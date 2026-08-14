@@ -1,4 +1,5 @@
 export * from './artifacts.js';
+export * from './ai-probes.js';
 export * from './directory-discovery.js';
 export * from './docker.js';
 export * from './host.js';

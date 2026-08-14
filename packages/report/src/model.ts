@@ -1,7 +1,9 @@
+import { BaselineRelevanceClassifier, governAiPlan } from '@opsense/ai-provider';
 import { ReportModelSchema, assertSchema } from '@opsense/schema';
-import type { ReportModel, ReportService, ScanSnapshot } from '@opsense/schema';
+import type { AiAnalysis, AiPlan, ReportModel, ReportService, ScanSnapshot } from '@opsense/schema';
 
 export interface BuildReportModelOptions {
+  analysis?: AiAnalysis;
   now?: () => Date;
 }
 
@@ -14,8 +16,24 @@ export function buildReportModel(
   const displayHost = snapshot.host?.hostname ?? snapshot.session.target.host;
   const socketById = new Map(snapshot.sockets.map((socket) => [socket.id, socket]));
   const containerById = new Map(snapshot.containers.map((container) => [container.id, container]));
-  const services = snapshot.services
+  const analysis = options.analysis ?? snapshot.aiAnalysis;
+  const baselinePlan = new BaselineRelevanceClassifier().classify(
+    snapshot,
+    () => new Date(generatedAt),
+  );
+  const plan =
+    analysis === undefined
+      ? baselinePlan
+      : governAiPlan(snapshot, analysisPlan(analysis), baselinePlan, () => new Date(generatedAt));
+  const assessmentByService = new Map(
+    plan.serviceAssessments.map((assessment) => [assessment.serviceId, assessment]),
+  );
+  const serviceIndex = snapshot.services
     .map((service): ReportService => {
+      const assessment = assessmentByService.get(service.id);
+      if (assessment === undefined) {
+        throw new Error(`Missing report assessment for service '${service.id}'.`);
+      }
       const ports = new Set<string>();
       for (const socketId of service.socketIds) {
         const socket = socketById.get(socketId);
@@ -34,6 +52,8 @@ export function buildReportModel(
         }
       }
       return {
+        assessmentConfidence: assessment.confidence,
+        assessmentReason: assessment.reason,
         confidence: service.confidence,
         configFiles: [...service.configFiles],
         conflictFields: [...(service.conflictFields ?? [])],
@@ -49,16 +69,24 @@ export function buildReportModel(
         name: service.name,
         ports: [...ports].sort(),
         processIds: [...service.processIds],
-        ...(service.purpose === undefined ? {} : { purpose: service.purpose }),
+        ...((assessment.purpose ?? service.purpose) === undefined
+          ? {}
+          : { purpose: assessment.purpose ?? service.purpose }),
+        reportPlacement: assessment.reportPlacement,
+        role: assessment.role,
         ...(service.startCommand === undefined ? {} : { startCommand: service.startCommand }),
         status: service.status,
         unknownFields: [...service.unknownFields],
       };
     })
     .sort(compareServices);
+  const services = serviceIndex.filter((service) => service.reportPlacement !== 'system_summary');
+  const systemServiceRecords = serviceIndex.filter(
+    (service) => service.reportPlacement === 'system_summary',
+  );
 
   const model: ReportModel = {
-    ...(snapshot.aiAnalysis === undefined ? {} : { aiAnalysis: snapshot.aiAnalysis }),
+    ...(analysis === undefined ? {} : { aiAnalysis: analysis }),
     disks: (snapshot.storage?.disks ?? []).map((disk) => ({
       evidenceIds: [...disk.evidenceIds],
       fileSystemTypes: [
@@ -192,18 +220,46 @@ export function buildReportModel(
       containerCount: snapshot.containers.length,
       diskCount: snapshot.storage?.disks.length ?? 0,
       evidenceCount: snapshot.evidence.length,
-      findingCount: snapshot.findings.length + (snapshot.aiAnalysis?.findings.length ?? 0),
+      findingCount: snapshot.findings.length + (analysis?.findings.length ?? 0),
       interfaceCount: snapshot.network?.interfaces.length ?? 0,
       mountCount: snapshot.storage?.mounts.length ?? 0,
+      needsReviewServiceCount: serviceIndex.filter(
+        (service) => service.reportPlacement === 'needs_review',
+      ).length,
+      primaryServiceCount: serviceIndex.filter((service) => service.reportPlacement === 'primary')
+        .length,
       runningServiceCount: services.filter((service) => service.status === 'running').length,
-      serviceCount: services.length,
+      serviceCount: serviceIndex.length,
       stoppedServiceCount: services.filter((service) => service.status === 'stopped').length,
-      unknownCount: snapshot.unknowns.length + (snapshot.aiAnalysis?.unknowns.length ?? 0),
+      supportingServiceCount: serviceIndex.filter(
+        (service) => service.reportPlacement === 'supporting',
+      ).length,
+      systemServiceCount: systemServiceRecords.length,
+      unknownCount: snapshot.unknowns.length + (analysis?.unknowns.length ?? 0),
+    },
+    serviceIndex,
+    systemServices: {
+      attentionServices: systemServiceRecords.filter((service) => service.status === 'failed'),
+      failedCount: systemServiceRecords.filter((service) => service.status === 'failed').length,
+      runningCount: systemServiceRecords.filter((service) => service.status === 'running').length,
+      totalCount: systemServiceRecords.length,
     },
     unknowns: [...snapshot.unknowns],
   };
   assertSchema(ReportModelSchema, model);
   return model;
+}
+
+function analysisPlan(analysis: AiAnalysis): AiPlan {
+  return {
+    generatedAt: analysis.generatedAt,
+    pathAssessments: analysis.pathAssessments,
+    probeRequests: [],
+    provider: analysis.provider,
+    serviceAssessments: analysis.serviceAssessments,
+    ...(analysis.model === undefined ? {} : { model: analysis.model }),
+    ...(analysis.threadId === undefined ? {} : { threadId: analysis.threadId }),
+  };
 }
 
 function formatEndpoint(address: string, port: number): string {

@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { redactForReport } from '@opsense/redaction';
 import { ReportModelSchema, ScanSnapshotSchema, assertSchema } from '@opsense/schema';
-import type { ReportModel, ScanSnapshot } from '@opsense/schema';
+import type { AiAnalysis, ReportModel, ScanSnapshot } from '@opsense/schema';
 
 import { renderDocxReport } from './docx.js';
 import { createReportFileNames } from './filename.js';
@@ -17,6 +17,7 @@ import type { DocxValidationResult } from './validation.js';
 export type ReportFormat = 'docx' | 'html' | 'markdown';
 
 export interface GenerateReportOptions {
+  analysis?: AiAnalysis;
   formats?: readonly ReportFormat[];
   now?: () => Date;
   outputDirectory: string;
@@ -40,7 +41,10 @@ export async function generateReportArtifacts(
 ): Promise<GeneratedReportArtifacts> {
   const formats = new Set(options.formats ?? ['docx', 'html', 'markdown']);
   const now = options.now ?? (() => new Date());
-  const model = buildReportModel(snapshot, { now });
+  const model = buildReportModel(snapshot, {
+    now,
+    ...(options.analysis === undefined ? {} : { analysis: options.analysis }),
+  });
   const redacted = redactForReport(model, now);
   assertSchema(ReportModelSchema, redacted.value);
   await mkdir(options.outputDirectory, { recursive: true });

@@ -19,6 +19,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@openai/codex-sdk": "^0.147.0",
     "@opsense/ai-provider": "workspace:*",
     "@opsense/schema": "workspace:*"
   }

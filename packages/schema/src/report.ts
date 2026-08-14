@@ -1,7 +1,8 @@
 import { Type, type Static } from '@sinclair/typebox';
 
-import { AiAnalysisSchema } from './ai.js';
+import { AiAnalysisSchema, AiServiceRoleSchema, ReportPlacementSchema } from './ai.js';
 import {
+  AiConfidenceSchema,
   ConfidenceSchema,
   DateTimeSchema,
   IdSchema,
@@ -39,9 +40,13 @@ export const ReportSummarySchema = Type.Object(
     findingCount: Type.Integer({ minimum: 0 }),
     interfaceCount: Type.Integer({ minimum: 0 }),
     mountCount: Type.Integer({ minimum: 0 }),
+    primaryServiceCount: Type.Integer({ minimum: 0 }),
     runningServiceCount: Type.Integer({ minimum: 0 }),
     serviceCount: Type.Integer({ minimum: 0 }),
     stoppedServiceCount: Type.Integer({ minimum: 0 }),
+    supportingServiceCount: Type.Integer({ minimum: 0 }),
+    systemServiceCount: Type.Integer({ minimum: 0 }),
+    needsReviewServiceCount: Type.Integer({ minimum: 0 }),
     unknownCount: Type.Integer({ minimum: 0 }),
   },
   { additionalProperties: false },
@@ -124,6 +129,8 @@ export const ReportNetworkSchema = Type.Object(
 
 export const ReportServiceSchema = Type.Object(
   {
+    assessmentConfidence: AiConfidenceSchema,
+    assessmentReason: NonEmptyStringSchema,
     confidence: ConfidenceSchema,
     configFiles: Type.Array(Type.String()),
     conflictFields: Type.Array(Type.String()),
@@ -140,9 +147,21 @@ export const ReportServiceSchema = Type.Object(
     ports: Type.Array(Type.String()),
     processIds: Type.Array(Type.Integer({ minimum: 1 })),
     purpose: Type.Optional(Type.String()),
+    reportPlacement: ReportPlacementSchema,
+    role: AiServiceRoleSchema,
     startCommand: Type.Optional(Type.String()),
     status: ServiceStatusSchema,
     unknownFields: Type.Array(Type.String()),
+  },
+  { additionalProperties: false },
+);
+
+export const ReportSystemServiceSummarySchema = Type.Object(
+  {
+    failedCount: Type.Integer({ minimum: 0 }),
+    runningCount: Type.Integer({ minimum: 0 }),
+    totalCount: Type.Integer({ minimum: 0 }),
+    attentionServices: Type.Array(ReportServiceSchema),
   },
   { additionalProperties: false },
 );
@@ -173,7 +192,9 @@ export const ReportModelSchema = Type.Object(
     network: ReportNetworkSchema,
     redaction: Type.Optional(RedactionReportSchema),
     services: Type.Array(ReportServiceSchema),
+    serviceIndex: Type.Array(ReportServiceSchema),
     summary: ReportSummarySchema,
+    systemServices: ReportSystemServiceSummarySchema,
     unknowns: Type.Array(Type.String()),
   },
   { $id: 'ReportModel', additionalProperties: false },
@@ -189,3 +210,4 @@ export type ReportNetwork = Static<typeof ReportNetworkSchema>;
 export type ReportNetworkInterface = Static<typeof ReportNetworkInterfaceSchema>;
 export type ReportService = Static<typeof ReportServiceSchema>;
 export type ReportSummary = Static<typeof ReportSummarySchema>;
+export type ReportSystemServiceSummary = Static<typeof ReportSystemServiceSummarySchema>;

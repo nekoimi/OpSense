@@ -77,9 +77,11 @@ export function escapeHtml(value: unknown): string {
 
 function renderSummary(model: ReportModel): string {
   const metrics = [
-    ['服务总数', model.summary.serviceCount],
-    ['运行中', model.summary.runningServiceCount],
-    ['已停止', model.summary.stoppedServiceCount],
+    ['候选总数', model.summary.serviceCount],
+    ['主要服务', model.summary.primaryServiceCount],
+    ['支撑组件', model.summary.supportingServiceCount],
+    ['系统服务', model.summary.systemServiceCount],
+    ['待确认', model.summary.needsReviewServiceCount],
     ['容器', model.summary.containerCount],
     ['磁盘', model.summary.diskCount],
     ['风险', model.summary.findingCount],
@@ -171,17 +173,48 @@ function renderNetwork(model: ReportModel): string {
 }
 
 function renderServices(model: ReportModel): string {
+  return `<section id="services">
+    <div class="section-heading"><p>05</p><h2>部署服务分类</h2></div>
+    ${renderServiceGroup(model, '主要部署服务', 'primary')}
+    ${renderServiceGroup(model, '支撑组件', 'supporting')}
+    ${renderServiceGroup(model, '待确认候选', 'needs_review')}
+    <h3>系统服务概况</h3>
+    ${keyValueTable([
+      ['总数', model.systemServices.totalCount],
+      ['运行中', model.systemServices.runningCount],
+      ['失败', model.systemServices.failedCount],
+      ['需关注 unit', displayList(model.systemServices.attentionServices.map((item) => item.name))],
+    ])}
+    <div class="service-list">${model.services.map(renderServiceDetails).join('')}</div>
+    <details class="service-index"><summary>完整服务候选索引（${model.serviceIndex.length}）</summary>
+      ${table(
+        ['服务', '状态', '角色', '报告位置', '部署方式'],
+        model.serviceIndex
+          .map(
+            (service) =>
+              `<tr><td>${escapeHtml(service.displayName ?? service.name)}</td><td>${badge(service.status)}</td><td>${escapeHtml(roleLabel(service.role))}</td><td>${escapeHtml(placementLabel(service.reportPlacement))}</td><td>${escapeHtml(service.deploymentType)}</td></tr>`,
+          )
+          .join(''),
+      )}
+    </details>
+  </section>`;
+}
+
+function renderServiceGroup(
+  model: ReportModel,
+  title: string,
+  placement: ReportService['reportPlacement'],
+): string {
   const rows = model.services
-    .map(
-      (service, index) =>
-        `<tr><td><a href="#service-${index}">${escapeHtml(service.displayName ?? service.name)}</a></td><td>${badge(service.status)}</td><td>${escapeHtml(service.deploymentType)}</td><td>${escapeHtml(displayList(service.ports))}</td><td>${escapeHtml(statusLabel(service.confidence))}</td></tr>`,
+    .flatMap((service, index) =>
+      service.reportPlacement !== placement
+        ? []
+        : [
+            `<tr><td><a href="#service-${index}">${escapeHtml(service.displayName ?? service.name)}</a></td><td>${badge(service.status)}</td><td>${escapeHtml(roleLabel(service.role))}</td><td>${escapeHtml(displayList(service.ports))}</td><td>${escapeHtml(statusLabel(service.assessmentConfidence))}</td></tr>`,
+          ],
     )
     .join('');
-  return `<section id="services">
-    <div class="section-heading"><p>05</p><h2>部署服务</h2></div>
-    ${table(['服务', '状态', '部署方式', '端口', '确定程度'], rows)}
-    <div class="service-list">${model.services.map(renderServiceDetails).join('')}</div>
-  </section>`;
+  return `<h3>${escapeHtml(title)}</h3>${table(['服务', '状态', '角色', '端口', '分类确定程度'], rows)}`;
 }
 
 function renderServiceDetails(service: ReportService, index: number): string {
@@ -191,6 +224,10 @@ function renderServiceDetails(service: ReportService, index: number): string {
       ${keyValueTable([
         ['服务 ID', service.id],
         ['部署方式', service.deploymentType],
+        ['服务角色', roleLabel(service.role)],
+        ['报告位置', placementLabel(service.reportPlacement)],
+        ['分类理由', service.assessmentReason],
+        ['分类确定程度', statusLabel(service.assessmentConfidence)],
         ['确定程度', statusLabel(service.confidence)],
         ['开机启动', displayBoolean(service.enabledAtBoot)],
         ['进程 PID', service.processIds.join(', ') || '-'],
@@ -208,6 +245,25 @@ function renderServiceDetails(service: ReportService, index: number): string {
       ${service.purpose === undefined ? '' : `<p class="purpose">${escapeHtml(service.purpose)}</p>`}
     </div>
   </details>`;
+}
+
+function roleLabel(value: ReportService['role']): string {
+  return {
+    application: '应用',
+    infrastructure: '基础设施',
+    middleware: '中间件',
+    system: '系统服务',
+    unknown: '未知',
+  }[value];
+}
+
+function placementLabel(value: ReportService['reportPlacement']): string {
+  return {
+    primary: '主要服务',
+    supporting: '支撑组件',
+    system_summary: '系统摘要',
+    needs_review: '待确认',
+  }[value];
 }
 
 function renderFindings(model: ReportModel): string {

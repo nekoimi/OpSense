@@ -54,8 +54,10 @@ describe('M8 report generation', () => {
     expect(model.summary).toMatchObject({
       diskCount: 1,
       interfaceCount: 1,
+      primaryServiceCount: 1,
       runningServiceCount: 1,
       serviceCount: 1,
+      systemServiceCount: 0,
     });
     expect(model.services[0]?.ports).toContain('TCP 0.0.0.0:8080 (external)');
   });

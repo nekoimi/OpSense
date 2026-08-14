@@ -181,10 +181,19 @@ function buildDocumentChildren(model: ReportModel): Array<Paragraph | Table | Ta
         `${model.network.firewallBackend ?? '-'} / ${displayBoolean(model.network.firewallActive)}`,
       ],
     ]),
-    heading('部署服务清单', 1, true),
+    heading('部署服务分类', 1, true),
     serviceSummaryTable(model),
+    heading('系统服务概况', 2),
+    keyValueTable([
+      ['总数', model.systemServices.totalCount],
+      ['运行中', model.systemServices.runningCount],
+      ['失败', model.systemServices.failedCount],
+      ['需关注 unit', displayList(model.systemServices.attentionServices.map((item) => item.name))],
+    ]),
     heading('服务详情', 1, true),
     ...model.services.flatMap((service) => serviceDetail(service)),
+    heading('完整服务候选索引', 1, true),
+    serviceIndexTable(model),
     heading('风险与待确认项', 1, true),
     ...findingParagraphs(model),
     heading('未知项', 2),
@@ -230,15 +239,14 @@ function cover(model: ReportModel): Paragraph[] {
 
 function summaryTable(model: ReportModel): Table {
   return createTable(
-    ['服务总数', '运行中', '已停止', '容器', '磁盘', '挂载', '风险', '未知项'],
+    ['候选总数', '主要服务', '支撑组件', '系统服务', '待确认', '风险', '未知项'],
     [
       [
         model.summary.serviceCount,
-        model.summary.runningServiceCount,
-        model.summary.stoppedServiceCount,
-        model.summary.containerCount,
-        model.summary.diskCount,
-        model.summary.mountCount,
+        model.summary.primaryServiceCount,
+        model.summary.supportingServiceCount,
+        model.summary.systemServiceCount,
+        model.summary.needsReviewServiceCount,
         model.summary.findingCount,
         model.summary.unknownCount,
       ],
@@ -315,15 +323,29 @@ function networkTable(model: ReportModel): Table {
 
 function serviceSummaryTable(model: ReportModel): Table {
   return createTable(
-    ['服务', '状态', '部署方式', '端口', '确定程度'],
+    ['服务', '状态', '角色', '报告位置', '端口', '分类确定程度'],
     model.services.map((service) => [
       service.displayName ?? service.name,
       statusLabel(service.status),
-      service.deploymentType,
+      service.role,
+      service.reportPlacement,
       displayList(service.ports),
-      statusLabel(service.confidence),
+      statusLabel(service.assessmentConfidence),
     ]),
-    new Set([3]),
+    new Set([4]),
+  );
+}
+
+function serviceIndexTable(model: ReportModel): Table {
+  return createTable(
+    ['服务', '状态', '角色', '报告位置', '部署方式'],
+    model.serviceIndex.map((service) => [
+      service.displayName ?? service.name,
+      statusLabel(service.status),
+      service.role,
+      service.reportPlacement,
+      service.deploymentType,
+    ]),
   );
 }
 
@@ -335,6 +357,10 @@ function serviceDetail(service: ReportService): Array<Paragraph | Table> {
         ['服务 ID', service.id],
         ['状态', statusLabel(service.status)],
         ['部署方式', service.deploymentType],
+        ['服务角色', service.role],
+        ['报告位置', service.reportPlacement],
+        ['分类理由', service.assessmentReason],
+        ['分类确定程度', statusLabel(service.assessmentConfidence)],
         ['确定程度', statusLabel(service.confidence)],
         ['开机启动', displayBoolean(service.enabledAtBoot)],
         ['进程 PID', service.processIds.join(', ') || '-'],

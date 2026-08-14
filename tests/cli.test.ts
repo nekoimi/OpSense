@@ -1,7 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ExitCode } from '../apps/cli/src/exit-code.js';
-import type { Logger, LoggerFactory } from '../apps/cli/src/logger.js';
 import { createCliPasswordProvider } from '../apps/cli/src/commands/scan.js';
 import { createProgram } from '../apps/cli/src/program.js';
 
@@ -29,21 +27,13 @@ describe('opsense CLI skeleton', () => {
     expect(program.helpInformation()).toContain('Inspect a Linux server');
   });
 
-  it('returns a clear placeholder result for unfinished commands', async () => {
-    const logger: Logger = {
-      debug: vi.fn(),
-      error: vi.fn(),
-      info: vi.fn(),
-    };
-    const loggerFactory: LoggerFactory = () => logger;
-    const program = createProgram({ loggerFactory });
+  it('exposes the M9 analyze options', () => {
+    const program = createProgram();
+    const analyze = program.commands.find((command) => command.name() === 'analyze');
 
-    await program.parseAsync(['node', 'opsense', 'analyze']);
-
-    expect(logger.error).toHaveBeenCalledWith(
-      "The 'analyze' command is not implemented yet (M0 skeleton).",
-    );
-    expect(process.exitCode).toBe(ExitCode.NotImplemented);
+    expect(analyze?.helpInformation()).toContain('--scan <scan-id>');
+    expect(analyze?.helpInformation()).toContain('--provider <provider>');
+    expect(analyze?.helpInformation()).toContain('--thread-id <thread-id>');
   });
 
   it('exposes the M3 scan connection options', () => {

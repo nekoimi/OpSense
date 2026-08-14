@@ -12,7 +12,10 @@ export interface WorkspaceLayout {
 
 export interface RunWorkspaceLayout extends WorkspaceLayout {
   aiInputDirectory: string;
+  aiPlanFile: string;
+  aiProbeAuditFile: string;
   aiOutputFile: string;
+  aiRunFile: string;
   auditFile: string;
   metaFile: string;
   redactionReportFile: string;
@@ -45,7 +48,10 @@ export function createRunWorkspaceLayout(
   return {
     ...workspace,
     aiInputDirectory: path.join(runDirectory, 'ai-input'),
+    aiPlanFile: path.join(runDirectory, 'ai-plan.json'),
+    aiProbeAuditFile: path.join(runDirectory, 'ai-probe-audit.json'),
     aiOutputFile: path.join(runDirectory, 'ai-output.json'),
+    aiRunFile: path.join(runDirectory, 'ai-run.json'),
     auditFile: path.join(runDirectory, 'audit.jsonl'),
     metaFile: path.join(runDirectory, 'meta.json'),
     redactionReportFile: path.join(runDirectory, 'redaction-report.json'),

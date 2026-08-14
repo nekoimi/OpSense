@@ -17,9 +17,12 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@opsense/ai-codex": "workspace:*",
+    "@opsense/ai-provider": "workspace:*",
     "@opsense/collectors": "workspace:*",
     "@opsense/core": "workspace:*",
     "@opsense/redaction": "workspace:*",
+    "@opsense/report": "workspace:*",
     "@opsense/schema": "workspace:*",
     "@opsense/ssh": "workspace:*",
     "@opsense/workspace": "workspace:*",

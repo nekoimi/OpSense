@@ -46,9 +46,9 @@ function renderOverview(model: ReportModel): string {
 
 ${heading(2, '执行摘要')}
 
-| 服务 | 运行中 | 已停止 | 容器 | 磁盘 | 挂载 | 风险 | 未知项 |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| ${model.summary.serviceCount} | ${model.summary.runningServiceCount} | ${model.summary.stoppedServiceCount} | ${model.summary.containerCount} | ${model.summary.diskCount} | ${model.summary.mountCount} | ${model.summary.findingCount} | ${model.summary.unknownCount} |
+| 候选总数 | 主要服务 | 支撑组件 | 系统服务 | 待确认 | 风险 | 未知项 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| ${model.summary.serviceCount} | ${model.summary.primaryServiceCount} | ${model.summary.supportingServiceCount} | ${model.summary.systemServiceCount} | ${model.summary.needsReviewServiceCount} | ${model.summary.findingCount} | ${model.summary.unknownCount} |
 
 ${model.aiAnalysis === undefined ? '' : `${heading(2, 'AI 分析（推断层）')}\n\n${markdownText(model.aiAnalysis.hostSummary)}\n`}
 
@@ -143,14 +143,27 @@ function renderServices(model: ReportModel): string {
   const rows = model.services
     .map((service) => {
       const fileName = serviceFileName(service.id);
-      return `| [${cell(service.displayName ?? service.name)}](services/${fileName}) | ${statusLabel(service.status)} | ${cell(service.deploymentType)} | ${cell(displayList(service.ports))} | ${statusLabel(service.confidence)} |`;
+      return `| [${cell(service.displayName ?? service.name)}](services/${fileName}) | ${statusLabel(service.status)} | ${cell(service.role)} | ${cell(service.reportPlacement)} | ${cell(displayList(service.ports))} | ${statusLabel(service.assessmentConfidence)} |`;
     })
     .join('\n');
-  return `${heading(1, '部署服务清单')}
+  return `${heading(1, '部署服务分类')}
 
-| 服务 | 状态 | 部署方式 | 端口 | 确定程度 |
+| 服务 | 状态 | 角色 | 报告位置 | 端口 | 分类确定程度 |
+| --- | --- | --- | --- | --- | --- |
+${rows || '| - | - | - | - | - | - |'}
+
+${heading(2, '系统服务概况')}
+
+- 总数：${model.systemServices.totalCount}
+- 运行中：${model.systemServices.runningCount}
+- 失败：${model.systemServices.failedCount}
+- 需关注 unit：${cell(displayList(model.systemServices.attentionServices.map((item) => item.name)))}
+
+${heading(2, '完整候选索引')}
+
+| 服务 | 状态 | 角色 | 报告位置 | 部署方式 |
 | --- | --- | --- | --- | --- |
-${rows || '| - | - | - | - | - |'}
+${model.serviceIndex.map((service) => `| ${cell(service.displayName ?? service.name)} | ${statusLabel(service.status)} | ${cell(service.role)} | ${cell(service.reportPlacement)} | ${cell(service.deploymentType)} |`).join('\n') || '| - | - | - | - | - |'}
 `;
 }
 
@@ -162,6 +175,10 @@ function renderService(service: ReportService): string {
 | 服务 ID | ${code(service.id)} |
 | 状态 | ${statusLabel(service.status)} |
 | 部署方式 | ${cell(service.deploymentType)} |
+| 服务角色 | ${cell(service.role)} |
+| 报告位置 | ${cell(service.reportPlacement)} |
+| 分类理由 | ${cell(service.assessmentReason)} |
+| 分类确定程度 | ${statusLabel(service.assessmentConfidence)} |
 | 确定程度 | ${statusLabel(service.confidence)} |
 | 开机启动 | ${displayBoolean(service.enabledAtBoot)} |
 | 进程 PID | ${cell(service.processIds.join(', '))} |

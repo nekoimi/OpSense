@@ -266,6 +266,32 @@ export const COMMAND_CATALOG = [
     supportedDistributions: ALL_DISTRIBUTIONS,
     timeoutMs: 15_000,
   },
+  {
+    arguments: [
+      { parameter: 'searchRoot' },
+      { literal: '-xdev' },
+      { literal: '-mindepth' },
+      { literal: '1' },
+      { literal: '-maxdepth' },
+      { parameter: 'maxDepth' },
+      { literal: '-iname' },
+      { parameter: 'searchTerm' },
+      { literal: '-printf' },
+      { literal: '%y\t%s\t%u\t%g\t%m\t%T@\t%p\t%l\\n' },
+    ],
+    executable: 'find',
+    id: 'directory.search-name',
+    maxOutputBytes: 2_000_000,
+    parameters: {
+      maxDepth: { kind: 'integer', min: 1, max: 8 },
+      searchRoot: { kind: 'path', maxLength: 4096 },
+      searchTerm: { kind: 'string', maxLength: 128, pattern: /^\*[A-Za-z0-9][A-Za-z0-9._@-]*\*$/ },
+    },
+    requiredCommands: ['find'],
+    sudo: 'allowed',
+    supportedDistributions: ALL_DISTRIBUTIONS,
+    timeoutMs: 15_000,
+  },
 ] as const satisfies readonly CommandSpec[];
 
 const COMMANDS_BY_ID = new Map(COMMAND_CATALOG.map((spec) => [spec.id, spec]));

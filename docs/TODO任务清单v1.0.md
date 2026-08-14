@@ -50,8 +50,8 @@ Later   明确放到后续版本
 | M5 | 定向目录与配置探测 | 路径、配置、日志和数据位置 | M4 |
 | M6 | 归一化与服务归并 | 统一 ServiceRecord 和证据索引 | M3、M4、M5 |
 | M7 | 脱敏与安全检查 | 可安全持久化和发送给 AI 的快照 | M1-M6 |
-| M8 | 基础报告与 Word 输出 | 不依赖 AI 的 `.docx` 报告 | M6、M7 |
-| M9 | Codex 接入 | AI 分析结果和增强报告 | M7、M8 |
+| M8 | 基础报告与 Word 输出 | 不依赖 AI 的 `.docx` 和 HTML 报告 | M6、M7 |
+| M9 | Codex 接入 | 服务语义分类、受控补探测计划和增强报告 | M7、M8 |
 | M10 | CLI 端到端编排 | `scan/analyze/report/inspect` | M2-M9 |
 | M11 | 测试、打包与发布 | 可安装的第一版 CLI | M10 |
 
@@ -530,52 +530,92 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 
 ## 12. M9：Codex 接入
 
-### M9-01 AI Provider 抽象
+### M9-01 AI Provider 与运行时抽象
 
-- [ ] `Must` 定义 `AiProvider` 接口。
-- [ ] `Must` 实现 `NoopProvider`。
-- [ ] `Must` 定义 `AnalysisInput` 和 `AnalysisResult`。
-- [ ] `Must` AI 失败不影响基础报告生成。
+- [x] `Must` 定义 `AiProvider`、`AnalysisInput`、`AnalysisResult` 和调用状态接口。
+- [x] `Must` 实现 `NoopProvider`，Codex 不可用时仍返回合法的空解释层。
+- [x] `Must` 实现基于可解释特征的 `BaselineRelevanceClassifier`，在无 AI 时保守区分部署服务、系统服务和待确认候选。
+- [x] `Must` Provider 失败不得修改快照，也不得阻断基础 HTML 和 Word 报告生成。
+- [x] `Must` 记录 Provider、模型、thread ID、耗时、重试次数和最终状态。
 
-### M9-02 AI 输入工作区
+### M9-02 脱敏 AI 工作区与紧凑候选视图
 
-- [ ] `Must` 生成 `context.md`。
-- [ ] `Must` 生成 host、storage、network、services 和 findings JSON。
-- [ ] `Must` 生成 `redaction-report.json`。
-- [ ] `Must` 生成 `output-schema.json`。
-- [ ] `Must` AI 工作区只包含脱敏后的必要文件。
+- [x] `Must` 为每次分析生成独立的只读 `ai-input/` 工作区。
+- [x] `Must` 生成 `context.md`、host、storage、network、findings 和 redaction report。
+- [x] `Must` 生成紧凑的 `service-candidates.json`，包含名称、描述、状态、ExecStart、端口、进程、容器、镜像、挂载、路径和 Evidence 引用。
+- [x] `Must` 生成 `path-candidates.json`，按服务聚合部署、配置、日志、数据、挂载和未归类路径线索。
+- [x] `Must` 生成 `evidence-index.json`，默认不把完整原始命令输出复制到 AI 工作区。
+- [x] `Must` 生成分类、补探测和最终分析所需的 JSON Schema。
+- [x] `Must` AI 工作区只包含脱敏后的必要文件，不包含 SSH 凭据、原始 `.env` 或未脱敏命令输出。
 
-### M9-03 提示词和输出契约
+### M9-03 服务语义分类契约
 
-- [ ] `Must` 编写服务器分析提示词。
-- [ ] `Must` 禁止将 inferred/unknown 写成 confirmed。
-- [ ] `Must` 要求重要结论引用 evidence ID。
-- [ ] `Must` 禁止补写不存在的密码、连接信息和业务依赖。
-- [ ] `Must` 定义 host summary、service summaries、findings 和 unknowns Schema。
+- [x] `Must` 为每个服务候选输出 `role`：application、middleware、infrastructure、system 或 unknown。
+- [x] `Must` 输出 `reportPlacement`：primary、supporting、system_summary 或 needs_review。
+- [x] `Must` 输出用途、判断理由、确定程度和 Evidence ID。
+- [x] `Must` 不允许 AI 删除服务候选、改变运行状态、端口、路径或部署方式等事实字段。
+- [x] `Must` 普通系统 unit 不进入主要部署服务详情，但仍保留在快照和系统服务附录。
+- [x] `Must` 失败、对外监听、使用自定义路径或与主要服务相关的 systemd unit 不能被静默降级隐藏。
+- [x] `Must` Docker、Compose 和明显自定义部署候选至少进入 supporting 或 needs_review，除非存在可验证的重复归并证据。
 
-### M9-04 CodexProvider
+### M9-04 路径语义与补探测计划契约
 
-- [ ] `Must` 接入 `@openai/codex-sdk`。
-- [ ] `Must` 创建 Codex thread 并运行分析提示词。
-- [ ] `Must` 保存 thread ID 和调用状态。
-- [ ] `Must` 解析 `finalResponse`。
-- [ ] `Must` 使用 AJV 校验 AI 输出。
-- [ ] `Must` 对 JSON 解析或 Schema 错误进行有限重试。
-- [ ] `Must` 实现超时和取消。
-- [ ] `Must` 将最终结果保存为 `ai-output.json`。
+- [x] `Must` 为路径候选输出 deploy、config、data、log、backup、runtime、system 或 unknown 语义。
+- [x] `Must` 允许 Codex 提出结构化 `ProbeRequest`，仅支持目录元数据、受限目录列表、配置摘要和受限路径名称搜索四类探测。
+- [x] `Must` 每个请求包含绝对路径或搜索根、来源 Evidence、目标服务、原因和期望补全字段。
+- [x] `Must` `path_search` 的搜索词只能来自已采集的服务名、进程可执行名、systemd unit、容器镜像或 Compose 标签。
+- [x] `Must` `path_search` 只能在批准的部署根和已知数据挂载内执行，并限制最大深度、最大命中数和总输出。
+- [x] `Must` 禁止 Codex 输出或执行任意 Shell 命令。
+- [x] `Must` 禁止无证据的全盘扫描、根目录扫描和 `/proc`、`/sys`、`/dev`、`/run`、容器 overlay 路径探测。
+- [x] `Must` 将被拒绝的请求及原因保存到 `ai-probe-audit.json`。
 
-### M9-05 AI 结果治理
+### M9-05 CodexProvider 与两阶段提示词
 
-- [ ] `Must` 拒绝没有证据的 confirmed 结论。
-- [ ] `Must` 拒绝 AI 修改原始 snapshot。
-- [ ] `Must` AI 结果作为独立解释层保存。
-- [ ] `Must` 在 Word 报告中标记 AI 推断和确定程度。
-- [ ] `Should` 支持对同一扫描 thread 继续提问或重新生成报告。
+- [x] `Must` 接入 `@openai/codex-sdk`，在用户本机启动 Codex thread。
+- [x] `Must` 每个 scan 创建一个 thread，保存 thread ID，并支持继续同一 thread。
+- [x] `Must` 第一阶段生成服务分类、路径分类和补探测计划。
+- [x] `Must` 补探测完成后在同一 thread 生成最终 host summary、storage summary、service summaries、findings 和 unknowns。
+- [x] `Must` 提示词禁止将 inferred/unknown 写成 confirmed，重要结论必须引用 Evidence ID。
+- [x] `Must` 提示词禁止补写不存在的密码、连接信息、业务依赖和运维流程。
+- [x] `Must` 解析 `finalResponse`，使用 AJV 校验输出，并对 JSON 或 Schema 错误进行最多两次修复重试。
+- [x] `Must` 实现超时、取消和 Codex 不可用降级。
+
+### M9-06 受控补探测执行与重新归一化
+
+- [x] `Must` 本地 `ProbePlanValidator` 校验路径来源、禁止目录、深度、文件数、输出字节数和超时预算。
+- [x] `Must` 由现有安全命令目录编译并执行探测，AI 不得直接访问 SSH 执行器。
+- [x] `Must` 第一版最多执行一轮补探测，并限制最大请求数和总读取字节数。
+- [ ] `Must` 补探测结果先进入证据层，再重新执行归一化、脱敏和 AI 最终分析。
+- [x] `Must` 记录 accepted、rejected、failed 和 skipped 请求及对应 Evidence。
+- [x] `Must` 补探测失败时继续使用基线快照生成报告。
+
+### M9-07 报告投影与完整事实保留
+
+- [x] `Must` 报告展示“主要部署服务、支撑组件、系统服务概况、待确认候选”四类结果。
+- [x] `Must` 报告摘要分别显示候选总数、主要服务数、支撑组件数、系统服务数和待确认数，不再用单一服务总数代表部署服务。
+- [x] `Must` Word 和 HTML 默认只为 primary、supporting 和 needs_review 生成服务详情。
+- [x] `Must` 系统服务概况显示总数、运行数、失败数和需要关注的异常 unit，不逐条展开普通系统服务。
+- [x] `Must` 报告显示每个 AI 分类的理由、确定程度和 Evidence 引用。
+- [x] `Must` 提供完整服务候选附录或机器可读索引，确保 AI 分类不会造成事实丢失。
+- [x] `Must` AI 输出作为独立解释层保存，不得覆盖 `snapshot.json`。
+
+### M9-08 评测、回归与可观测性
+
+- [ ] `Must` 建立 Ubuntu、Debian、Rocky/RHEL 和无 systemd 环境的服务分类 fixture。
+- [ ] `Must` 覆盖 systemd 系统服务降噪，以及 Doris、Hadoop、MinIO、Nginx、数据库和自研应用识别。
+- [x] `Must` 验证 Doris、Hadoop、MinIO 等名称已知但目录未知的候选可以生成安全的 `path_search` 请求。
+- [ ] `Must` 统计主要服务召回率、系统服务误报率、unknown 比例和 ProbeRequest 接受率。
+- [x] `Must` 验证外部监听、失败服务和自定义路径服务不会被错误隐藏。
+- [x] `Must` 验证 AI 失败、非法 JSON、超时和探测请求全部被拒绝时仍可生成基础报告。
+- [ ] `Should` 保存脱敏的分类输入输出样例用于回归评测。
 
 验收条件：
 
-- Codex 可用时生成合法 `ai-output.json` 并增强 Word 报告。
-- Codex 不可用或输出非法时，仍生成基础 Word 报告。
+- Codex 可用时生成合法的 `ai-plan.json`、`ai-probe-audit.json` 和 `ai-output.json`。
+- 真实测试服务器上的普通 Linux 系统服务不再逐条占用主要部署服务章节。
+- Docker、Compose、自定义 systemd 应用和非标准目录服务能够进入主要服务或待确认清单。
+- 所有被降级到系统服务概况的候选仍可在快照或完整索引中追溯。
+- Codex 不可用、输出非法或补探测失败时，仍生成基础 Word 和 HTML 报告。
 
 ---
 
@@ -593,7 +633,9 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 - [ ] `Must` 接收 scan ID 和 provider。
 - [ ] `Must` 验证快照和脱敏状态。
 - [ ] `Must` 调用 CodexProvider 或 NoopProvider。
-- [ ] `Must` 生成 `ai-output.json`。
+- [ ] `Must` 生成服务分类、路径分类和 `ProbeRequest`，但独立 analyze 不重新连接服务器。
+- [ ] `Must` 生成 `ai-plan.json`、`ai-probe-audit.json`、`ai-output.json` 和 `ai-run.json`。
+- [ ] `Must` 对未执行的补探测请求标记 pending 或 skipped，不得要求持久化 SSH 密码。
 
 ### M10-03 `report` 命令
 
@@ -605,6 +647,8 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 ### M10-04 `inspect` 命令
 
 - [ ] `Must` 串联 scan、analyze 和 report。
+- [ ] `Must` 在 SSH 认证信息仍位于当前进程内存时执行通过校验的一轮补探测。
+- [ ] `Must` 补探测后重新归一化、脱敏并执行 Codex 最终分析。
 - [ ] `Must` 实时显示当前执行阶段。
 - [ ] `Must` 支持 Ctrl+C 安全中断。
 - [ ] `Must` Codex 失败时自动降级为基础报告。
@@ -612,7 +656,7 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 
 ### M10-05 状态和退出码
 
-- [ ] `Must` 实现 created、connecting、collecting、normalizing、redacting、analyzing、rendering 状态。
+- [ ] `Must` 实现 created、connecting、collecting、normalizing、redacting、planning、enriching、analyzing、rendering 状态。
 - [ ] `Must` 实现 completed、partial 和 failed 终态。
 - [ ] `Must` 区分连接失败、认证失败、扫描部分失败、AI 失败和报告失败退出码。
 
@@ -620,6 +664,7 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 
 - 一条 `opsense inspect` 命令可以完成第一版最小闭环。
 - 部分采集失败时仍能输出报告并明确缺失内容。
+- 主要部署服务章节不再逐条展开普通 Linux 系统服务。
 
 ---
 
@@ -633,7 +678,8 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 - [ ] `Must` 覆盖脱敏规则。
 - [ ] `Must` 覆盖 Word 报告生成器。
 - [ ] `Must` 覆盖 HTML 报告生成器、离线资源和内容转义。
-- [ ] `Must` 覆盖 AI 输出校验和降级路径。
+- [ ] `Must` 覆盖 AI 分类、报告投影、输出校验和降级路径。
+- [ ] `Must` 覆盖 ProbePlanValidator 的允许、拒绝、预算和禁止目录逻辑。
 
 ### M11-02 Linux 场景测试
 
@@ -660,6 +706,7 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 
 - [ ] `Must` 从空工作区执行 `opsense inspect`。
 - [ ] `Must` 生成合法 `snapshot.json`。
+- [ ] `Must` 生成合法 `ai-plan.json` 和 `ai-probe-audit.json`，或记录 AI 降级状态。
 - [ ] `Must` 生成合法 `ai-output.json` 或记录 AI 降级状态。
 - [ ] `Must` 生成文件名包含服务器 IP、主机名或服务名的可打开中文 Word 报告。
 - [ ] `Must` 生成无需本地服务即可打开的 `index.html` 报告。
