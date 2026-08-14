@@ -131,6 +131,7 @@ describe('M10 CLI workflows', () => {
             markdownFiles: [],
             modelFile: path.join(root, 'report-model.json'),
             outputDirectory: root,
+            projectionFile: path.join(root, 'inventory-projection.json'),
             redactionReportFile: path.join(root, 'redaction-report.json'),
             snapshotFile: path.join(root, 'snapshot.json'),
             docxFile: path.join(root, '服务器巡检报告.docx'),

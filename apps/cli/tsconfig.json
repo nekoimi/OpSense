@@ -14,6 +14,7 @@
     { "path": "../../packages/core" },
     { "path": "../../packages/redaction" },
     { "path": "../../packages/report" },
+    { "path": "../../packages/projection" },
     { "path": "../../packages/schema" },
     { "path": "../../packages/ssh" },
     { "path": "../../packages/workspace" }

@@ -24,11 +24,13 @@
     "baseUrl": ".",
     "paths": {
       "@opsense/ai-codex": ["packages/ai-codex/src/index.ts"],
+      "@opsense/agent-runtime": ["packages/agent-runtime/src/index.ts"],
       "@opsense/ai-provider": ["packages/ai-provider/src/index.ts"],
       "@opsense/collectors": ["packages/collectors/src/index.ts"],
       "@opsense/core": ["packages/core/src/index.ts"],
       "@opsense/redaction": ["packages/redaction/src/index.ts"],
       "@opsense/report": ["packages/report/src/index.ts"],
+      "@opsense/projection": ["packages/projection/src/index.ts"],
       "@opsense/schema": ["packages/schema/src/index.ts"],
       "@opsense/ssh": ["packages/ssh/src/index.ts"],
       "@opsense/workspace": ["packages/workspace/src/index.ts"]

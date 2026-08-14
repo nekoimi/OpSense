@@ -1,0 +1,10 @@
+{
+  "hypothesisId": "hypothesis-fixture",
+  "sessionId": "agent-session-fixture",
+  "statement": "该进程可能是主要应用服务。",
+  "status": "proposed",
+  "confidence": 0.6,
+  "evidenceIds": ["evidence:process"],
+  "createdAt": "2026-08-14T03:00:01.000Z",
+  "updatedAt": "2026-08-14T03:00:01.000Z"
+}

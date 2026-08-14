@@ -1,34 +1,26 @@
-import { BaselineRelevanceClassifier, governAiPlan } from '@opsense/ai-provider';
 import { ReportModelSchema, assertSchema } from '@opsense/schema';
-import type { AiAnalysis, AiPlan, ReportModel, ReportService, ScanSnapshot } from '@opsense/schema';
+import type { InventoryProjection, ReportModel, ReportService } from '@opsense/schema';
 
 export interface BuildReportModelOptions {
-  analysis?: AiAnalysis;
   now?: () => Date;
 }
 
 export function buildReportModel(
-  snapshot: ScanSnapshot,
+  projection: InventoryProjection,
   options: BuildReportModelOptions = {},
 ): ReportModel {
   const generatedAt = (options.now ?? (() => new Date()))().toISOString();
-  const scannedAt = snapshot.session.finishedAt ?? snapshot.session.startedAt;
-  const displayHost = snapshot.host?.hostname ?? snapshot.session.target.host;
-  const socketById = new Map(snapshot.sockets.map((socket) => [socket.id, socket]));
-  const containerById = new Map(snapshot.containers.map((container) => [container.id, container]));
-  const analysis = options.analysis ?? snapshot.aiAnalysis;
-  const baselinePlan = new BaselineRelevanceClassifier().classify(
-    snapshot,
-    () => new Date(generatedAt),
+  const scannedAt = projection.session.finishedAt ?? projection.session.startedAt;
+  const displayHost = projection.host?.hostname ?? projection.session.target.host;
+  const socketById = new Map(projection.sockets.map((socket) => [socket.id, socket]));
+  const containerById = new Map(
+    projection.containers.map((container) => [container.id, container]),
   );
-  const plan =
-    analysis === undefined
-      ? baselinePlan
-      : governAiPlan(snapshot, analysisPlan(analysis), baselinePlan, () => new Date(generatedAt));
+  const analysis = projection.analysis;
   const assessmentByService = new Map(
-    plan.serviceAssessments.map((assessment) => [assessment.serviceId, assessment]),
+    projection.serviceAssessments.map((assessment) => [assessment.serviceId, assessment]),
   );
-  const serviceIndex = snapshot.services
+  const serviceIndex = projection.services
     .map((service): ReportService => {
       const assessment = assessmentByService.get(service.id);
       if (assessment === undefined) {
@@ -87,7 +79,7 @@ export function buildReportModel(
 
   const model: ReportModel = {
     ...(analysis === undefined ? {} : { aiAnalysis: analysis }),
-    disks: (snapshot.storage?.disks ?? []).map((disk) => ({
+    disks: (projection.storage?.disks ?? []).map((disk) => ({
       evidenceIds: [...disk.evidenceIds],
       fileSystemTypes: [
         ...new Set(
@@ -105,7 +97,7 @@ export function buildReportModel(
       sizeBytes: disk.sizeBytes,
       type: disk.type,
     })),
-    evidence: snapshot.evidence.map((evidence) => ({
+    evidence: projection.evidence.map((evidence) => ({
       collectedAt: evidence.collectedAt,
       ...(evidence.commandId === undefined ? {} : { commandId: evidence.commandId }),
       id: evidence.id,
@@ -115,62 +107,62 @@ export function buildReportModel(
       source: evidence.source,
       status: evidence.status,
     })),
-    findings: [...snapshot.findings],
+    findings: [...projection.findings],
     host: {
-      ...(snapshot.host?.architecture === undefined
+      ...(projection.host?.architecture === undefined
         ? {}
-        : { architecture: snapshot.host.architecture }),
-      ...(snapshot.host?.memory.availableBytes === undefined
+        : { architecture: projection.host.architecture }),
+      ...(projection.host?.memory.availableBytes === undefined
         ? {}
-        : { availableMemoryBytes: snapshot.host.memory.availableBytes }),
-      ...(snapshot.host?.cpu.model === undefined ? {} : { cpuModel: snapshot.host.cpu.model }),
-      ...(snapshot.host?.fqdn === undefined ? {} : { fqdn: snapshot.host.fqdn }),
+        : { availableMemoryBytes: projection.host.memory.availableBytes }),
+      ...(projection.host?.cpu.model === undefined ? {} : { cpuModel: projection.host.cpu.model }),
+      ...(projection.host?.fqdn === undefined ? {} : { fqdn: projection.host.fqdn }),
       hostname: displayHost,
-      ...(snapshot.host?.kernelVersion === undefined
+      ...(projection.host?.kernelVersion === undefined
         ? {}
-        : { kernelVersion: snapshot.host.kernelVersion }),
-      ...(snapshot.host?.cpu.logicalCores === undefined
+        : { kernelVersion: projection.host.kernelVersion }),
+      ...(projection.host?.cpu.logicalCores === undefined
         ? {}
-        : { logicalCores: snapshot.host.cpu.logicalCores }),
-      ...(snapshot.host?.operatingSystem.prettyName === undefined
+        : { logicalCores: projection.host.cpu.logicalCores }),
+      ...(projection.host?.operatingSystem.prettyName === undefined
         ? {}
-        : { operatingSystem: snapshot.host.operatingSystem.prettyName }),
-      ...(snapshot.host?.packageManager === undefined
+        : { operatingSystem: projection.host.operatingSystem.prettyName }),
+      ...(projection.host?.packageManager === undefined
         ? {}
-        : { packageManager: snapshot.host.packageManager }),
-      ...(snapshot.host?.cpu.physicalCores === undefined
+        : { packageManager: projection.host.packageManager }),
+      ...(projection.host?.cpu.physicalCores === undefined
         ? {}
-        : { physicalCores: snapshot.host.cpu.physicalCores }),
-      ...(snapshot.host?.memory.swapTotalBytes === undefined
+        : { physicalCores: projection.host.cpu.physicalCores }),
+      ...(projection.host?.memory.swapTotalBytes === undefined
         ? {}
-        : { swapTotalBytes: snapshot.host.memory.swapTotalBytes }),
-      ...(snapshot.host?.timezone === undefined ? {} : { timezone: snapshot.host.timezone }),
-      ...(snapshot.host?.memory.totalBytes === undefined
+        : { swapTotalBytes: projection.host.memory.swapTotalBytes }),
+      ...(projection.host?.timezone === undefined ? {} : { timezone: projection.host.timezone }),
+      ...(projection.host?.memory.totalBytes === undefined
         ? {}
-        : { totalMemoryBytes: snapshot.host.memory.totalBytes }),
-      ...(snapshot.host?.uptimeSeconds === undefined
+        : { totalMemoryBytes: projection.host.memory.totalBytes }),
+      ...(projection.host?.uptimeSeconds === undefined
         ? {}
-        : { uptimeSeconds: snapshot.host.uptimeSeconds }),
-      ...(snapshot.host?.virtualization === undefined
+        : { uptimeSeconds: projection.host.uptimeSeconds }),
+      ...(projection.host?.virtualization === undefined
         ? {}
-        : { virtualization: snapshot.host.virtualization }),
+        : { virtualization: projection.host.virtualization }),
     },
     metadata: {
       displayHost,
       generatedAt,
-      opsenseVersion: snapshot.session.opsenseVersion,
-      scanId: snapshot.session.id,
+      opsenseVersion: projection.session.opsenseVersion,
+      scanId: projection.session.id,
       scannedAt,
-      schemaVersion: snapshot.session.schemaVersion,
-      state: snapshot.session.state,
-      targetHost: snapshot.session.target.host,
-      targetPort: snapshot.session.target.port,
-      ...(snapshot.session.target.user === undefined
+      schemaVersion: projection.session.schemaVersion,
+      state: projection.session.state,
+      targetHost: projection.session.target.host,
+      targetPort: projection.session.target.port,
+      ...(projection.session.target.user === undefined
         ? {}
-        : { targetUser: snapshot.session.target.user }),
+        : { targetUser: projection.session.target.user }),
       title: `${displayHost} 服务器巡检报告`,
     },
-    mounts: (snapshot.storage?.mounts ?? []).map((mount) => {
+    mounts: (projection.storage?.mounts ?? []).map((mount) => {
       const percent = usagePercent(mount.usedBytes, mount.totalBytes);
       return {
         ...(mount.availableBytes === undefined ? {} : { availableBytes: mount.availableBytes }),
@@ -186,20 +178,20 @@ export function buildReportModel(
       };
     }),
     network: {
-      defaultRoutes: (snapshot.network?.routes ?? [])
+      defaultRoutes: (projection.network?.routes ?? [])
         .filter((route) => route.isDefault)
         .map(
           (route) =>
             `${route.destination}${route.gateway === undefined ? '' : ` via ${route.gateway}`}${route.device === undefined ? '' : ` dev ${route.device}`}`,
         ),
-      dnsServers: [...(snapshot.network?.dns.servers ?? [])],
-      ...(snapshot.network?.firewall.active === undefined
+      dnsServers: [...(projection.network?.dns.servers ?? [])],
+      ...(projection.network?.firewall.active === undefined
         ? {}
-        : { firewallActive: snapshot.network.firewall.active }),
-      ...(snapshot.network?.firewall.backend === undefined
+        : { firewallActive: projection.network.firewall.active }),
+      ...(projection.network?.firewall.backend === undefined
         ? {}
-        : { firewallBackend: snapshot.network.firewall.backend }),
-      interfaces: (snapshot.network?.interfaces ?? []).map((networkInterface) => ({
+        : { firewallBackend: projection.network.firewall.backend }),
+      interfaces: (projection.network?.interfaces ?? []).map((networkInterface) => ({
         addresses: networkInterface.addresses.map(
           (address) => `${address.address}/${address.prefixLength} (${address.classification})`,
         ),
@@ -211,18 +203,18 @@ export function buildReportModel(
         name: networkInterface.name,
         ...(networkInterface.state === undefined ? {} : { state: networkInterface.state }),
       })),
-      searchDomains: [...(snapshot.network?.dns.searchDomains ?? [])],
+      searchDomains: [...(projection.network?.dns.searchDomains ?? [])],
     },
-    ...(snapshot.redaction === undefined ? {} : { redaction: snapshot.redaction }),
+    ...(projection.redaction === undefined ? {} : { redaction: projection.redaction }),
     services,
     summary: {
-      artifactCount: snapshot.artifacts.length,
-      containerCount: snapshot.containers.length,
-      diskCount: snapshot.storage?.disks.length ?? 0,
-      evidenceCount: snapshot.evidence.length,
-      findingCount: snapshot.findings.length + (analysis?.findings.length ?? 0),
-      interfaceCount: snapshot.network?.interfaces.length ?? 0,
-      mountCount: snapshot.storage?.mounts.length ?? 0,
+      artifactCount: projection.artifacts.length,
+      containerCount: projection.containers.length,
+      diskCount: projection.storage?.disks.length ?? 0,
+      evidenceCount: projection.evidence.length,
+      findingCount: projection.findings.length + (analysis?.findings.length ?? 0),
+      interfaceCount: projection.network?.interfaces.length ?? 0,
+      mountCount: projection.storage?.mounts.length ?? 0,
       needsReviewServiceCount: serviceIndex.filter(
         (service) => service.reportPlacement === 'needs_review',
       ).length,
@@ -235,7 +227,7 @@ export function buildReportModel(
         (service) => service.reportPlacement === 'supporting',
       ).length,
       systemServiceCount: systemServiceRecords.length,
-      unknownCount: snapshot.unknowns.length + (analysis?.unknowns.length ?? 0),
+      unknownCount: projection.unknowns.length + (analysis?.unknowns.length ?? 0),
     },
     serviceIndex,
     systemServices: {
@@ -244,22 +236,10 @@ export function buildReportModel(
       runningCount: systemServiceRecords.filter((service) => service.status === 'running').length,
       totalCount: systemServiceRecords.length,
     },
-    unknowns: [...snapshot.unknowns],
+    unknowns: [...projection.unknowns],
   };
   assertSchema(ReportModelSchema, model);
   return model;
-}
-
-function analysisPlan(analysis: AiAnalysis): AiPlan {
-  return {
-    generatedAt: analysis.generatedAt,
-    pathAssessments: analysis.pathAssessments,
-    probeRequests: [],
-    provider: analysis.provider,
-    serviceAssessments: analysis.serviceAssessments,
-    ...(analysis.model === undefined ? {} : { model: analysis.model }),
-    ...(analysis.threadId === undefined ? {} : { threadId: analysis.threadId }),
-  };
 }
 
 function formatEndpoint(address: string, port: number): string {

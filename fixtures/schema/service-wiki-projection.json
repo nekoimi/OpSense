@@ -1,0 +1,10 @@
+{
+  "projectionId": "service-wiki:fixture",
+  "inventoryProjectionId": "projection:scan-20260814T030000Z-12345678",
+  "generatedAt": "2026-08-14T03:00:02.000Z",
+  "serviceIds": [],
+  "summaryServiceIds": [],
+  "reviewServiceIds": [],
+  "riskFindings": [],
+  "unresolvedQuestions": []
+}

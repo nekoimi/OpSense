@@ -26,6 +26,8 @@ import type {
   ScanSnapshot,
 } from '@opsense/schema';
 
+export * from './preflight.js';
+
 interface CodexClient {
   resumeThread(id: string, options?: ThreadOptions): Thread;
   startThread(options?: ThreadOptions): Thread;

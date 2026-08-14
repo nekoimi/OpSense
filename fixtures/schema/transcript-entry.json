@@ -1,0 +1,8 @@
+{
+  "entryId": "transcript-fixture",
+  "sessionId": "agent-session-fixture",
+  "sequence": 1,
+  "at": "2026-08-14T03:00:01.000Z",
+  "kind": "user",
+  "text": "整理服务器服务。"
+}

@@ -1,0 +1,23 @@
+{
+  "responseId": "response-fixture",
+  "sessionId": "agent-session-fixture",
+  "turnId": "turn-fixture",
+  "message": "已完成当前轮调查。",
+  "observations": [],
+  "toolActivity": [
+    {
+      "activityId": "activity-fixture",
+      "toolName": "read_context",
+      "status": "completed",
+      "startedAt": "2026-08-14T03:00:01.000Z",
+      "evidenceIds": [],
+      "resultSummary": "读取摘要成功。"
+    }
+  ],
+  "evidenceReferences": [],
+  "updatedEntities": [],
+  "unresolvedQuestions": [],
+  "wikiArtifacts": [],
+  "nextSuggestions": [],
+  "nextAction": "继续验证主要服务。"
+}

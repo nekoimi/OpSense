@@ -23,6 +23,7 @@
     "@opsense/core": "workspace:*",
     "@opsense/redaction": "workspace:*",
     "@opsense/report": "workspace:*",
+    "@opsense/projection": "workspace:*",
     "@opsense/schema": "workspace:*",
     "@opsense/ssh": "workspace:*",
     "@opsense/workspace": "workspace:*",

@@ -1,0 +1,12 @@
+{
+  "turnId": "turn-fixture",
+  "sessionId": "agent-session-fixture",
+  "sequence": 1,
+  "startedAt": "2026-08-14T03:00:01.000Z",
+  "inputContextHash": "sha256:fixture",
+  "userMessage": "整理服务器服务。",
+  "decisionKind": "tool_call",
+  "toolCalls": [],
+  "evidenceAdded": [],
+  "projectionChanges": []
+}

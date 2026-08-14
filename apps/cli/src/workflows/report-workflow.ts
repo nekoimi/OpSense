@@ -2,6 +2,7 @@ import { access, constants, readFile } from 'node:fs/promises';
 
 import { generateReportArtifacts } from '@opsense/report';
 import type { GeneratedReportArtifacts, ReportFormat } from '@opsense/report';
+import { buildInventoryProjection } from '@opsense/projection';
 import { AiAnalysisSchema, assertSchema } from '@opsense/schema';
 import type { AiAnalysis, ScanSnapshot } from '@opsense/schema';
 import {
@@ -9,6 +10,7 @@ import {
   createRunWorkspaceLayout,
   ensureWorkspace,
   loadConfig,
+  writeJsonAtomic,
 } from '@opsense/workspace';
 
 import { readSnapshotFile } from './analysis-workflow.js';
@@ -39,16 +41,20 @@ export async function runReportWorkflow(
   const layout = createRunWorkspaceLayout(options.scan, workspaceRoot);
   const snapshot = await readSnapshotFile(layout.snapshotFile);
   const analysis = await readOptionalAnalysis(layout.aiOutputFile);
+  const projection = buildInventoryProjection(snapshot, {
+    ...(analysis === undefined ? {} : { analysis }),
+  });
+  await writeJsonAtomic(layout.agentProjectionFile, projection);
   const scannedAt = new Date(snapshot.session.finishedAt ?? snapshot.session.startedAt);
   const outputDirectory = createReportDirectory(
     snapshot.session.target.host,
     scannedAt,
     workspaceRoot,
   );
-  const artifacts = await generateReportArtifacts(snapshot, {
-    ...(analysis === undefined ? {} : { analysis }),
+  const artifacts = await generateReportArtifacts(projection, {
     formats: options.formats,
     outputDirectory,
+    sourceSnapshot: snapshot,
     ...(options.timeZone === undefined ? {} : { timeZone: options.timeZone }),
   });
   return { ...(analysis === undefined ? {} : { analysis }), artifacts, snapshot };

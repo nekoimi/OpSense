@@ -63,12 +63,13 @@ M12 -> M13 -> M14 -> M15 -> M16 -> M17 -> M18
 
 ### M12-01 固化 v2 模块边界
 
-- [ ] `Must` 新增 `packages/agent-runtime`，只负责 Agent 会话、循环、工具路由、预算和恢复。
-- [ ] `Must` 新增 `packages/projection`，负责主机资源可见性、服务 Wiki 投影和报告质量门禁。
-- [ ] `Must` 将 `packages/ai-provider` 的职责收窄为 Provider/Thread 适配、候选基线分类和通用 AI 契约。
-- [ ] `Must` 禁止 `packages/report` 直接依赖 `@opsense/ai-provider` 的分类实现。
-- [ ] `Must` 保留现有 `collectors`、`ssh`、`redaction` 和 `core` 的公共 API 兼容层。
-- [ ] `Should` 更新 workspace、TypeScript path alias、Vitest alias 和包级 README。
+- [x] `Must` 新增 `packages/agent-runtime`，只负责 Agent 会话、循环、工具路由、预算和恢复。
+- [x] `Must` 新增 `packages/projection`，负责主机资源可见性、服务 Wiki 投影和报告质量门禁。
+- [x] `Must` 将 `packages/ai-provider` 的职责收窄为 Provider/Thread 适配、候选基线分类和通用 AI 契约。
+- [x] `Must` 禁止 `packages/report` 直接依赖 `@opsense/ai-provider` 的分类实现。
+- [x] `Must` 保留现有 `collectors`、`ssh`、`redaction` 和 `core` 的公共 API 兼容层。
+- [x] `Should` 更新 workspace、TypeScript path alias、Vitest alias。
+- [ ] `Should` 增加新包级 README。
 
 验收条件：
 
@@ -78,29 +79,29 @@ M12 -> M13 -> M14 -> M15 -> M16 -> M17 -> M18
 
 ### M12-02 定义 Agent 契约
 
-- [ ] `Must` 定义 `AgentSession`、`AgentTurn`、`AgentDecision`、`AgentResponse`。
-- [ ] `Must` 定义 `AgentHypothesis`、`ProbeBudget`、`ToolActivity` 和 `TranscriptEntry`。
-- [ ] `Must` 定义 Agent 阶段、终态、错误、失败和中断状态。
-- [ ] `Must` 定义 `nextAction`、`unresolvedQuestions` 和 `nextSuggestions` 字段。
-- [ ] `Must` 所有结构提供 TypeBox Schema、TypeScript 类型和 fixture。
-- [ ] `Must` 对模型输出执行严格 Schema 校验，禁止把非结构化文本写入事实字段。
+- [x] `Must` 定义 `AgentSession`、`AgentTurn`、`AgentDecision`、`AgentResponse`。
+- [x] `Must` 定义 `AgentHypothesis`、`ProbeBudget`、`ToolActivity` 和 `TranscriptEntry`。
+- [x] `Must` 定义 Agent 阶段、终态、错误、失败和中断状态。
+- [x] `Must` 定义 `nextAction`、`unresolvedQuestions` 和 `nextSuggestions` 字段。
+- [x] `Must` 所有结构提供 TypeBox Schema、TypeScript 类型和 fixture。
+- [x] `Must` 对模型输出执行严格 Schema 校验，禁止把非结构化文本写入事实字段。
 
 ### M12-04 Codex 硬依赖预检
 
-- [ ] `Must` 在 Agent 启动前检查 Codex CLI/SDK 是否可调用。
-- [ ] `Must` 检查 Codex 登录状态、凭据、模型和 Thread 创建能力。
-- [ ] `Must` 预检失败时返回专用 CodexUnavailable 退出码。
-- [ ] `Must` 预检失败时不连接服务器、不执行 Agent 工具、不生成 v2 Agent Wiki。
-- [ ] `Must` 将预检错误和修复提示写入 AgentSession。
+- [x] `Must` 在 Agent 启动前检查 Codex CLI/SDK 是否可调用。
+- [x] `Must` 检查 Codex 登录状态、凭据、模型和 Thread 创建能力。
+- [x] `Must` 预检失败时返回专用 CodexUnavailable 退出码。
+- [x] `Must` 预检失败时不连接服务器、不执行 Agent 工具、不生成 v2 Agent Wiki。
+- [x] `Must` 将预检错误和修复提示写入 AgentSession。
 - [ ] `Should` 提供独立的 `opsense agent doctor` 诊断命令。
 
 ### M12-03 定义资源投影契约
 
-- [ ] `Must` 定义 `InventoryProjection`。
-- [ ] `Must` 定义 `VisibilityDecision`：`primary`、`supporting`、`summary`、`appendix`、`filtered`。
-- [ ] `Must` 定义 `resourceClass`、`visibilityReason`、`relatedServiceIds` 和 `evidenceIds`。
-- [ ] `Must` 定义 `ServiceWikiProjection` 和 `RiskFinding`。
-- [ ] `Must` 保证 `filtered` 只改变展示投影，不删除原始快照对象。
+- [x] `Must` 定义 `InventoryProjection`。
+- [x] `Must` 定义 `VisibilityDecision`：`primary`、`supporting`、`summary`、`appendix`、`filtered`。
+- [x] `Must` 定义 `resourceClass`、`visibilityReason`、`relatedServiceIds` 和 `evidenceIds`。
+- [x] `Must` 定义 `ServiceWikiProjection` 和 `RiskFinding`。
+- [x] `Must` 保证 `filtered` 只改变展示投影，不删除原始快照对象。
 
 ## 4. M13：服务知识条目模型
 

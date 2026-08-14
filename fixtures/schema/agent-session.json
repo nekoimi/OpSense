@@ -1,0 +1,26 @@
+{
+  "sessionId": "agent-session-fixture",
+  "scanId": "scan-20260814T030000Z-12345678",
+  "provider": "codex",
+  "model": "gpt-5",
+  "state": "created",
+  "currentStage": "created",
+  "startedAt": "2026-08-14T03:00:00.000Z",
+  "updatedAt": "2026-08-14T03:00:00.000Z",
+  "turnCount": 0,
+  "probeRound": 0,
+  "budgets": {
+    "maxRounds": 1,
+    "maxRequests": 8,
+    "maxBytes": 2000000,
+    "maxDurationMs": 120000,
+    "usedRounds": 0,
+    "usedRequests": 0,
+    "usedBytes": 0,
+    "usedDurationMs": 0
+  },
+  "coverage": {},
+  "unresolvedQuestions": [],
+  "repairSuggestions": [],
+  "outputFiles": []
+}

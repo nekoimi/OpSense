@@ -1,5 +1,5 @@
 {
-  "name": "@opsense/ai-codex",
+  "name": "@opsense/projection",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -19,8 +19,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@openai/codex-sdk": "^0.147.0",
-    "@opsense/agent-runtime": "workspace:*",
     "@opsense/ai-provider": "workspace:*",
     "@opsense/schema": "workspace:*"
   }

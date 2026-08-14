@@ -50,6 +50,9 @@ importers:
       '@opsense/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@opsense/projection':
+        specifier: workspace:*
+        version: link:../../packages/projection
       '@opsense/redaction':
         specifier: workspace:*
         version: link:../../packages/redaction
@@ -69,11 +72,23 @@ importers:
         specifier: ^14.0.0
         version: 14.0.3
 
+  packages/agent-runtime:
+    dependencies:
+      '@opsense/schema':
+        specifier: workspace:*
+        version: link:../schema
+      '@opsense/workspace':
+        specifier: workspace:*
+        version: link:../workspace
+
   packages/ai-codex:
     dependencies:
       '@openai/codex-sdk':
         specifier: ^0.147.0
         version: 0.147.0
+      '@opsense/agent-runtime':
+        specifier: workspace:*
+        version: link:../agent-runtime
       '@opsense/ai-provider':
         specifier: workspace:*
         version: link:../ai-provider
@@ -121,6 +136,15 @@ importers:
         specifier: workspace:*
         version: link:../schema
 
+  packages/projection:
+    dependencies:
+      '@opsense/ai-provider':
+        specifier: workspace:*
+        version: link:../ai-provider
+      '@opsense/schema':
+        specifier: workspace:*
+        version: link:../schema
+
   packages/redaction:
     dependencies:
       '@opsense/schema':
@@ -129,9 +153,6 @@ importers:
 
   packages/report:
     dependencies:
-      '@opsense/ai-provider':
-        specifier: workspace:*
-        version: link:../ai-provider
       '@opsense/redaction':
         specifier: workspace:*
         version: link:../redaction

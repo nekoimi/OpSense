@@ -13,6 +13,7 @@ export const ExitCode = {
   ConnectionFailed: 10,
   AuthenticationFailed: 11,
   ReportFailed: 20,
+  CodexUnavailable: 30,
 } as const;
 
 export type ExitCodeValue = (typeof ExitCode)[keyof typeof ExitCode];
@@ -26,6 +27,14 @@ export function exitCodeForError(error: unknown, fallback = ExitCode.GeneralErro
     error.code === 'commander.invalidArgument'
   ) {
     return ExitCode.InvalidUsage;
+  }
+  if (
+    error !== null &&
+    typeof error === 'object' &&
+    'code' in error &&
+    error.code === 'CODEX_UNAVAILABLE'
+  ) {
+    return ExitCode.CodexUnavailable;
   }
   if (error instanceof SshError) {
     if (error.code === 'SSH_CONNECTION_ABORTED') return ExitCode.Interrupted;

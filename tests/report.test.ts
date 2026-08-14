@@ -10,6 +10,7 @@ import {
   sanitizeReportIdentifier,
   validateDocxBuffer,
 } from '@opsense/report';
+import { buildInventoryProjection } from '@opsense/projection';
 import { REDACTED_VALUE, scanForSecrets } from '@opsense/redaction';
 import { ReportModelSchema, validateSchema } from '@opsense/schema';
 import type { ScanSnapshot } from '@opsense/schema';
@@ -35,7 +36,10 @@ describe('M8 report generation', () => {
   });
 
   it('creates Chinese cross-platform file names with a common local timestamp', async () => {
-    const model = createReportModel(await reportSnapshot(), () => new Date('2026-08-14T09:00:00Z'));
+    const model = createReportModel(
+      buildInventoryProjection(await reportSnapshot()),
+      () => new Date('2026-08-14T09:00:00Z'),
+    );
 
     expect(createReportFileNames(model, { timeZone: 'Asia/Shanghai' })).toEqual({
       docx: '服务器巡检报告-192.168.168.12-2026-08-14_16-36-12.docx',
@@ -47,7 +51,10 @@ describe('M8 report generation', () => {
   });
 
   it('builds a schema-valid format-independent report model', async () => {
-    const model = createReportModel(await reportSnapshot(), () => new Date('2026-08-14T09:00:00Z'));
+    const model = createReportModel(
+      buildInventoryProjection(await reportSnapshot()),
+      () => new Date('2026-08-14T09:00:00Z'),
+    );
     const validation = validateSchema(ReportModelSchema, model);
 
     expect(validation.valid, JSON.stringify(validation.errors)).toBe(true);
@@ -65,9 +72,11 @@ describe('M8 report generation', () => {
   it('writes redacted Markdown, offline HTML, and a valid DOCX from one model', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'opsense-report-test-'));
     temporaryDirectories.push(root);
-    const artifacts = await generateReportArtifacts(await reportSnapshot(), {
+    const snapshot = await reportSnapshot();
+    const artifacts = await generateReportArtifacts(buildInventoryProjection(snapshot), {
       now: () => new Date('2026-08-14T09:00:00Z'),
       outputDirectory: root,
+      sourceSnapshot: snapshot,
       timeZone: 'Asia/Shanghai',
     });
 
@@ -90,7 +99,9 @@ describe('M8 report generation', () => {
 
     const html = await readFile(artifacts.htmlFile ?? '', 'utf8');
     const model = JSON.parse(await readFile(artifacts.modelFile, 'utf8')) as unknown;
-    const persistedSnapshot = JSON.parse(await readFile(artifacts.snapshotFile, 'utf8')) as unknown;
+    const persistedSnapshot = JSON.parse(
+      await readFile(artifacts.snapshotFile ?? '', 'utf8'),
+    ) as unknown;
     const persisted = await Promise.all(
       (await listFiles(root)).map((file) =>
         path.extname(file) === '.docx' ? Promise.resolve('') : readFile(file, 'utf8'),

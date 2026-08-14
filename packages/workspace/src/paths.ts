@@ -11,6 +11,12 @@ export interface WorkspaceLayout {
 }
 
 export interface RunWorkspaceLayout extends WorkspaceLayout {
+  agentHypothesesFile: string;
+  agentProjectionFile: string;
+  agentReviewFile: string;
+  agentSessionFile: string;
+  agentTranscriptFile: string;
+  agentTurnsFile: string;
   aiInputDirectory: string;
   aiPlanFile: string;
   aiProbeAuditFile: string;
@@ -47,6 +53,12 @@ export function createRunWorkspaceLayout(
   const runDirectory = path.join(workspace.runsDirectory, sanitizePathSegment(scanId));
   return {
     ...workspace,
+    agentHypothesesFile: path.join(runDirectory, 'agent-hypotheses.json'),
+    agentProjectionFile: path.join(runDirectory, 'agent-projection.json'),
+    agentReviewFile: path.join(runDirectory, 'agent-review.json'),
+    agentSessionFile: path.join(runDirectory, 'agent-session.json'),
+    agentTranscriptFile: path.join(runDirectory, 'agent-transcript.jsonl'),
+    agentTurnsFile: path.join(runDirectory, 'agent-turns.jsonl'),
     aiInputDirectory: path.join(runDirectory, 'ai-input'),
     aiPlanFile: path.join(runDirectory, 'ai-plan.json'),
     aiProbeAuditFile: path.join(runDirectory, 'ai-probe-audit.json'),

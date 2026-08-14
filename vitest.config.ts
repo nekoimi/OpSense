@@ -8,6 +8,9 @@ export default defineConfig({
       '@opsense/ai-codex': fileURLToPath(
         new URL('./packages/ai-codex/src/index.ts', import.meta.url),
       ),
+      '@opsense/agent-runtime': fileURLToPath(
+        new URL('./packages/agent-runtime/src/index.ts', import.meta.url),
+      ),
       '@opsense/ai-provider': fileURLToPath(
         new URL('./packages/ai-provider/src/index.ts', import.meta.url),
       ),
@@ -19,6 +22,9 @@ export default defineConfig({
         new URL('./packages/redaction/src/index.ts', import.meta.url),
       ),
       '@opsense/report': fileURLToPath(new URL('./packages/report/src/index.ts', import.meta.url)),
+      '@opsense/projection': fileURLToPath(
+        new URL('./packages/projection/src/index.ts', import.meta.url),
+      ),
       '@opsense/schema': fileURLToPath(new URL('./packages/schema/src/index.ts', import.meta.url)),
       '@opsense/ssh': fileURLToPath(new URL('./packages/ssh/src/index.ts', import.meta.url)),
       '@opsense/workspace': fileURLToPath(
