@@ -30,6 +30,7 @@ export default defineConfig({
       '@opsense/workspace': fileURLToPath(
         new URL('./packages/workspace/src/index.ts', import.meta.url),
       ),
+      '@opsense/wiki': fileURLToPath(new URL('./packages/wiki/src/index.ts', import.meta.url)),
     },
   },
   test: {

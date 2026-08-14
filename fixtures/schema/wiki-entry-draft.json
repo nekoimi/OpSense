@@ -1,0 +1,79 @@
+{
+  "serviceId": "service:order-api",
+  "identity": {
+    "name": "order-api",
+    "displayName": "订单服务",
+    "role": "primary_application"
+  },
+  "oneLineSummary": "处理订单请求。",
+  "purpose": {
+    "summary": "处理订单请求。",
+    "confidence": "confirmed",
+    "evidenceIds": ["evidence:service"]
+  },
+  "lifecycle": {
+    "status": "running",
+    "enabledAtBoot": true,
+    "start": {
+      "command": "/opt/order-api/bin/start",
+      "confidence": "confirmed",
+      "evidenceIds": ["evidence:unit"]
+    }
+  },
+  "deployment": {
+    "deploymentType": "systemd",
+    "deployDirectories": ["/opt/order-api"],
+    "systemdUnitIds": ["systemd:order-api.service"],
+    "composeProjectIds": [],
+    "composeServices": [],
+    "containerIds": [],
+    "containers": [],
+    "processIds": [100]
+  },
+  "exposure": {
+    "ports": [
+      {
+        "protocol": "TCP",
+        "hostAddress": "0.0.0.0",
+        "hostPort": 8080,
+        "exposed": true,
+        "evidenceIds": ["evidence:socket"]
+      }
+    ]
+  },
+  "configuration": {
+    "configFiles": ["/opt/order-api/config.yml"],
+    "environmentFiles": [],
+    "backupPaths": []
+  },
+  "storage": {
+    "dataDirectories": ["/var/lib/order-api"],
+    "mountIds": [],
+    "backupPaths": []
+  },
+  "logging": { "logLocations": ["/var/log/order-api"] },
+  "evidence": {
+    "evidenceIds": ["evidence:service", "evidence:unit", "evidence:socket"],
+    "coverage": 1,
+    "coveredFields": [
+      "configFiles",
+      "dataDirectories",
+      "deployDirectory",
+      "deploymentType",
+      "evidenceIds",
+      "lifecycle",
+      "logLocations",
+      "ports",
+      "purpose",
+      "status"
+    ],
+    "missingFields": [],
+    "conflictFields": []
+  },
+  "confidence": "confirmed",
+  "conflicts": [],
+  "confirmedFacts": [],
+  "inferences": [],
+  "unknowns": [],
+  "reviewItems": []
+}

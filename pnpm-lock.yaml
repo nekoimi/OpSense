@@ -197,6 +197,12 @@ importers:
         specifier: ^1.15.5
         version: 1.15.5
 
+  packages/wiki:
+    dependencies:
+      '@opsense/schema':
+        specifier: workspace:*
+        version: link:../schema
+
   packages/workspace:
     dependencies:
       '@opsense/schema':

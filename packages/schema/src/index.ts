@@ -14,3 +14,4 @@ export * from './scan.js';
 export * from './service.js';
 export * from './storage.js';
 export * from './validator.js';
+export * from './wiki.js';

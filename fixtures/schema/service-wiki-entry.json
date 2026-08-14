@@ -1,0 +1,53 @@
+{
+  "serviceId": "service:order-api",
+  "identity": {
+    "name": "order-api",
+    "role": "primary_application"
+  },
+  "oneLineSummary": "处理订单请求。",
+  "purpose": {
+    "summary": "处理订单请求。",
+    "confidence": "confirmed",
+    "evidenceIds": ["evidence:service"]
+  },
+  "lifecycle": { "status": "running" },
+  "deployment": {
+    "deploymentType": "systemd",
+    "deployDirectories": ["/opt/order-api"],
+    "systemdUnitIds": [],
+    "composeProjectIds": [],
+    "composeServices": [],
+    "containerIds": [],
+    "containers": [],
+    "processIds": []
+  },
+  "exposure": { "ports": [] },
+  "configuration": { "configFiles": [], "environmentFiles": [], "backupPaths": [] },
+  "storage": { "dataDirectories": [], "mountIds": [], "backupPaths": [] },
+  "logging": { "logLocations": [] },
+  "evidence": {
+    "evidenceIds": ["evidence:service"],
+    "coverage": 0.2,
+    "coveredFields": ["evidenceIds", "status"],
+    "missingFields": [
+      "purpose",
+      "deploymentType",
+      "deployDirectory",
+      "ports",
+      "configFiles",
+      "logLocations",
+      "dataDirectories",
+      "lifecycle"
+    ],
+    "conflictFields": []
+  },
+  "confidence": "confirmed",
+  "conflicts": [],
+  "confirmedFacts": [],
+  "inferences": [],
+  "unknowns": ["缺少 ports 的有效证据。"],
+  "reviewItems": ["服务证据覆盖率 20%，低于建议阈值。"],
+  "anchor": "service-service-order-api",
+  "reportPlacement": "primary",
+  "generatedAt": "2026-08-14T06:00:00.000Z"
+}

@@ -107,29 +107,29 @@ M12 -> M13 -> M14 -> M15 -> M16 -> M17 -> M18
 
 ### M13-01 ServiceWikiEntry
 
-- [ ] `Must` 定义 `ServiceWikiEntry` 和 `WikiEntryDraft` Schema。
-- [ ] `Must` 覆盖身份、用途、角色、状态、部署方式和证据置信度。
-- [ ] `Must` 覆盖部署目录、配置文件、环境文件、端口、数据、日志和备份路径。
-- [ ] `Must` 覆盖 systemd unit、Compose service、容器、镜像、进程和运行用户关联。
-- [ ] `Must` 覆盖生命周期入口，并区分 `confirmed`、`inferred` 和 `unknown`。
-- [ ] `Must` 覆盖 `confirmedFacts`、`inferences`、`unknowns` 和 `reviewItems`。
+- [x] `Must` 定义 `ServiceWikiEntry` 和 `WikiEntryDraft` Schema。
+- [x] `Must` 覆盖身份、用途、角色、状态、部署方式和证据置信度。
+- [x] `Must` 覆盖部署目录、配置文件、环境文件、端口、数据、日志和备份路径。
+- [x] `Must` 覆盖 systemd unit、Compose service、容器、镜像、进程和运行用户关联。
+- [x] `Must` 覆盖生命周期入口，并区分 `confirmed`、`inferred` 和 `unknown`。
+- [x] `Must` 覆盖 `confirmedFacts`、`inferences`、`unknowns` 和 `reviewItems`。
 
 ### M13-02 服务完整度和证据门禁
 
-- [ ] `Must` 定义主要服务最低关键字段集合。
-- [ ] `Must` 实现服务完整度评分和证据覆盖率。
-- [ ] `Must` 确保每个主要服务至少关联一个进程、unit、容器、端口、目录或配置证据。
-- [ ] `Must` 禁止没有 Evidence ID 的确定性结论进入 Wiki 正文。
-- [ ] `Must` 对证据冲突保留多个来源，不隐式选择一个值。
-- [ ] `Should` 为服务条目生成稳定锚点，供 HTML、Markdown 和 Word 目录链接使用。
+- [x] `Must` 定义主要服务最低关键字段集合。
+- [x] `Must` 实现服务完整度评分和证据覆盖率。
+- [x] `Must` 确保每个主要服务至少关联一个进程、unit、容器、端口、目录或配置证据。
+- [x] `Must` 禁止没有 Evidence ID 的确定性结论进入 Wiki 正文。
+- [x] `Must` 对证据冲突保留多个来源，不隐式选择一个值。
+- [x] `Should` 为服务条目生成稳定锚点，供 HTML、Markdown 和 Word 目录链接使用。
 
 ### M13-03 确定性服务视图
 
-- [ ] `Must` 将 `primary_application`、`infrastructure_service`、`edge_service`、`supporting_component`、`container_platform` 和 `system_service` 区分开。
-- [ ] `Must` 普通发行版 systemd 服务只进入摘要或异常列表。
-- [ ] `Must` 统一主机端口、容器端口和容器内部端口的表达方式。
-- [ ] `Must` 支持一个服务合并多个容器、进程和 Compose service。
-- [ ] `Must` 为无法确认的候选生成 `needs_review` 条目，不静默丢弃。
+- [x] `Must` 将 `primary_application`、`infrastructure_service`、`edge_service`、`supporting_component`、`container_platform` 和 `system_service` 区分开。
+- [x] `Must` 普通发行版 systemd 服务只进入摘要或异常列表。
+- [x] `Must` 统一主机端口、容器端口和容器内部端口的表达方式。
+- [x] `Must` 支持一个服务合并多个容器、进程和 Compose service。
+- [x] `Must` 为无法确认的候选生成 `needs_review` 条目，不静默丢弃。
 
 ## 5. M14：服务发现与非标准路径增强
 

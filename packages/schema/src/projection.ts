@@ -12,6 +12,7 @@ import { ContainerRecordSchema, ComposeProjectRecordSchema } from './container.j
 import { ArtifactRecordSchema, PathSeedRecordSchema } from './evidence.js';
 import { ScanSessionSchema } from './scan.js';
 import { RedactionReportSchema } from './redaction.js';
+import { ServiceWikiEntrySchema } from './wiki.js';
 
 export const VisibilityPlacementSchema = Type.Union([
   Type.Literal('primary'),
@@ -73,6 +74,7 @@ export const ServiceWikiProjectionSchema = Type.Object(
     summaryServiceIds: Type.Array(IdSchema),
     reviewServiceIds: Type.Array(IdSchema),
     riskFindings: Type.Array(RiskFindingSchema),
+    entries: Type.Array(ServiceWikiEntrySchema),
     unresolvedQuestions: Type.Array(Type.String()),
   },
   { $id: 'ServiceWikiProjection', additionalProperties: false },

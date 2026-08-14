@@ -33,7 +33,8 @@
       "@opsense/projection": ["packages/projection/src/index.ts"],
       "@opsense/schema": ["packages/schema/src/index.ts"],
       "@opsense/ssh": ["packages/ssh/src/index.ts"],
-      "@opsense/workspace": ["packages/workspace/src/index.ts"]
+      "@opsense/workspace": ["packages/workspace/src/index.ts"],
+      "@opsense/wiki": ["packages/wiki/src/index.ts"]
     }
   }
 }
