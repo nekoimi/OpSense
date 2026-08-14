@@ -136,6 +136,12 @@ importers:
         specifier: workspace:*
         version: link:../schema
 
+  packages/discovery:
+    dependencies:
+      '@opsense/schema':
+        specifier: workspace:*
+        version: link:../schema
+
   packages/projection:
     dependencies:
       '@opsense/ai-provider':

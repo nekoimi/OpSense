@@ -3,6 +3,7 @@ export * from './agent.js';
 export * from './common.js';
 export * from './config.js';
 export * from './container.js';
+export * from './discovery.js';
 export * from './evidence.js';
 export * from './host.js';
 export * from './network.js';

@@ -18,6 +18,9 @@ export default defineConfig({
         new URL('./packages/collectors/src/index.ts', import.meta.url),
       ),
       '@opsense/core': fileURLToPath(new URL('./packages/core/src/index.ts', import.meta.url)),
+      '@opsense/discovery': fileURLToPath(
+        new URL('./packages/discovery/src/index.ts', import.meta.url),
+      ),
       '@opsense/redaction': fileURLToPath(
         new URL('./packages/redaction/src/index.ts', import.meta.url),
       ),

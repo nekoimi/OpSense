@@ -135,26 +135,26 @@ M12 -> M13 -> M14 -> M15 -> M16 -> M17 -> M18
 
 ### M14-01 证据驱动的候选生成
 
-- [ ] `Must` 将进程、父子关系、cgroup、unit、端口、容器、镜像、Compose 标签和路径建立可查询索引。
-- [ ] `Must` 将候选来源和归并规则写入 Evidence 图。
-- [ ] `Must` 降低对固定服务名称和固定目录名称的依赖。
-- [ ] `Must` 识别无标准名称的 Java、Go、Rust、Shell 和自研程序候选。
+- [x] `Must` 将进程、父子关系、cgroup、unit、端口、容器、镜像、Compose 标签和路径建立可查询索引。
+- [x] `Must` 将候选来源和归并规则写入 Evidence 图。
+- [x] `Must` 降低对固定服务名称和固定目录名称的依赖。
+- [x] `Must` 识别无标准名称的 Java、Go、Rust、Shell 和自研程序候选。
 - [ ] `Should` 增加 Doris、Hadoop、MinIO、RustFS、FastDFS 等样本的识别 fixture。
 
 ### M14-02 受控路径调查种子
 
-- [ ] `Must` 从已知 Evidence 生成目录元数据、目录列表、配置摘要和路径搜索候选。
-- [ ] `Must` 搜索根只能来自已采集部署根、数据挂载或服务路径。
-- [ ] `Must` 搜索词只能来自已有服务、进程、unit、镜像或 Compose 线索。
-- [ ] `Must` 明确排除 `/proc`、`/sys`、`/dev`、`/run`、overlay2 和运行时内部目录。
-- [ ] `Must` 保留被拒绝探测的原因，供 Agent 和用户查看。
+- [x] `Must` 从已知 Evidence 生成目录元数据、目录列表、配置摘要和路径搜索候选。
+- [x] `Must` 搜索根只能来自已采集部署根、数据挂载或服务路径。
+- [x] `Must` 搜索词只能来自已有服务、进程、unit、镜像或 Compose 线索。
+- [x] `Must` 明确排除 `/proc`、`/sys`、`/dev`、`/run`、overlay2 和运行时内部目录。
+- [x] `Must` 保留被拒绝探测的原因，供 Agent 和用户查看。
 
 ### M14-03 过滤规则样本
 
-- [ ] `Must` 增加 Docker bridge、veth、overlay、Compose network 样本。
-- [ ] `Must` 增加 overlay2、rootfs、shm、proc、sysfs 和 runtime mount 样本。
-- [ ] `Must` 增加业务数据挂载与容器运行时挂载混合样本。
-- [ ] `Must` 验证过滤后业务挂载仍能回溯到服务。
+- [x] `Must` 增加 Docker bridge、veth、overlay、Compose network 样本。
+- [x] `Must` 增加 overlay2、rootfs、shm、proc、sysfs 和 runtime mount 样本。
+- [x] `Must` 增加业务数据挂载与容器运行时挂载混合样本。
+- [x] `Must` 验证过滤后业务挂载仍能回溯到服务。
 
 ## 6. M15：Agent Runtime
 

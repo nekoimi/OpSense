@@ -28,6 +28,7 @@
       "@opsense/ai-provider": ["packages/ai-provider/src/index.ts"],
       "@opsense/collectors": ["packages/collectors/src/index.ts"],
       "@opsense/core": ["packages/core/src/index.ts"],
+      "@opsense/discovery": ["packages/discovery/src/index.ts"],
       "@opsense/redaction": ["packages/redaction/src/index.ts"],
       "@opsense/report": ["packages/report/src/index.ts"],
       "@opsense/projection": ["packages/projection/src/index.ts"],
