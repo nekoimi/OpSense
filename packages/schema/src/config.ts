@@ -87,7 +87,7 @@ export const DEFAULT_OPSENSE_CONFIG: OpsenseConfig = {
     maxRetries: 2,
   },
   report: {
-    formats: ['docx'],
+    formats: ['docx', 'html'],
   },
   workspace: {},
 };

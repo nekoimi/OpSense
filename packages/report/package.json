@@ -20,6 +20,10 @@
   },
   "dependencies": {
     "@opsense/ai-provider": "workspace:*",
-    "@opsense/schema": "workspace:*"
+    "@opsense/redaction": "workspace:*",
+    "@opsense/schema": "workspace:*",
+    "docx": "^9.7.1",
+    "fast-xml-parser": "^5.10.1",
+    "jszip": "^3.10.1"
   }
 }

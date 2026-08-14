@@ -81,7 +81,7 @@ describe('local workspace', () => {
 
     expect(loaded.created).toBe(true);
     expect(loaded.config.scan.maxDirectoryDepth).toBe(7);
-    expect(loaded.config.report.formats).toEqual(['docx']);
+    expect(loaded.config.report.formats).toEqual(['docx', 'html']);
     expect(JSON.parse(await readFile(loaded.sourcePath, 'utf8'))).toBeDefined();
   });
 

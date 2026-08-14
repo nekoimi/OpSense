@@ -468,53 +468,56 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 
 ### M8-01 报告 ViewModel
 
-- [ ] `Must` 定义与输出格式无关的 `ReportModel`。
-- [ ] `Must` 将主机、磁盘、网络、服务、风险和未知项转换为报告章节。
-- [ ] `Must` 无 AI 时使用事实数据生成完整基础报告。
-- [ ] `Must` AI 内容与事实内容分层显示。
+- [x] `Must` 定义与输出格式无关的 `ReportModel`。
+- [x] `Must` 将主机、磁盘、网络、服务、风险和未知项转换为报告章节。
+- [x] `Must` 无 AI 时使用事实数据生成完整基础报告。
+- [x] `Must` AI 内容与事实内容分层显示。
 
 ### M8-02 Markdown 与 HTML 报告
 
-- [ ] `Must` 生成 `README.md`、`system.md`、`storage.md`、`network.md` 和 `services.md`。
-- [ ] `Must` 为每个服务生成详情章节或文件。
-- [ ] `Must` 生成风险、未知项和证据附录。
-- [ ] `Must` 生成静态 HTML 报告入口 `index.html`。
-- [ ] `Must` HTML 与 Word 使用同一份 `ReportModel`，章节和事实数据保持一致。
-- [ ] `Must` HTML 报告无需启动本地服务即可离线打开和浏览。
-- [ ] `Must` HTML 包含系统、存储、网络、服务、风险、未知项和证据章节。
-- [ ] `Must` 对报告内容执行 HTML 转义，不允许采集内容注入脚本或标签。
-- [ ] `Must` HTML 在常见桌面浏览器中布局可读，长命令、路径和表格可滚动或换行。
+- [x] `Must` 生成 `README.md`、`system.md`、`storage.md`、`network.md` 和 `services.md`。
+- [x] `Must` 为每个服务生成详情章节或文件。
+- [x] `Must` 生成风险、未知项和证据附录。
+- [x] `Must` 生成静态 HTML 报告入口 `index.html`。
+- [x] `Must` HTML 与 Word 使用同一份 `ReportModel`，章节和事实数据保持一致。
+- [x] `Must` HTML 报告无需启动本地服务即可离线打开和浏览。
+- [x] `Must` HTML 包含系统、存储、网络、服务、风险、未知项和证据章节。
+- [x] `Must` 对报告内容执行 HTML 转义，不允许采集内容注入脚本或标签。
+- [x] `Must` HTML 在常见桌面浏览器中布局可读，长命令、路径和表格可滚动或换行。
+- [x] `Must` HTML 使用低对比度 OpSense 背景水印，并在页脚显示版权声明。
 
 ### M8-03 Word 报告生成器
 
-- [ ] `Must` 使用 `docx` 生成 Word 报告。
-- [ ] `Must` Word 文件名使用中文，格式为 `服务器巡检报告-{服务器标识}-{YYYY-MM-DD_HH-mm-ss}.docx`。
-- [ ] `Must` 文件名中的服务器标识使用扫描目标 IP、主机名或服务名，确保仅查看文件名即可识别目标服务器。
-- [ ] `Must` 清理 Windows、macOS 和 Linux 文件名非法字符；IPv6 地址中的 `:` 替换为 `_`。
-- [ ] `Must` 限制文件名长度，并使用扫描时间避免同一服务器的报告被覆盖。
-- [ ] `Must` 文件名中的扫描时间按本地时区显示，使用常见且文件名安全的 `YYYY-MM-DD_HH-mm-ss` 格式。
-- [ ] `Must` 生成封面。
-- [ ] `Must` 使用 Heading 1/2/3 标题样式。
-- [ ] `Must` 插入可更新的自动目录。
-- [ ] `Must` 生成执行摘要。
-- [ ] `Must` 生成系统环境章节。
-- [ ] `Must` 生成磁盘、分区和挂载表格。
-- [ ] `Must` 生成部署服务汇总表和服务详情。
-- [ ] `Must` 生成风险、未知项和证据附录。
-- [ ] `Must` 添加页眉、页脚和页码。
-- [ ] `Must` 命令和路径使用等宽字体。
-- [ ] `Must` 长路径和表格内容允许换行。
-- [ ] `Must` 服务标题和正文具有合理分页控制。
-- [ ] `Must` 配置中文字体和替代字体。
+- [x] `Must` 使用 `docx` 生成 Word 报告。
+- [x] `Must` Word 文件名使用中文，格式为 `服务器巡检报告-{服务器标识}-{YYYY-MM-DD_HH-mm-ss}.docx`。
+- [x] `Must` 文件名中的服务器标识使用扫描目标 IP、主机名或服务名，确保仅查看文件名即可识别目标服务器。
+- [x] `Must` 清理 Windows、macOS 和 Linux 文件名非法字符；IPv6 地址中的 `:` 替换为 `_`。
+- [x] `Must` 限制文件名长度，并使用扫描时间避免同一服务器的报告被覆盖。
+- [x] `Must` 文件名中的扫描时间按本地时区显示，使用常见且文件名安全的 `YYYY-MM-DD_HH-mm-ss` 格式。
+- [x] `Must` 生成封面。
+- [x] `Must` 使用 Heading 1/2/3 标题样式。
+- [x] `Must` 插入可更新的自动目录。
+- [x] `Must` 生成执行摘要。
+- [x] `Must` 生成系统环境章节。
+- [x] `Must` 生成磁盘、分区和挂载表格。
+- [x] `Must` 生成部署服务汇总表和服务详情。
+- [x] `Must` 生成风险、未知项和证据附录。
+- [x] `Must` 添加页眉、页脚和页码。
+- [x] `Must` 命令和路径使用等宽字体。
+- [x] `Must` 长路径和表格内容允许换行。
+- [x] `Must` 服务标题和正文具有合理分页控制。
+- [x] `Must` 配置中文字体和替代字体。
+- [x] `Must` Word 使用页眉背景水印，并在封面及正文页脚显示 OpSense 版权声明。
 
 ### M8-04 Word 验证
 
-- [ ] `Must` 验证生成文件为有效 ZIP/Open XML 结构。
-- [ ] `Must` 使用解析器重新读取核心段落和表格。
-- [ ] `Must` 在 Microsoft Word 中打开，不出现修复提示。
+- [x] `Must` 验证生成文件为有效 ZIP/Open XML 结构。
+- [x] `Must` 使用解析器重新读取核心段落和表格。
+- [x] `Must` 验证 DOCX 页眉水印与页脚版权声明已写入 Open XML。
+- [x] `Must` 在 Microsoft Word 中打开，不出现修复提示。
 - [ ] `Must` 在 WPS 中打开，不出现修复提示。
 - [ ] `Must` 检查目录、页码、中文、长路径和分页效果。
-- [ ] `Must` 验证中文报告文件名包含服务器标识，并可在 Windows、macOS 和 Linux 本地文件系统正常创建和打开。
+- [x] `Must` 验证中文报告文件名包含服务器标识，并可在 Windows、macOS 和 Linux 本地文件系统正常创建和打开。
 - [ ] `Should` 保存一份脱敏示例 Word 报告作为发布样例。
 
 验收条件：
