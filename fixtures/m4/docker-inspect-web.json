@@ -1,0 +1,44 @@
+[
+  {
+    "Id": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+    "Name": "/web",
+    "Image": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "Config": {
+      "Image": "nginx:1.27",
+      "Env": ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin", "API_TOKEN=secret-value"],
+      "Labels": {
+        "com.docker.compose.project": "shop",
+        "com.docker.compose.service": "web",
+        "com.docker.compose.project.working_dir": "/srv/shop",
+        "com.docker.compose.project.config_files": "/srv/shop/compose.yml,/srv/shop/compose.prod.yml",
+        "example.password": "must-not-persist"
+      }
+    },
+    "State": {
+      "Status": "running",
+      "Pid": 3456,
+      "StartedAt": "2026-08-14T04:00:00.000000000Z",
+      "Health": { "Status": "healthy" }
+    },
+    "HostConfig": { "RestartPolicy": { "Name": "unless-stopped" } },
+    "NetworkSettings": {
+      "Networks": { "shop_default": { "IPAddress": "172.30.0.2" } },
+      "Ports": { "80/tcp": [{ "HostIp": "0.0.0.0", "HostPort": "8080" }] }
+    },
+    "Mounts": [
+      {
+        "Type": "bind",
+        "Source": "/srv/shop/nginx.conf",
+        "Destination": "/etc/nginx/nginx.conf",
+        "RW": false
+      },
+      {
+        "Type": "volume",
+        "Name": "shop_data",
+        "Source": "/var/lib/docker/volumes/shop_data/_data",
+        "Destination": "/usr/share/nginx/html",
+        "RW": true
+      }
+    ]
+  }
+]

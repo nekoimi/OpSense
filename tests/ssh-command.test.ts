@@ -51,6 +51,11 @@ describe('safe command specifications', () => {
         'storage.lsblk-pairs',
         'network.addresses',
         'network.addresses-text',
+        'process.list',
+        'process.links',
+        'service.systemd-details',
+        'docker.ps-basic',
+        'docker.inspect',
         'service.systemd-units',
         'directory.stat',
       ]),
@@ -78,6 +83,19 @@ describe('safe command specifications', () => {
     expect(renderCommand(getCommandSpec('storage.mountinfo')).execution).toContain(
       "'/proc/self/mountinfo'",
     );
+    expect(() =>
+      renderCommand(getCommandSpec('docker.inspect'), { containerId: 'not-an-id' }),
+    ).toThrowError(CommandSpecError);
+    expect(() =>
+      renderCommand(getCommandSpec('service.systemd-show'), {
+        unitName: "bad.service'; touch /tmp/owned; echo '",
+      }),
+    ).toThrowError(CommandSpecError);
+    expect(
+      renderCommand(getCommandSpec('docker.inspect'), {
+        containerId: 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+      }).audit,
+    ).toContain('[containerId]');
   });
 });
 

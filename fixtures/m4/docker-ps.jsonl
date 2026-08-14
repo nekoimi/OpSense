@@ -1,0 +1,2 @@
+{"Command":"\"nginx -g 'daemon off;'\"","CreatedAt":"2026-08-14 12:00:00 +0800 CST","ID":"abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890","Image":"nginx:1.27","Names":"web","Ports":"0.0.0.0:8080->80/tcp","State":"running","Status":"Up 1 minute"}
+{"Command":"\"node worker.js\"","CreatedAt":"2026-08-13 12:00:00 +0800 CST","ID":"1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef","Image":"node:22","Names":"worker","Ports":"","State":"exited","Status":"Exited (0) 1 hour ago"}

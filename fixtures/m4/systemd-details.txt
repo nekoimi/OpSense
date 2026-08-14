@@ -1,0 +1,29 @@
+Id=order-api.service
+Description=Order API
+LoadState=loaded
+ActiveState=active
+SubState=running
+UnitFileState=enabled
+MainPID=2341
+FragmentPath=/etc/systemd/system/order-api.service
+WorkingDirectory=/opt/order-api
+ExecStart={ path=/usr/bin/node ; argv[]=/usr/bin/node /opt/order-api/server.js --token top-secret ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }
+ExecReload={ path=/bin/kill ; argv[]=/bin/kill -HUP $MAINPID ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }
+EnvironmentFiles=/etc/order-api/order-api.env (ignore_errors=no)
+User=app
+Group=app
+
+Id=ssh.service
+Description=OpenBSD Secure Shell server
+LoadState=loaded
+ActiveState=active
+SubState=running
+UnitFileState=enabled
+MainPID=100
+FragmentPath=/lib/systemd/system/ssh.service
+WorkingDirectory=
+ExecStart={ path=/usr/sbin/sshd ; argv[]=/usr/sbin/sshd -D $SSHD_OPTS ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }
+ExecReload=
+EnvironmentFiles=-/etc/default/ssh (ignore_errors=yes)
+User=
+Group=

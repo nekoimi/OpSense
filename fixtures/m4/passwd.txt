@@ -1,0 +1,2 @@
+root:x:0:0:root:/root:/bin/bash
+app:x:1001:1001:Application:/opt/order-api:/usr/sbin/nologin

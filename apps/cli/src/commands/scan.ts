@@ -1,4 +1,4 @@
-import { collectM3Snapshot } from '@opsense/collectors';
+import { collectM3Snapshot, collectM4Snapshot } from '@opsense/collectors';
 import { SCHEMA_VERSION, ScanSnapshotSchema, assertSchema } from '@opsense/schema';
 import type { ScanSnapshot } from '@opsense/schema';
 import { SafeCommandExecutor, connectSsh, detectPermissions } from '@opsense/ssh';
@@ -35,7 +35,9 @@ interface ScanOptions {
 
 export function createScanCommand(loggerFactory: LoggerFactory): Command {
   const command = new Command('scan')
-    .description('Collect a read-only system, storage, and network snapshot from one Linux server.')
+    .description(
+      'Collect a read-only system, storage, network, and service snapshot from one Linux server.',
+    )
     .requiredOption('--host <host>', 'target host name or IP address')
     .option('--port <port>', 'SSH port', parsePort, 22)
     .requiredOption('--user <user>', 'SSH user name')
@@ -99,18 +101,25 @@ export function createScanCommand(loggerFactory: LoggerFactory): Command {
         opsenseVersion: VERSION,
         useSudo,
       });
+      const services = await collectM4Snapshot(executor, {
+        commandTimeoutMs: loaded.config.ssh.commandTimeoutMs,
+        maxOutputBytes: loaded.config.scan.maxCommandOutputBytes,
+        opsenseVersion: VERSION,
+        useSudo,
+      });
       await auditWrite;
 
       const finishedAt = new Date();
+      const unknowns = [...collected.unknowns, ...services.unknowns];
       const snapshot: ScanSnapshot = {
         artifacts: [],
-        composeProjects: [],
-        containers: [],
-        evidence: collected.evidence,
+        composeProjects: services.composeProjects,
+        containers: services.containers,
+        evidence: [...collected.evidence, ...services.evidence],
         findings: [],
         host: collected.host,
         network: collected.network,
-        processes: [],
+        processes: services.processes,
         services: [],
         session: {
           configSummary: summarizeConfig(loaded.config),
@@ -121,13 +130,13 @@ export function createScanCommand(loggerFactory: LoggerFactory): Command {
           rulesVersion: VERSION,
           schemaVersion: SCHEMA_VERSION,
           startedAt: startedAt.toISOString(),
-          state: collected.unknowns.length === 0 ? 'completed' : 'partial',
+          state: unknowns.length === 0 ? 'completed' : 'partial',
           target: { host: scanOptions.host, port: scanOptions.port, user: scanOptions.user },
         },
-        sockets: [],
+        sockets: services.sockets,
         storage: collected.storage,
-        systemdUnits: [],
-        unknowns: collected.unknowns,
+        systemdUnits: services.systemdUnits,
+        unknowns,
       };
       assertSchema(ScanSnapshotSchema, snapshot);
       await Promise.all([

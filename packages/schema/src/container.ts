@@ -12,6 +12,8 @@ export const ContainerMountSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export type ContainerMount = Static<typeof ContainerMountSchema>;
+
 export const ContainerPortMappingSchema = Type.Object(
   {
     protocol: Type.Union([Type.Literal('tcp'), Type.Literal('udp')]),
@@ -21,6 +23,8 @@ export const ContainerPortMappingSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+
+export type ContainerPortMapping = Static<typeof ContainerPortMappingSchema>;
 
 export const ContainerRecordSchema = Type.Object(
   {

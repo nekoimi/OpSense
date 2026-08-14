@@ -1,0 +1,4 @@
+tcp LISTEN 0 4096 0.0.0.0:8080 0.0.0.0:* users:(("node",pid=2341,fd=20))
+tcp LISTEN 0 128 [::]:22 [::]:* users:(("sshd",pid=100,fd=3))
+tcp LISTEN 0 511 127.0.0.1:18080 0.0.0.0:* users:(("nginx",pid=3456,fd=6))
+udp UNCONN 0 0 127.0.0.53%lo:53 0.0.0.0:* users:(("systemd-resolve",pid=80,fd=13))

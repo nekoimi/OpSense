@@ -33,6 +33,8 @@ export const SocketRecordSchema = Type.Object(
     listening: Type.Boolean(),
     exposed: Type.Boolean(),
     processIds: Type.Array(Type.Integer({ minimum: 1 })),
+    processNames: Type.Array(Type.String()),
+    containerIds: Type.Array(IdSchema),
     evidenceIds: Type.Array(IdSchema),
   },
   { additionalProperties: false },

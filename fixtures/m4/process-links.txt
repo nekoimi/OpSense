@@ -1,0 +1,8 @@
+/proc/1/exe	/usr/lib/systemd/systemd
+/proc/1/cwd	/
+/proc/100/exe	/usr/sbin/sshd
+/proc/100/cwd	/
+/proc/2341/exe	/usr/bin/node
+/proc/2341/cwd	/opt/order-api
+/proc/3456/exe	/usr/sbin/nginx
+/proc/3456/cwd	/

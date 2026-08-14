@@ -1,0 +1,25 @@
+[
+  {
+    "Id": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+    "Name": "/worker",
+    "Image": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "Config": {
+      "Image": "node:22",
+      "Env": ["NODE_ENV=production"],
+      "Labels": {
+        "com.docker.compose.project": "shop",
+        "com.docker.compose.service": "worker",
+        "com.docker.compose.project.working_dir": "/srv/shop",
+        "com.docker.compose.project.config_files": "/srv/shop/compose.yml,/srv/shop/compose.prod.yml"
+      }
+    },
+    "State": {
+      "Status": "exited",
+      "Pid": 0,
+      "StartedAt": "2026-08-13T04:00:00.000000000Z"
+    },
+    "HostConfig": { "RestartPolicy": { "Name": "no" } },
+    "NetworkSettings": { "Networks": {}, "Ports": {} },
+    "Mounts": []
+  }
+]

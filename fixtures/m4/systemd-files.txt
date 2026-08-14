@@ -1,0 +1,3 @@
+order-api.service enabled enabled
+legacy-worker.service disabled enabled
+ssh.service enabled enabled

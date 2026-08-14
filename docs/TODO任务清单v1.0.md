@@ -299,43 +299,43 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 
 ### M4-01 systemd 探测
 
-- [ ] `Must` 采集 service unit 列表和运行状态。
-- [ ] `Must` 采集 unit file 启用状态。
-- [ ] `Must` 提取 `ExecStart`、`ExecReload`、`WorkingDirectory`。
-- [ ] `Must` 提取 `EnvironmentFile`、`User`、`Group` 和 unit 文件路径。
-- [ ] `Must` 关联 MainPID。
-- [ ] `Must` 支持已停止但已安装的服务。
+- [x] `Must` 采集 service unit 列表和运行状态。
+- [x] `Must` 采集 unit file 启用状态。
+- [x] `Must` 提取 `ExecStart`、`ExecReload`、`WorkingDirectory`。
+- [x] `Must` 提取 `EnvironmentFile`、`User`、`Group` 和 unit 文件路径。
+- [x] `Must` 关联 MainPID。
+- [x] `Must` 支持已停止但已安装的服务。
 
 ### M4-02 进程探测
 
-- [ ] `Must` 采集 PID、PPID、UID、启动时间和命令行。
-- [ ] `Must` 获取 `/proc/<pid>/exe` 和 `/proc/<pid>/cwd`。
-- [ ] `Must` 获取 cgroup 信息。
-- [ ] `Must` 处理进程扫描期间退出的竞态情况。
-- [ ] `Must` 默认不读取完整 `/proc/<pid>/environ`。
+- [x] `Must` 采集 PID、PPID、UID、启动时间和命令行。
+- [x] `Must` 获取 `/proc/<pid>/exe` 和 `/proc/<pid>/cwd`。
+- [x] `Must` 获取 cgroup 信息。
+- [x] `Must` 处理进程扫描期间退出的竞态情况。
+- [x] `Must` 默认不读取完整 `/proc/<pid>/environ`。
 
 ### M4-03 监听端口探测
 
-- [ ] `Must` 解析 `ss -lntup`。
-- [ ] `Must` 记录协议、地址、端口、PID 和进程名。
-- [ ] `Must` 区分本地监听和对外监听。
-- [ ] `Must` 支持 IPv4 和 IPv6。
+- [x] `Must` 解析 `ss -lntup`。
+- [x] `Must` 记录协议、地址、端口、PID 和进程名。
+- [x] `Must` 区分本地监听和对外监听。
+- [x] `Must` 支持 IPv4 和 IPv6。
 
 ### M4-04 Docker 探测
 
-- [ ] `Must` 探测 Docker 是否安装和可访问。
-- [ ] `Must` 采集运行中和已停止容器。
-- [ ] `Must` 解析容器名称、镜像、状态和启动时间。
-- [ ] `Must` 解析端口映射、网络、Bind Mount 和 Volume。
-- [ ] `Must` 解析 RestartPolicy 和 Healthcheck。
-- [ ] `Must` 环境变量默认只保留键名。
+- [x] `Must` 探测 Docker 是否安装和可访问。
+- [x] `Must` 采集运行中和已停止容器。
+- [x] `Must` 解析容器名称、镜像、状态和启动时间。
+- [x] `Must` 解析端口映射、网络、Bind Mount 和 Volume。
+- [x] `Must` 解析 RestartPolicy 和 Healthcheck。
+- [x] `Must` 环境变量默认只保留键名。
 
 ### M4-05 Docker Compose 探测
 
-- [ ] `Must` 从容器标签识别 Compose project 和 service。
-- [ ] `Must` 提取 Compose working directory 和配置文件路径。
-- [ ] `Must` 支持 `docker compose ls` 可用与不可用两种情况。
-- [ ] `Must` 将同一 Compose project 的容器归组。
+- [x] `Must` 从容器标签识别 Compose project 和 service。
+- [x] `Must` 提取 Compose working directory 和配置文件路径。
+- [x] `Must` 支持 `docker compose ls` 可用与不可用两种情况。
+- [x] `Must` 将同一 Compose project 的容器归组。
 
 ### M4-06 常见服务入口
 
@@ -348,8 +348,8 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 
 验收条件：
 
-- 可以在 fixture 中识别 systemd 应用、普通进程、Docker 容器和 Compose 项目。
-- 可以把监听端口关联到对应 PID 或容器。
+- [x] 可以在 fixture 中识别 systemd 应用、普通进程、Docker 容器和 Compose 项目。
+- [x] 可以把监听端口关联到对应 PID 或容器。
 
 ---
 

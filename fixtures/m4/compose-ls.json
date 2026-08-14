@@ -1,0 +1,7 @@
+[
+  {
+    "Name": "shop",
+    "Status": "running(1)",
+    "ConfigFiles": "/srv/shop/compose.yml,/srv/shop/compose.prod.yml"
+  }
+]

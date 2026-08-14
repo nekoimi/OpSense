@@ -16,7 +16,7 @@ Run the CLI in development mode:
 pnpm dev -- --help
 ```
 
-Run a read-only M3 system scan with SSH Agent authentication:
+Run a read-only M3/M4 system and service scan with SSH Agent authentication:
 
 ```powershell
 pnpm dev -- scan --host server.example.com --user ops --accept-new-host-key
@@ -37,3 +37,5 @@ pnpm dev -- scan --host server.example.com --user ops --password '<password>' --
 Command-line passwords may be visible in shell history and process listings. OpSense does not write the password to its config, audit log, snapshot, or report files. The command writes `snapshot.json`, `meta.json`, and `audit.jsonl` under the local OpSense workspace. `analyze`, `report`, and `inspect` remain milestone placeholders.
 
 M3 collection detects Debian, RHEL, Alpine, or an unknown Linux family from `/etc/os-release`. Logical probes use audited read-only fallback commands when JSON output, command options, or utilities are unavailable, and every attempted variant remains traceable in the snapshot evidence.
+
+M4 adds systemd units, processes, listening sockets, Docker containers, and Compose projects. Process environment values are not read, Docker environment values are reduced to key names, and direct PID/container/socket ownership is preserved for later service normalization.
