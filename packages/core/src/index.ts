@@ -1,1 +1,1 @@
-export const corePackageName = '@opsense/core' as const;
+export * from './normalization.js';

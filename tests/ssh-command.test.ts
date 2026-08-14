@@ -87,6 +87,7 @@ describe('safe command specifications', () => {
     expect(renderCommand(getCommandSpec('storage.mountinfo')).execution).toContain(
       "'/proc/self/mountinfo'",
     );
+    expect(renderCommand(getCommandSpec('process.list')).execution).toContain('cgroup:512=');
     expect(() =>
       renderCommand(getCommandSpec('docker.inspect'), { containerId: 'not-an-id' }),
     ).toThrowError(CommandSpecError);

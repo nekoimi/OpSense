@@ -1,4 +1,5 @@
 import { collectM3Snapshot, collectM4Snapshot, collectM5Snapshot } from '@opsense/collectors';
+import { normalizeAndMergeServices } from '@opsense/core';
 import { SCHEMA_VERSION, ScanSnapshotSchema, assertSchema } from '@opsense/schema';
 import type { ScanSnapshot } from '@opsense/schema';
 import { SafeCommandExecutor, connectSsh, detectPermissions } from '@opsense/ssh';
@@ -128,19 +129,30 @@ export function createScanCommand(loggerFactory: LoggerFactory): Command {
       );
       await auditWrite;
 
-      const finishedAt = new Date();
-      const unknowns = [...collected.unknowns, ...services.unknowns, ...directories.unknowns];
-      const snapshot: ScanSnapshot = {
+      const normalized = normalizeAndMergeServices({
         artifacts: directories.artifacts,
+        collectedAt: new Date().toISOString(),
         composeProjects: services.composeProjects,
         containers: services.containers,
         evidence: [...collected.evidence, ...services.evidence, ...directories.evidence],
+        opsenseVersion: VERSION,
+        processes: services.processes,
+        sockets: services.sockets,
+        systemdUnits: services.systemdUnits,
+        unknowns: [...collected.unknowns, ...services.unknowns, ...directories.unknowns],
+      });
+      const finishedAt = new Date();
+      const snapshot: ScanSnapshot = {
+        artifacts: normalized.artifacts,
+        composeProjects: normalized.composeProjects,
+        containers: normalized.containers,
+        evidence: normalized.evidence,
         findings: [],
         host: collected.host,
         network: collected.network,
         pathSeeds: directories.pathSeeds,
-        processes: services.processes,
-        services: [],
+        processes: normalized.processes,
+        services: normalized.services,
         session: {
           configSummary: summarizeConfig(loaded.config),
           finishedAt: finishedAt.toISOString(),
@@ -150,13 +162,13 @@ export function createScanCommand(loggerFactory: LoggerFactory): Command {
           rulesVersion: VERSION,
           schemaVersion: SCHEMA_VERSION,
           startedAt: startedAt.toISOString(),
-          state: unknowns.length === 0 ? 'completed' : 'partial',
+          state: normalized.unknowns.length === 0 ? 'completed' : 'partial',
           target: { host: scanOptions.host, port: scanOptions.port, user: scanOptions.user },
         },
-        sockets: services.sockets,
+        sockets: normalized.sockets,
         storage: collected.storage,
-        systemdUnits: services.systemdUnits,
-        unknowns,
+        systemdUnits: normalized.systemdUnits,
+        unknowns: normalized.unknowns,
       };
       assertSchema(ScanSnapshotSchema, snapshot);
       await Promise.all([

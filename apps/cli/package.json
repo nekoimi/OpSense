@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@opsense/collectors": "workspace:*",
+    "@opsense/core": "workspace:*",
     "@opsense/schema": "workspace:*",
     "@opsense/ssh": "workspace:*",
     "@opsense/workspace": "workspace:*",

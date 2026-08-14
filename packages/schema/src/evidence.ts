@@ -27,6 +27,7 @@ export const EvidenceRecordSchema = Type.Object(
     collectedAt: DateTimeSchema,
     opsenseVersion: NonEmptyStringSchema,
     parserVersion: Type.Optional(NonEmptyStringSchema),
+    sourceEvidenceIds: Type.Optional(Type.Array(IdSchema)),
     commandId: Type.Optional(NonEmptyStringSchema),
     status: CollectionStatusSchema,
     sensitivity: SensitivitySchema,

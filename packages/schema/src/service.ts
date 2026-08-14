@@ -43,6 +43,7 @@ export const ServiceRecordSchema = Type.Object(
     confidence: ConfidenceSchema,
     evidenceIds: Type.Array(IdSchema),
     unknownFields: Type.Array(Type.String()),
+    conflictFields: Type.Optional(Type.Array(Type.String())),
   },
   { additionalProperties: false },
 );

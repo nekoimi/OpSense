@@ -16,7 +16,7 @@ Run the CLI in development mode:
 pnpm dev -- --help
 ```
 
-Run a read-only M3/M4/M5 system, service, and targeted directory scan with SSH Agent authentication:
+Run a read-only M3-M6 system, service, targeted directory, and normalization scan with SSH Agent authentication:
 
 ```powershell
 pnpm dev -- scan --host server.example.com --user ops --accept-new-host-key
@@ -41,3 +41,5 @@ M3 collection detects Debian, RHEL, Alpine, or an unknown Linux family from `/et
 M4 adds systemd units, processes, listening sockets, Docker containers, and Compose projects. Process environment values are not read, Docker environment values are reduced to key names, and direct PID/container/socket ownership is preserved for later service normalization.
 
 M5 derives path seeds from M4 runtime evidence and scans only those absolute paths. Directory reads are depth-, count-, output-, timeout-, and filesystem-bounded; pseudo filesystems, caches, source-control metadata, dependency trees, database internals, and container overlay layers are excluded. Small JSON, YAML, TOML, and INI files produce key-only structural summaries, while `.env` values are never read.
+
+M6 normalizes the collected entities and deterministically merges systemd units, process trees, listening sockets, Docker containers, Compose services, and discovered artifacts into `ServiceRecord` entries. Merge evidence references its source evidence IDs, rule-derived services remain `inferred`, conflicts and unknown fields remain separate, and no business dependency graph is inferred.

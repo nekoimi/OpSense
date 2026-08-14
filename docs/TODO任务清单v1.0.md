@@ -403,27 +403,27 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 
 ### M6-01 原始结果归一化
 
-- [ ] `Must` 将命令输出转换为统一实体。
-- [ ] `Must` 所有记录使用稳定 ID。
-- [ ] `Must` 保存原始来源、解析器版本和采集时间。
-- [ ] `Must` 统一容量、时间、地址和路径格式。
+- [x] `Must` 将命令输出转换为统一实体。
+- [x] `Must` 所有记录使用稳定 ID。
+- [x] `Must` 保存原始来源、解析器版本和采集时间。
+- [x] `Must` 统一容量、时间、地址和路径格式。
 
 ### M6-02 服务归并规则
 
-- [ ] `Must` 根据 systemd MainPID 关联进程。
-- [ ] `Must` 根据 cgroup 关联 systemd unit 或容器。
-- [ ] `Must` 根据 PID 关联监听端口。
-- [ ] `Must` 根据容器标签归并 Compose 服务。
-- [ ] `Must` 根据工作目录和可执行路径关联 Artifact。
-- [ ] `Must` 避免将同一服务重复输出为多个服务。
-- [ ] `Must` 不推断业务上下游依赖。
+- [x] `Must` 根据 systemd MainPID 关联进程。
+- [x] `Must` 根据 cgroup 关联 systemd unit 或容器。
+- [x] `Must` 根据 PID 关联监听端口。
+- [x] `Must` 根据容器标签归并 Compose 服务。
+- [x] `Must` 根据工作目录和可执行路径关联 Artifact。
+- [x] `Must` 避免将同一服务重复输出为多个服务。
+- [x] `Must` 不推断业务上下游依赖。
 
 ### M6-03 冲突与未知项
 
-- [ ] `Must` 不同来源值不一致时标记 `conflict`。
-- [ ] `Must` 权限不足和命令缺失产生 `unknown`。
-- [ ] `Must` 规则推断标记为 `inferred`。
-- [ ] `Must` 报告层可以单独列出未知和冲突项。
+- [x] `Must` 不同来源值不一致时标记 `conflict`。
+- [x] `Must` 权限不足和命令缺失产生 `unknown`。
+- [x] `Must` 规则推断标记为 `inferred`。
+- [x] `Must` 报告层可以单独列出未知和冲突项。
 
 验收条件：
 

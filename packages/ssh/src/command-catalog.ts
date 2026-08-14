@@ -66,9 +66,14 @@ export const COMMAND_CATALOG = [
   command('environment.dpkg', 'dpkg-query', ['--version'], { maxOutputBytes: 100_000 }),
   command('environment.rpm', 'rpm', ['--version'], { maxOutputBytes: 100_000 }),
   command('environment.apk', 'apk', ['--version'], { maxOutputBytes: 100_000 }),
-  command('process.list', 'ps', ['-eo', 'pid=,ppid=,uid=,etimes=,cgroup=,args=', '--no-headers'], {
-    maxOutputBytes: 10_000_000,
-  }),
+  command(
+    'process.list',
+    'ps',
+    ['-ww', '-eo', 'pid=,ppid=,uid=,etimes=,cgroup:512=,args=', '--no-headers'],
+    {
+      maxOutputBytes: 10_000_000,
+    },
+  ),
   command(
     'process.links',
     'find',
