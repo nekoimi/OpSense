@@ -68,9 +68,13 @@ export function summarizeConfig(config: OpsenseConfig): Record<string, unknown> 
     report: config.report,
     scan: config.scan,
     ssh: {
+      acceptNewHostKey: config.ssh.acceptNewHostKey,
       commandTimeoutMs: config.ssh.commandTimeoutMs,
       connectTimeoutMs: config.ssh.connectTimeoutMs,
       identityFileConfigured: config.ssh.identityFile !== undefined,
+      keepaliveCountMax: config.ssh.keepaliveCountMax,
+      keepaliveIntervalMs: config.ssh.keepaliveIntervalMs,
+      knownHostsFileConfigured: config.ssh.knownHostsFile !== undefined,
       strictHostKeyChecking: config.ssh.strictHostKeyChecking,
     },
     workspace: {

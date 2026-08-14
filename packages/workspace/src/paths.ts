@@ -4,6 +4,7 @@ import path from 'node:path';
 
 export interface WorkspaceLayout {
   configFile: string;
+  knownHostsFile: string;
   reportsDirectory: string;
   rootDirectory: string;
   runsDirectory: string;
@@ -27,6 +28,7 @@ export function createWorkspaceLayout(explicitRoot?: string): WorkspaceLayout {
   const rootDirectory = resolveWorkspaceRoot(explicitRoot);
   return {
     configFile: path.join(rootDirectory, 'config.json'),
+    knownHostsFile: path.join(rootDirectory, 'known-hosts.json'),
     reportsDirectory: path.join(rootDirectory, 'reports'),
     rootDirectory,
     runsDirectory: path.join(rootDirectory, 'runs'),

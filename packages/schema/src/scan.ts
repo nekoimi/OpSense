@@ -23,6 +23,8 @@ export const PermissionLevelSchema = Type.Union([
   Type.Literal('unknown'),
 ]);
 
+export type PermissionLevel = Static<typeof PermissionLevelSchema>;
+
 export const ScanTargetSchema = Type.Object(
   {
     host: Type.String({ minLength: 1 }),

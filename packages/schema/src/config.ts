@@ -18,8 +18,12 @@ export const OpsenseConfigSchema = Type.Object(
       {
         connectTimeoutMs: Type.Integer({ minimum: 1000, maximum: 300_000 }),
         commandTimeoutMs: Type.Integer({ minimum: 1000, maximum: 3_600_000 }),
+        keepaliveIntervalMs: Type.Integer({ minimum: 0, maximum: 300_000 }),
+        keepaliveCountMax: Type.Integer({ minimum: 1, maximum: 20 }),
         strictHostKeyChecking: Type.Boolean(),
+        acceptNewHostKey: Type.Boolean(),
         identityFile: Type.Optional(Type.String({ minLength: 1 })),
+        knownHostsFile: Type.Optional(Type.String({ minLength: 1 })),
       },
       { additionalProperties: false },
     ),
@@ -63,7 +67,10 @@ export const DEFAULT_OPSENSE_CONFIG: OpsenseConfig = {
   ssh: {
     connectTimeoutMs: 10_000,
     commandTimeoutMs: 30_000,
+    keepaliveIntervalMs: 15_000,
+    keepaliveCountMax: 3,
     strictHostKeyChecking: true,
+    acceptNewHostKey: false,
   },
   scan: {
     maxDirectoryDepth: 4,
