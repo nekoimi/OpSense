@@ -623,42 +623,42 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 
 ### M10-01 `scan` 命令
 
-- [ ] `Must` 接收 host、port、user 和身份认证参数。
-- [ ] `Must` 执行预检、系统扫描、服务扫描和目录扫描。
-- [ ] `Must` 生成 `snapshot.json` 和审计日志。
-- [ ] `Must` 输出 scan ID 和本地目录。
+- [x] `Must` 接收 host、port、user 和身份认证参数。
+- [x] `Must` 执行预检、系统扫描、服务扫描和目录扫描。
+- [x] `Must` 生成 `snapshot.json` 和审计日志。
+- [x] `Must` 输出 scan ID 和本地目录。
 
 ### M10-02 `analyze` 命令
 
-- [ ] `Must` 接收 scan ID 和 provider。
-- [ ] `Must` 验证快照和脱敏状态。
-- [ ] `Must` 调用 CodexProvider 或 NoopProvider。
-- [ ] `Must` 生成服务分类、路径分类和 `ProbeRequest`，但独立 analyze 不重新连接服务器。
-- [ ] `Must` 生成 `ai-plan.json`、`ai-probe-audit.json`、`ai-output.json` 和 `ai-run.json`。
-- [ ] `Must` 对未执行的补探测请求标记 pending 或 skipped，不得要求持久化 SSH 密码。
+- [x] `Must` 接收 scan ID 和 provider。
+- [x] `Must` 验证快照和脱敏状态。
+- [x] `Must` 调用 CodexProvider 或 NoopProvider。
+- [x] `Must` 生成服务分类、路径分类和 `ProbeRequest`，但独立 analyze 不重新连接服务器。
+- [x] `Must` 生成 `ai-plan.json`、`ai-probe-audit.json`、`ai-output.json` 和 `ai-run.json`。
+- [x] `Must` 对未执行的补探测请求标记 pending 或 skipped，不得要求持久化 SSH 密码。
 
 ### M10-03 `report` 命令
 
-- [ ] `Must` 接收 scan ID 和输出格式。
-- [ ] `Must` 默认同时输出 `docx` 和 `html`。
-- [ ] `Must` 支持重新生成报告而不重新扫描服务器。
-- [ ] `Must` 支持 `docx,markdown,html` 多格式输出和显式格式选择。
+- [x] `Must` 接收 scan ID 和输出格式。
+- [x] `Must` 默认同时输出 `docx` 和 `html`。
+- [x] `Must` 支持重新生成报告而不重新扫描服务器。
+- [x] `Must` 支持 `docx,markdown,html` 多格式输出和显式格式选择。
 
 ### M10-04 `inspect` 命令
 
-- [ ] `Must` 串联 scan、analyze 和 report。
-- [ ] `Must` 在 SSH 认证信息仍位于当前进程内存时执行通过校验的一轮补探测。
-- [ ] `Must` 补探测后重新归一化、脱敏并执行 Codex 最终分析。
-- [ ] `Must` 实时显示当前执行阶段。
-- [ ] `Must` 支持 Ctrl+C 安全中断。
-- [ ] `Must` Codex 失败时自动降级为基础报告。
-- [ ] `Must` 完成后输出 Word 和 HTML 报告绝对路径。
+- [x] `Must` 串联 scan、analyze 和 report。
+- [x] `Must` 在 SSH 认证信息仍位于当前进程内存时执行通过校验的一轮补探测。
+- [x] `Must` 补探测后重新归一化、脱敏并执行 Codex 最终分析。
+- [x] `Must` 实时显示当前执行阶段。
+- [x] `Must` 支持 Ctrl+C 安全中断。
+- [x] `Must` Codex 失败时自动降级为基础报告。
+- [x] `Must` 完成后输出 Word 和 HTML 报告绝对路径。
 
 ### M10-05 状态和退出码
 
-- [ ] `Must` 实现 created、connecting、collecting、normalizing、redacting、planning、enriching、analyzing、rendering 状态。
-- [ ] `Must` 实现 completed、partial 和 failed 终态。
-- [ ] `Must` 区分连接失败、认证失败、扫描部分失败、AI 失败和报告失败退出码。
+- [x] `Must` 实现 created、connecting、collecting、normalizing、redacting、planning、enriching、analyzing、rendering 状态。
+- [x] `Must` 实现 completed、partial 和 failed 终态。
+- [x] `Must` 区分连接失败、认证失败、扫描部分失败、AI 失败和报告失败退出码。
 
 验收条件：
 

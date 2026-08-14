@@ -49,6 +49,7 @@ export interface SshConnectionOptions {
   passphraseProvider?: () => Promise<string>;
   passwordProvider?: () => Promise<string>;
   port?: number;
+  signal?: AbortSignal;
   strictHostKeyChecking?: boolean;
   user: string;
   workspaceRoot?: string;
@@ -210,11 +211,16 @@ export async function connectSsh(
   return new Promise((resolve, reject) => {
     let settled = false;
 
+    const cleanup = (): void => {
+      options.signal?.removeEventListener('abort', abort);
+    };
+
     const rejectOnce = (error: unknown): void => {
       if (settled) {
         return;
       }
       settled = true;
+      cleanup();
       const rejection = hostKeyPolicy.getRejection();
       reject(
         rejection ??
@@ -227,6 +233,22 @@ export async function connectSsh(
               )),
       );
     };
+
+    const abort = (): void => {
+      client.end();
+      rejectOnce(
+        new SshError(
+          'SSH_CONNECTION_ABORTED',
+          `SSH connection to ${options.host}:${port} was cancelled.`,
+        ),
+      );
+    };
+
+    if (options.signal?.aborted === true) {
+      abort();
+      return;
+    }
+    options.signal?.addEventListener('abort', abort, { once: true });
 
     client.on('error', rejectOnce);
     client.once('close', () => {
@@ -245,6 +267,7 @@ export async function connectSsh(
         }
         if (!settled) {
           settled = true;
+          cleanup();
           resolve(new SshConnection(client, options.host, port, options.user));
         }
       })().catch((error: unknown) => {

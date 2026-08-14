@@ -50,6 +50,8 @@ export const ScanStageSchema = Type.Union([
   Type.Literal('collecting'),
   Type.Literal('normalizing'),
   Type.Literal('redacting'),
+  Type.Literal('planning'),
+  Type.Literal('enriching'),
   Type.Literal('analyzing'),
   Type.Literal('rendering'),
 ]);

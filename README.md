@@ -34,7 +34,7 @@ For trusted internal environments, a plaintext password can be supplied for the 
 pnpm dev -- scan --host server.example.com --user ops --password '<password>' --accept-new-host-key
 ```
 
-Command-line passwords may be visible in shell history and process listings. OpSense does not write the password to its config, audit log, snapshot, or report files. The command writes `snapshot.json`, `meta.json`, `audit.jsonl`, and `redaction-report.json` under the local OpSense workspace. `analyze`, `report`, and `inspect` remain milestone placeholders.
+Command-line passwords may be visible in shell history and process listings. OpSense does not write the password to its config, audit log, snapshot, or report files. The command writes `snapshot.json`, `meta.json`, `audit.jsonl`, and `redaction-report.json` under the local OpSense workspace. `analyze` performs offline Codex/baseline analysis, `report` regenerates local Word/HTML/Markdown output, and `inspect` runs the end-to-end scan, one governed enrichment round, final analysis, and report generation.
 
 M3 collection detects Debian, RHEL, Alpine, or an unknown Linux family from `/etc/os-release`. Logical probes use audited read-only fallback commands when JSON output, command options, or utilities are unavailable, and every attempted variant remains traceable in the snapshot evidence.
 

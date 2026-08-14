@@ -11,12 +11,16 @@ export interface PermissionProbe {
   user?: string;
 }
 
-export async function detectPermissions(executor: SafeCommandExecutor): Promise<PermissionProbe> {
+export async function detectPermissions(
+  executor: SafeCommandExecutor,
+  options: { signal?: AbortSignal } = {},
+): Promise<PermissionProbe> {
+  const executionOptions = options.signal === undefined ? {} : { signal: options.signal };
   const [uidResult, userResult, groupsResult, sudoResult] = await Promise.all([
-    executor.executeById('permission.uid'),
-    executor.executeById('permission.user'),
-    executor.executeById('permission.groups'),
-    executor.executeById('permission.sudo'),
+    executor.executeById('permission.uid', {}, executionOptions),
+    executor.executeById('permission.user', {}, executionOptions),
+    executor.executeById('permission.groups', {}, executionOptions),
+    executor.executeById('permission.sudo', {}, executionOptions),
   ]);
 
   const uid = parseUid(uidResult);
