@@ -15,7 +15,7 @@ opsense inspect --host server.example.com --user ops --provider codex
 ```text
 ~/.opsense/runs/<scan-id>/snapshot.json
 ~/.opsense/runs/<scan-id>/ai-output.json
-~/.opsense/reports/<host>/<scan-time>/server-report.docx
+~/.opsense/reports/<host>/<scan-time>/服务器巡检报告-<服务器标识>-<YYYY-MM-DD_HH-mm-ss>.docx
 ```
 
 任务状态约定：
@@ -473,16 +473,26 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 - [ ] `Must` 无 AI 时使用事实数据生成完整基础报告。
 - [ ] `Must` AI 内容与事实内容分层显示。
 
-### M8-02 Markdown 报告
+### M8-02 Markdown 与 HTML 报告
 
 - [ ] `Must` 生成 `README.md`、`system.md`、`storage.md`、`network.md` 和 `services.md`。
 - [ ] `Must` 为每个服务生成详情章节或文件。
 - [ ] `Must` 生成风险、未知项和证据附录。
-- [ ] `Should` 生成可选静态 HTML。
+- [ ] `Must` 生成静态 HTML 报告入口 `index.html`。
+- [ ] `Must` HTML 与 Word 使用同一份 `ReportModel`，章节和事实数据保持一致。
+- [ ] `Must` HTML 报告无需启动本地服务即可离线打开和浏览。
+- [ ] `Must` HTML 包含系统、存储、网络、服务、风险、未知项和证据章节。
+- [ ] `Must` 对报告内容执行 HTML 转义，不允许采集内容注入脚本或标签。
+- [ ] `Must` HTML 在常见桌面浏览器中布局可读，长命令、路径和表格可滚动或换行。
 
 ### M8-03 Word 报告生成器
 
-- [ ] `Must` 使用 `docx` 生成 `server-report.docx`。
+- [ ] `Must` 使用 `docx` 生成 Word 报告。
+- [ ] `Must` Word 文件名使用中文，格式为 `服务器巡检报告-{服务器标识}-{YYYY-MM-DD_HH-mm-ss}.docx`。
+- [ ] `Must` 文件名中的服务器标识使用扫描目标 IP、主机名或服务名，确保仅查看文件名即可识别目标服务器。
+- [ ] `Must` 清理 Windows、macOS 和 Linux 文件名非法字符；IPv6 地址中的 `:` 替换为 `_`。
+- [ ] `Must` 限制文件名长度，并使用扫描时间避免同一服务器的报告被覆盖。
+- [ ] `Must` 文件名中的扫描时间按本地时区显示，使用常见且文件名安全的 `YYYY-MM-DD_HH-mm-ss` 格式。
 - [ ] `Must` 生成封面。
 - [ ] `Must` 使用 Heading 1/2/3 标题样式。
 - [ ] `Must` 插入可更新的自动目录。
@@ -504,12 +514,14 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 - [ ] `Must` 在 Microsoft Word 中打开，不出现修复提示。
 - [ ] `Must` 在 WPS 中打开，不出现修复提示。
 - [ ] `Must` 检查目录、页码、中文、长路径和分页效果。
+- [ ] `Must` 验证中文报告文件名包含服务器标识，并可在 Windows、macOS 和 Linux 本地文件系统正常创建和打开。
 - [ ] `Should` 保存一份脱敏示例 Word 报告作为发布样例。
 
 验收条件：
 
 - 不调用 Codex 也能生成可交付的 Word 报告。
 - Word 报告包含封面、目录、系统、存储、服务、风险和证据附录。
+- 不调用 Codex 也能生成可离线打开的完整 HTML 报告。
 
 ---
 
@@ -583,9 +595,9 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 ### M10-03 `report` 命令
 
 - [ ] `Must` 接收 scan ID 和输出格式。
-- [ ] `Must` 默认输出 `docx`。
+- [ ] `Must` 默认同时输出 `docx` 和 `html`。
 - [ ] `Must` 支持重新生成报告而不重新扫描服务器。
-- [ ] `Should` 支持 `docx,markdown,html` 多格式输出。
+- [ ] `Must` 支持 `docx,markdown,html` 多格式输出和显式格式选择。
 
 ### M10-04 `inspect` 命令
 
@@ -593,7 +605,7 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 - [ ] `Must` 实时显示当前执行阶段。
 - [ ] `Must` 支持 Ctrl+C 安全中断。
 - [ ] `Must` Codex 失败时自动降级为基础报告。
-- [ ] `Must` 完成后输出 Word 报告绝对路径。
+- [ ] `Must` 完成后输出 Word 和 HTML 报告绝对路径。
 
 ### M10-05 状态和退出码
 
@@ -617,6 +629,7 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 - [ ] `Must` 覆盖服务归并和冲突处理。
 - [ ] `Must` 覆盖脱敏规则。
 - [ ] `Must` 覆盖 Word 报告生成器。
+- [ ] `Must` 覆盖 HTML 报告生成器、离线资源和内容转义。
 - [ ] `Must` 覆盖 AI 输出校验和降级路径。
 
 ### M11-02 Linux 场景测试
@@ -645,7 +658,8 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 - [ ] `Must` 从空工作区执行 `opsense inspect`。
 - [ ] `Must` 生成合法 `snapshot.json`。
 - [ ] `Must` 生成合法 `ai-output.json` 或记录 AI 降级状态。
-- [ ] `Must` 生成可打开的 `server-report.docx`。
+- [ ] `Must` 生成文件名包含服务器 IP、主机名或服务名的可打开中文 Word 报告。
+- [ ] `Must` 生成无需本地服务即可打开的 `index.html` 报告。
 - [ ] `Must` 报告中的服务、端口和路径与测试服务器一致。
 - [ ] `Must` 每个重要结论可追溯到 evidence ID。
 
@@ -656,6 +670,7 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 - [ ] `Must` 编写安装、升级和卸载说明。
 - [ ] `Must` 编写 SSH 和 Codex 使用前置条件。
 - [ ] `Must` 提供脱敏示例快照和示例 Word 报告。
+- [ ] `Must` 提供可离线打开的脱敏示例 HTML 报告。
 - [ ] `Should` 提供 Windows、macOS 和 Linux 本地运行验证。
 
 ---
@@ -675,7 +690,8 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 - [ ] 所有重要结论具有 evidence ID 和确定程度。
 - [ ] 密码、Token 和私钥不进入快照、日志、AI 输入和报告。
 - [ ] 无 Codex 时可以生成基础 Word 报告。
-- [ ] 有 Codex 时可以生成结构化分析并增强 Word 报告。
+- [ ] 无 Codex 时可以生成完整静态 HTML 报告。
+- [ ] 有 Codex 时可以生成结构化分析并增强 Word 和 HTML 报告。
 - [ ] Word 报告可在 Microsoft Word 和 WPS 中正常打开。
 - [ ] 权限不足、未知项和冲突信息在报告中明确显示。
 - [ ] `opsense inspect` 可以完成端到端流程。
