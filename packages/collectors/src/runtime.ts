@@ -270,6 +270,7 @@ function splitCommandLine(source: string): string[] {
 
 function redactCommandTokens(tokens: string[]): string[] {
   const redacted: string[] = [];
+  const commandName = executableName(tokens[0] ?? '');
   let redactNext = false;
   for (const token of tokens) {
     if (redactNext) {
@@ -277,34 +278,48 @@ function redactCommandTokens(tokens: string[]): string[] {
       redactNext = false;
       continue;
     }
-    const inline =
-      /^(--?[^=]*(?:password|passwd|passphrase|token|secret|api[-_]?key|authorization|credential)[^=]*)=(.*)$/i.exec(
-        token,
-      );
-    if (inline?.[1] !== undefined) {
+    const inline = /^(--?[A-Za-z0-9_-]+)=(.*)$/.exec(token);
+    if (inline?.[1] !== undefined && isSensitiveCommandOption(inline[1])) {
       redacted.push(`${inline[1]}=[REDACTED]`);
       continue;
     }
-    const assignment =
-      /^([^=]*(?:password|passwd|passphrase|token|secret|api[-_]?key|authorization|credential)[^=]*)=(.*)$/i.exec(
-        token,
-      );
-    if (assignment?.[1] !== undefined) {
+    const assignment = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(token);
+    if (assignment?.[1] !== undefined && isSensitiveAssignmentKey(assignment[1])) {
       redacted.push(`${assignment[1]}=[REDACTED]`);
       continue;
     }
-    if (/^-p.+$/i.test(token)) {
+    if (supportsAttachedShortPassword(commandName) && /^-p.+$/i.test(token)) {
       redacted.push('-p[REDACTED]');
       continue;
     }
     redacted.push(redactInlineSecrets(token));
-    redactNext =
-      token === '-p' ||
-      /^--?[^=]*(?:password|passwd|passphrase|token|secret|api[-_]?key|authorization|credential)$/i.test(
-        token,
-      );
+    redactNext = token === '-p' || isSensitiveCommandOption(token);
   }
   return redacted;
+}
+
+function executableName(value: string): string {
+  return value.split(/[\\/]/).pop()?.toLowerCase() ?? '';
+}
+
+function isSensitiveCommandOption(value: string): boolean {
+  if (!/^--?/.test(value)) return false;
+  const option = value.replace(/^--?/, '');
+  return /(?:^|[-_])(?:password|passwd|passphrase|pwd|token|secret|api[-_]?key|authorization|credential)(?:$|[-_])/i.test(
+    option,
+  );
+}
+
+function isSensitiveAssignmentKey(value: string): boolean {
+  return /(?:^|_)(?:PASSWORD|PASSWD|PASSPHRASE|PWD|TOKEN|SECRET|API_KEY|AUTHORIZATION|CREDENTIAL)(?:$|_)/i.test(
+    value,
+  );
+}
+
+function supportsAttachedShortPassword(commandName: string): boolean {
+  return /^(?:mariadb|mariadb-dump|mongo|mongodump|mongoexport|mongoimport|mongorestore|mongosh|mysql|mysqladmin|mysqldump)$/.test(
+    commandName,
+  );
 }
 
 function redactInlineSecrets(value: string): string {

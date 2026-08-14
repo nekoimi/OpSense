@@ -1,0 +1,21 @@
+{
+  "password": "OPSENSE_TEST_PASSWORD_VALUE",
+  "apiToken": "OPSENSE_TEST_API_TOKEN_VALUE",
+  "authorization": "Bearer eyJvcHNlbnNlIjoiZmFrZSJ9.eyJzY29wZSI6InRlc3QifQ.ZmFrZS1zaWduYXR1cmU",
+  "cloudCredential": "AKIAIOSFODNN7EXAMPLE",
+  "privateKey": "-----BEGIN OPENSSH PRIVATE KEY-----\nOPSENSE_TEST_PRIVATE_KEY_BODY\n-----END OPENSSH PRIVATE KEY-----",
+  "databaseUrl": "postgresql://opsense_user:OPSENSE_TEST_DB_PASSWORD@db.internal:5432/app?sslmode=require&token=OPSENSE_TEST_DB_TOKEN",
+  "signedUrl": "https://storage.internal/object?download=1&X-Amz-Signature=OPSENSE_TEST_SIGNATURE&token=OPSENSE_TEST_URL_TOKEN",
+  "command": "worker --password OPSENSE_TEST_COMMAND_PASSWORD --api-key=OPSENSE_TEST_COMMAND_TOKEN DB_SECRET=OPSENSE_TEST_ENV_SECRET",
+  "arguments": ["--token", "OPSENSE_TEST_ARGUMENT_TOKEN", "--mode=worker"],
+  "environment": ["NORMAL_VALUE=visible", "API_TOKEN=OPSENSE_TEST_DOCKER_TOKEN"],
+  "environmentKeys": ["NORMAL_VALUE", "API_TOKEN"],
+  "labels": {
+    "example.password": "OPSENSE_TEST_LABEL_PASSWORD",
+    "example.url": "https://user:OPSENSE_TEST_URL_PASSWORD@app.internal/path?signature=OPSENSE_TEST_LABEL_SIGNATURE"
+  },
+  "environmentFile": {
+    "path": "/opt/order-api/.env",
+    "content": "DB_PASSWORD=OPSENSE_TEST_ENV_FILE_PASSWORD\nAPI_TOKEN=OPSENSE_TEST_ENV_FILE_TOKEN\nPUBLIC_MODE=production\n"
+  }
+}

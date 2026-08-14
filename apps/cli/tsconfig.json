@@ -10,6 +10,7 @@
   "references": [
     { "path": "../../packages/collectors" },
     { "path": "../../packages/core" },
+    { "path": "../../packages/redaction" },
     { "path": "../../packages/schema" },
     { "path": "../../packages/ssh" },
     { "path": "../../packages/workspace" }

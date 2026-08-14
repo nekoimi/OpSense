@@ -1,5 +1,6 @@
 import { collectM3Snapshot, collectM4Snapshot, collectM5Snapshot } from '@opsense/collectors';
 import { normalizeAndMergeServices } from '@opsense/core';
+import { redactForAudit, redactSnapshot } from '@opsense/redaction';
 import { SCHEMA_VERSION, ScanSnapshotSchema, assertSchema } from '@opsense/schema';
 import type { ScanSnapshot } from '@opsense/schema';
 import { SafeCommandExecutor, connectSsh, detectPermissions } from '@opsense/ssh';
@@ -65,7 +66,9 @@ export function createScanCommand(loggerFactory: LoggerFactory): Command {
       const layout = await ensureRunWorkspace(scanId, workspaceRoot);
       let auditWrite = Promise.resolve();
       const executorAudit = (record: unknown): Promise<void> => {
-        auditWrite = auditWrite.then(() => appendJsonLine(layout.auditFile, record));
+        auditWrite = auditWrite.then(() =>
+          appendJsonLine(layout.auditFile, redactForAudit(record).value),
+        );
         return auditWrite;
       };
 
@@ -170,12 +173,14 @@ export function createScanCommand(loggerFactory: LoggerFactory): Command {
         systemdUnits: normalized.systemdUnits,
         unknowns: normalized.unknowns,
       };
-      assertSchema(ScanSnapshotSchema, snapshot);
+      const redacted = redactSnapshot(snapshot);
+      assertSchema(ScanSnapshotSchema, redacted.value);
       await Promise.all([
-        writeJsonAtomic(layout.snapshotFile, snapshot),
-        writeJsonAtomic(layout.metaFile, snapshot.session),
+        writeJsonAtomic(layout.snapshotFile, redacted.value),
+        writeJsonAtomic(layout.metaFile, redacted.value.session),
+        writeJsonAtomic(layout.redactionReportFile, redacted.report),
       ]);
-      logger.info(`Scan ${scanId} completed with state '${snapshot.session.state}'.`);
+      logger.info(`Scan ${scanId} completed with state '${redacted.value.session.state}'.`);
       logger.info(layout.snapshotFile);
       process.exitCode = ExitCode.Success;
     } catch (error) {

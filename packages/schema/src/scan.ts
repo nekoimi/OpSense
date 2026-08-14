@@ -17,6 +17,7 @@ import {
 } from './evidence.js';
 import { HostSnapshotSchema } from './host.js';
 import { NetworkSnapshotSchema } from './network.js';
+import { RedactionReportSchema } from './redaction.js';
 import { ProcessRecordSchema, SocketRecordSchema, SystemdUnitRecordSchema } from './runtime.js';
 import { ServiceRecordSchema } from './service.js';
 import { StorageSnapshotSchema } from './storage.js';
@@ -75,6 +76,7 @@ export const ScanSnapshotSchema = Type.Object(
     evidence: Type.Array(EvidenceRecordSchema),
     findings: Type.Array(FindingRecordSchema),
     unknowns: Type.Array(Type.String()),
+    redaction: Type.Optional(RedactionReportSchema),
     aiAnalysis: Type.Optional(AiAnalysisSchema),
   },
   { $id: 'ScanSnapshot', additionalProperties: false },

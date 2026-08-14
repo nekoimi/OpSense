@@ -44,6 +44,9 @@ importers:
       '@opsense/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@opsense/redaction':
+        specifier: workspace:*
+        version: link:../../packages/redaction
       '@opsense/schema':
         specifier: workspace:*
         version: link:../../packages/schema

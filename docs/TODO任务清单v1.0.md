@@ -436,27 +436,27 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 
 ### M7-01 敏感信息分类
 
-- [ ] `Must` 实现 `public/internal/sensitive/secret` 分类。
-- [ ] `Must` 定义字段级敏感信息规则。
-- [ ] `Must` 定义文件类型和路径敏感规则。
+- [x] `Must` 实现 `public/internal/sensitive/secret` 分类。
+- [x] `Must` 定义字段级敏感信息规则。
+- [x] `Must` 定义文件类型和路径敏感规则。
 
 ### M7-02 脱敏规则
 
-- [ ] `Must` `.env` 默认只保留键名。
-- [ ] `Must` 私钥只记录路径、权限和可选指纹。
-- [ ] `Must` 数据库连接串隐藏用户、密码和查询参数。
-- [ ] `Must` URL 中凭据、Token 和签名参数替换为 `[REDACTED]`。
-- [ ] `Must` 命令行中的 password、token、secret 参数脱敏。
-- [ ] `Must` Docker 环境变量同时使用键名规则和值模式过滤。
-- [ ] `Must` 对 AI 输入执行第二次脱敏扫描。
+- [x] `Must` `.env` 默认只保留键名。
+- [x] `Must` 私钥只记录路径、权限和可选指纹。
+- [x] `Must` 数据库连接串隐藏用户、密码和查询参数。
+- [x] `Must` URL 中凭据、Token 和签名参数替换为 `[REDACTED]`。
+- [x] `Must` 命令行中的 password、token、secret 参数脱敏。
+- [x] `Must` Docker 环境变量同时使用键名规则和值模式过滤。
+- [x] `Must` 对 AI 输入执行第二次脱敏扫描。
 
 ### M7-03 安全测试
 
-- [ ] `Must` 创建包含假密码、Token、私钥和连接串的 fixture。
-- [ ] `Must` 断言 secret 不进入 `snapshot.json`。
-- [ ] `Must` 断言 secret 不进入 AI 输入目录。
-- [ ] `Must` 断言 secret 不进入日志和 Word 报告。
-- [ ] `Must` 输出脱敏规则版本和命中计数。
+- [x] `Must` 创建包含假密码、Token、私钥和连接串的 fixture。
+- [x] `Must` 断言 secret 不进入 `snapshot.json`。
+- [x] `Must` 断言 secret 不进入 AI 输入目录。
+- [x] `Must` 断言 secret 不进入日志和报告生成输入；Word 成品验证在 M8-04 完成。
+- [x] `Must` 输出脱敏规则版本和命中计数。
 
 验收条件：
 

@@ -5,6 +5,7 @@ export * from './container.js';
 export * from './evidence.js';
 export * from './host.js';
 export * from './network.js';
+export * from './redaction.js';
 export * from './runtime.js';
 export * from './scan.js';
 export * from './service.js';

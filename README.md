@@ -16,7 +16,7 @@ Run the CLI in development mode:
 pnpm dev -- --help
 ```
 
-Run a read-only M3-M6 system, service, targeted directory, and normalization scan with SSH Agent authentication:
+Run a read-only M3-M7 system, service, targeted directory, normalization, and redaction scan with SSH Agent authentication:
 
 ```powershell
 pnpm dev -- scan --host server.example.com --user ops --accept-new-host-key
@@ -34,7 +34,7 @@ For trusted internal environments, a plaintext password can be supplied for the 
 pnpm dev -- scan --host server.example.com --user ops --password '<password>' --accept-new-host-key
 ```
 
-Command-line passwords may be visible in shell history and process listings. OpSense does not write the password to its config, audit log, snapshot, or report files. The command writes `snapshot.json`, `meta.json`, and `audit.jsonl` under the local OpSense workspace. `analyze`, `report`, and `inspect` remain milestone placeholders.
+Command-line passwords may be visible in shell history and process listings. OpSense does not write the password to its config, audit log, snapshot, or report files. The command writes `snapshot.json`, `meta.json`, `audit.jsonl`, and `redaction-report.json` under the local OpSense workspace. `analyze`, `report`, and `inspect` remain milestone placeholders.
 
 M3 collection detects Debian, RHEL, Alpine, or an unknown Linux family from `/etc/os-release`. Logical probes use audited read-only fallback commands when JSON output, command options, or utilities are unavailable, and every attempted variant remains traceable in the snapshot evidence.
 
@@ -43,3 +43,5 @@ M4 adds systemd units, processes, listening sockets, Docker containers, and Comp
 M5 derives path seeds from M4 runtime evidence and scans only those absolute paths. Directory reads are depth-, count-, output-, timeout-, and filesystem-bounded; pseudo filesystems, caches, source-control metadata, dependency trees, database internals, and container overlay layers are excluded. Small JSON, YAML, TOML, and INI files produce key-only structural summaries, while `.env` values are never read.
 
 M6 normalizes the collected entities and deterministically merges systemd units, process trees, listening sockets, Docker containers, Compose services, and discovered artifacts into `ServiceRecord` entries. Merge evidence references its source evidence IDs, rule-derived services remain `inferred`, conflicts and unknown fields remain separate, and no business dependency graph is inferred.
+
+M7 classifies operational data as `public`, `internal`, `sensitive`, or `secret` and applies versioned redaction before snapshots and audit records are persisted. Secret fields, environment values, private key blocks, credentials in URLs and database connection strings, authorization tokens, and sensitive command options are replaced with `[REDACTED]`. AI input uses a mandatory second pass, and report payloads use the same fail-closed residual secret scan.

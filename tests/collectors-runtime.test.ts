@@ -24,6 +24,16 @@ describe('M4 process and socket parsers', () => {
     expect(command).not.toContain('assigned-secret');
   });
 
+  it('preserves ordinary options that only start with p or contain secret words', () => {
+    const command = redactCommandLine(
+      'java -port 8080 -profile prod --tokenize input password-policy DB_PASSWORD_FILE=/run/secret',
+    );
+
+    expect(command).toBe(
+      'java -port 8080 -profile prod --tokenize input password-policy DB_PASSWORD_FILE=[REDACTED]',
+    );
+  });
+
   it('parses process metadata, proc links, cgroups, and redacts command arguments', async () => {
     const [processesSource, linksSource, passwdSource] = await Promise.all([
       readFixture('m4/process-list.txt'),

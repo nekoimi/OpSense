@@ -39,6 +39,9 @@ describe('local workspace', () => {
       expect.arrayContaining(['reports', 'runs']),
     );
     expect(await readdir(layout.runDirectory)).toContain('ai-input');
+    expect(layout.redactionReportFile).toBe(
+      path.join(layout.runDirectory, 'redaction-report.json'),
+    );
   });
 
   it('atomically writes and replaces JSON files', async () => {
