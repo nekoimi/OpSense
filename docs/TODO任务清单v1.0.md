@@ -109,21 +109,21 @@ M0 -> M1 -> M2 -> M3 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 
 ### M1-01 定义扫描会话模型
 
-- [ ] `Must` 定义 `ScanSession`。
-- [ ] `Must` 定义扫描 ID、目标主机标识、开始和结束时间。
-- [ ] `Must` 定义执行阶段、总体状态和部分失败状态。
-- [ ] `Must` 定义 OpSense 版本、规则版本和配置摘要。
+- [x] `Must` 定义 `ScanSession`。
+- [x] `Must` 定义扫描 ID、目标主机标识、开始和结束时间。
+- [x] `Must` 定义执行阶段、总体状态和部分失败状态。
+- [x] `Must` 定义 OpSense 版本、规则版本和配置摘要。
 
 ### M1-02 定义基础实体 Schema
 
-- [ ] `Must` 定义 `HostSnapshot`。
-- [ ] `Must` 定义 `StorageSnapshot`、Disk、Partition、FileSystem、Mount。
-- [ ] `Must` 定义 `NetworkSnapshot`、Interface、Route、Dns、FirewallSummary。
-- [ ] `Must` 定义 `ProcessRecord` 和 `SocketRecord`。
-- [ ] `Must` 定义 `SystemdUnitRecord`。
-- [ ] `Must` 定义 `ContainerRecord` 和 `ComposeProjectRecord`。
-- [ ] `Must` 定义 `ArtifactRecord`、`EvidenceRecord` 和 `FindingRecord`。
-- [ ] `Must` 定义 `ServiceRecord` 和 `AiAnalysis`。
+- [x] `Must` 定义 `HostSnapshot`。
+- [x] `Must` 定义 `StorageSnapshot`、Disk、Partition、FileSystem、Mount。
+- [x] `Must` 定义 `NetworkSnapshot`、Interface、Route、Dns、FirewallSummary。
+- [x] `Must` 定义 `ProcessRecord` 和 `SocketRecord`。
+- [x] `Must` 定义 `SystemdUnitRecord`。
+- [x] `Must` 定义 `ContainerRecord` 和 `ComposeProjectRecord`。
+- [x] `Must` 定义 `ArtifactRecord`、`EvidenceRecord` 和 `FindingRecord`。
+- [x] `Must` 定义 `ServiceRecord` 和 `AiAnalysis`。
 
 验收条件：
 
@@ -132,27 +132,27 @@ M0 -> M1 -> M2 -> M3 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 
 ### M1-03 定义证据与确定程度
 
-- [ ] `Must` 实现 `confirmed`、`inferred`、`unknown`、`conflict`。
-- [ ] `Must` 每条证据包含来源、采集时间、字段、状态和敏感级别。
-- [ ] `Must` 明确 AI 无权把 `inferred/unknown` 提升为 `confirmed`。
-- [ ] `Must` 定义命令失败、命令缺失和权限不足的证据格式。
+- [x] `Must` 实现 `confirmed`、`inferred`、`unknown`、`conflict`。
+- [x] `Must` 每条证据包含来源、采集时间、字段、状态和敏感级别。
+- [x] `Must` 明确 AI 无权把 `inferred/unknown` 提升为 `confirmed`。
+- [x] `Must` 定义命令失败、命令缺失和权限不足的证据格式。
 
 ### M1-04 实现本地工作区
 
-- [ ] `Must` 创建 `~/.opsense/config.json`。
-- [ ] `Must` 创建 `runs/<scan-id>`。
-- [ ] `Must` 创建 `reports/<host>/<scan-time>`。
-- [ ] `Must` 安全写入 `meta.json`、`snapshot.json` 和审计日志。
-- [ ] `Must` 使用临时文件加原子替换，避免中断产生半个 JSON 文件。
-- [ ] `Should` 支持通过参数覆盖工作区根目录。
+- [x] `Must` 创建 `~/.opsense/config.json`。
+- [x] `Must` 创建 `runs/<scan-id>`。
+- [x] `Must` 创建 `reports/<host>/<scan-time>`。
+- [x] `Must` 安全写入 `meta.json`、`snapshot.json` 和审计日志。
+- [x] `Must` 使用临时文件加原子替换，避免中断产生半个 JSON 文件。
+- [x] `Should` 支持通过参数覆盖工作区根目录。
 
 ### M1-05 实现配置加载
 
-- [ ] `Must` 定义配置 Schema 和默认值。
-- [ ] `Must` 支持配置文件和 CLI 参数合并。
-- [ ] `Must` 明确 CLI 参数优先级高于配置文件。
-- [ ] `Must` 拒绝在配置中保存密码和私钥正文。
-- [ ] `Must` 校验超时、目录深度、文件数和输出大小范围。
+- [x] `Must` 定义配置 Schema 和默认值。
+- [x] `Must` 支持配置文件和 CLI 参数合并。
+- [x] `Must` 明确 CLI 参数优先级高于配置文件。
+- [x] `Must` 拒绝在配置中保存密码和私钥正文。
+- [x] `Must` 校验超时、目录深度、文件数和输出大小范围。
 
 ---
 

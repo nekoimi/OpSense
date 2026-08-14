@@ -1,0 +1,16 @@
+{
+  "session": {
+    "id": "invalid id with spaces",
+    "schemaVersion": "1.0.0",
+    "opsenseVersion": "0.1.0",
+    "rulesVersion": "0.1.0",
+    "target": {
+      "host": "server.example.com",
+      "port": 70000
+    },
+    "state": "made_up",
+    "permissionLevel": "unknown",
+    "startedAt": "not-a-date",
+    "configSummary": {}
+  }
+}

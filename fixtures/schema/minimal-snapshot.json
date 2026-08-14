@@ -1,0 +1,28 @@
+{
+  "session": {
+    "id": "scan-20260814T030000Z-12345678",
+    "schemaVersion": "1.0.0",
+    "opsenseVersion": "0.1.0",
+    "rulesVersion": "0.1.0",
+    "target": {
+      "host": "server.example.com",
+      "port": 22,
+      "user": "ops"
+    },
+    "state": "completed",
+    "permissionLevel": "unknown",
+    "startedAt": "2026-08-14T03:00:00.000Z",
+    "finishedAt": "2026-08-14T03:00:01.000Z",
+    "configSummary": {}
+  },
+  "processes": [],
+  "sockets": [],
+  "systemdUnits": [],
+  "containers": [],
+  "composeProjects": [],
+  "artifacts": [],
+  "services": [],
+  "evidence": [],
+  "findings": [],
+  "unknowns": []
+}

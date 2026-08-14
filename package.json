@@ -14,14 +14,14 @@
   },
   "scripts": {
     "build": "pnpm -r --if-present run build",
-    "check": "pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run build",
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run test",
     "dev": "pnpm --filter @opsense/cli run dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "pnpm -r --if-present run typecheck"
+    "typecheck": "pnpm run build && pnpm -r --if-present run typecheck"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
