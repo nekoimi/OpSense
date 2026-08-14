@@ -1,0 +1,15 @@
+{
+  "files": [],
+  "references": [
+    { "path": "apps/cli" },
+    { "path": "packages/ai-codex" },
+    { "path": "packages/ai-provider" },
+    { "path": "packages/collectors" },
+    { "path": "packages/core" },
+    { "path": "packages/redaction" },
+    { "path": "packages/report" },
+    { "path": "packages/schema" },
+    { "path": "packages/ssh" },
+    { "path": "packages/workspace" }
+  ]
+}
