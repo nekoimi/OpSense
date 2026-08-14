@@ -1,0 +1,2 @@
+NAME="sda" KNAME="sda" PATH="/dev/sda" TYPE="disk" SIZE="107374182400" PKNAME="" FSTYPE="" UUID="" MOUNTPOINT="" MODEL="Virtual Disk" SERIAL="disk-1" ROTA="1" RM="0"
+NAME="sda1" KNAME="sda1" PATH="/dev/sda1" TYPE="part" SIZE="53687091200" PKNAME="sda" FSTYPE="ext4" UUID="root-uuid" MOUNTPOINT="/" MODEL="" SERIAL="" ROTA="1" RM="0"

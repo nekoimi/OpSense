@@ -45,7 +45,8 @@ Later   明确放到后续版本
 | M1 | 数据契约与本地工作区 | Schema、配置和运行目录 | M0 |
 | M2 | SSH 与安全命令执行 | 可靠的只读远程执行层 | M0、M1 |
 | M3 | 系统与存储采集 | 主机基础快照 | M2 |
-| M4 | 服务探测 | systemd、进程、端口、Docker 清单 | M2、M3 |
+| M3.1 | 发行版适配与命令降级层 | 跨发行版逻辑探针与降级证据 | M3 |
+| M4 | 服务探测 | systemd、进程、端口、Docker 清单 | M2、M3.1 |
 | M5 | 定向目录与配置探测 | 路径、配置、日志和数据位置 | M4 |
 | M6 | 归一化与服务归并 | 统一 ServiceRecord 和证据索引 | M3、M4、M5 |
 | M7 | 脱敏与安全检查 | 可安全持久化和发送给 AI 的快照 | M1-M6 |
@@ -57,7 +58,7 @@ Later   明确放到后续版本
 关键路径：
 
 ```text
-M0 -> M1 -> M2 -> M3 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
+M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 ```
 
 ---
@@ -163,7 +164,7 @@ M0 -> M1 -> M2 -> M3 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 - [x] `Must` 使用 `ssh2` 实现 SSH 连接。
 - [x] `Must` 支持 SSH Agent。
 - [x] `Must` 支持私钥文件。
-- [ ] `Should` 支持交互式密码输入，但不得记录密码。
+- [x] `Should` 支持 CLI 明文密码输入，但不得写入配置、审计、快照或报告。
 - [x] `Must` 支持连接超时和 keepalive。
 - [x] `Must` 默认启用主机指纹校验。
 - [x] `Must` 对首次连接和指纹变化给出明确处理方式。
@@ -205,49 +206,92 @@ M0 -> M1 -> M2 -> M3 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 
 ### M3-01 预检与主机信息
 
-- [ ] `Must` 采集 `/etc/os-release`。
-- [ ] `Must` 采集 Kernel 和 CPU 架构。
-- [ ] `Must` 采集主机名、时区、运行时间和虚拟化特征。
-- [ ] `Must` 探测必要命令是否存在。
-- [ ] `Must` 生成主机能力清单。
+- [x] `Must` 采集 `/etc/os-release`。
+- [x] `Must` 采集 Kernel 和 CPU 架构。
+- [x] `Must` 采集主机名、时区、运行时间和虚拟化特征。
+- [x] `Must` 探测必要命令是否存在。
+- [x] `Must` 生成主机能力清单。
 
 ### M3-02 CPU、内存和 Swap
 
-- [ ] `Must` 解析 `lscpu -J`，并实现文本回退解析。
-- [ ] `Must` 解析 `/proc/meminfo`。
-- [ ] `Must` 采集 Swap 设备和使用情况。
-- [ ] `Must` 所有容量使用字节存储，报告层负责格式化。
+- [x] `Must` 解析 `lscpu -J`，并实现文本回退解析。
+- [x] `Must` 解析 `/proc/meminfo`。
+- [x] `Must` 采集 Swap 设备和使用情况。
+- [x] `Must` 所有容量使用字节存储，报告层负责格式化。
 
 ### M3-03 磁盘、分区和文件系统
 
-- [ ] `Must` 解析 `lsblk -J -O`。
-- [ ] `Must` 解析 `findmnt -J`。
-- [ ] `Must` 解析 `df -B1` 和 `df -i`。
-- [ ] `Must` 读取 `/etc/fstab` 的挂载声明。
-- [ ] `Should` 探测 LVM。
-- [ ] `Should` 探测软件 RAID。
-- [ ] `Must` 标记只读、网络和临时文件系统。
+- [x] `Must` 解析 `lsblk -J -O`。
+- [x] `Must` 解析 `findmnt -J`。
+- [x] `Must` 解析 `df -B1` 和 `df -i`。
+- [x] `Must` 读取 `/etc/fstab` 的挂载声明。
+- [x] `Should` 探测 LVM。
+- [x] `Should` 探测软件 RAID。
+- [x] `Must` 标记只读、网络和临时文件系统。
 
 ### M3-04 网络与 DNS
 
-- [ ] `Must` 解析 `ip -j addr`。
-- [ ] `Must` 解析 `ip -j route`。
-- [ ] `Must` 读取 DNS 配置。
-- [ ] `Must` 区分回环、内网、公网和未知地址。
-- [ ] `Should` 采集默认网关和主路由表摘要。
+- [x] `Must` 解析 `ip -j addr`。
+- [x] `Must` 解析 `ip -j route`。
+- [x] `Must` 读取 DNS 配置。
+- [x] `Must` 区分回环、内网、公网和未知地址。
+- [x] `Should` 采集默认网关和主路由表摘要。
 
 ### M3-05 防火墙、用户和软件环境
 
-- [ ] `Must` 探测 nftables、iptables、firewalld 或 UFW。
-- [ ] `Must` 只生成规则摘要，避免无界输出。
+- [x] `Must` 探测 nftables、iptables、firewalld 或 UFW。
+- [x] `Must` 只生成规则摘要，避免无界输出。
 - [ ] `Should` 采集用户、用户组和可登录 Shell 概况。
-- [ ] `Should` 识别包管理器。
+- [x] `Should` 识别包管理器。
 - [ ] `Should` 采集关键软件版本，不默认导出全部软件包清单。
 
 验收条件：
 
 - `opsense scan` 可以生成仅包含系统、存储和网络的合法 `snapshot.json`。
 - 缺少某个命令时生成未知项，不导致整个扫描失败。
+
+---
+
+## 6.1 M3.1：发行版适配与命令降级层
+
+### M3.1-01 发行版识别与逻辑探针
+
+- [x] `Must` 在其他 M3 探针前读取 `/etc/os-release`。
+- [x] `Must` 将发行版归类为 `debian`、`rhel`、`alpine` 或 `unknown`。
+- [x] `Must` 定义与具体命令解耦的 `ProbeSpec`、`ProbeVariant` 和 `ProbeOutcome`。
+- [x] `Must` 根据发行版选择并排序可用命令变体。
+- [x] `Must` 探针之间最多并发 4 个 SSH 通道，单个探针的变体顺序执行。
+
+### M3.1-02 命令降级与证据
+
+- [x] `Must` 在命令缺失、参数不支持、权限不足或解析失败时尝试下一变体。
+- [x] `Must` 保留每次命令尝试及解析失败的独立 evidence。
+- [x] `Must` 仅在必需逻辑探针的全部变体失败后生成一个 unknown。
+- [x] `Must` 可选探针全部失败时不把扫描状态改为 `partial`。
+- [x] `Must` 所有降级命令继续使用静态只读允许列表，禁止任意 `sh -c`。
+
+### M3.1-03 首批兼容矩阵
+
+- [x] `Must` CPU 支持 `lscpu -J`、文本 `lscpu`、`/proc/cpuinfo`。
+- [x] `Must` 磁盘支持完整 JSON、基础 JSON 和 `lsblk -P`。
+- [x] `Must` 挂载支持 `findmnt -J` 和 `/proc/self/mountinfo`。
+- [x] `Must` 容量支持 `df -B1 -P` 和 `df -k -P` 本地换算。
+- [x] `Must` Swap 支持 `swapon --show` 和 `/proc/swaps`。
+- [x] `Must` 网络支持 `ip` JSON 和单行文本输出。
+- [x] `Should` 时区、虚拟化、防火墙和包管理器支持有序替代来源。
+
+### M3.1-04 兼容性测试
+
+- [x] `Must` 增加 Debian、RHEL 和 Alpine 的 `os-release` fixture。
+- [x] `Must` 覆盖主命令成功和命令缺失降级。
+- [x] `Must` 覆盖参数不支持和解析失败降级。
+- [x] `Must` 覆盖全部变体失败及可选探针失败。
+- [x] `Must` 覆盖文本格式回退解析器和容量单位换算。
+
+验收条件：
+
+- 同一逻辑采集项可以在不同 Linux 发行版和命令版本上选择可解析的安全命令。
+- 任一降级尝试均可追溯，且只有必需信息最终不可得时扫描才标记为部分完成。
 
 ---
 

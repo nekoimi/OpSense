@@ -1,0 +1,9 @@
+{
+  "lscpu": [
+    { "field": "Architecture:", "data": "x86_64" },
+    { "field": "CPU(s):", "data": "8" },
+    { "field": "Model name:", "data": "Example Virtual CPU" },
+    { "field": "Socket(s):", "data": "2" },
+    { "field": "Core(s) per socket:", "data": "2" }
+  ]
+}

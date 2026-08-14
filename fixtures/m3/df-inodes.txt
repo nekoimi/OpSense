@@ -1,0 +1,5 @@
+Filesystem           Inodes IUsed IFree IUse% Mounted on
+/dev/sda1            3276800 120000 3156800 4% /
+/dev/mapper/vg-data  2621440  50000 2571440 2% /data
+tmpfs                 262144    100  262044 1% /run
+nas.example.com:/share 5000000 250000 4750000 5% /mnt/share

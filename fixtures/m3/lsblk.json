@@ -1,0 +1,34 @@
+{
+  "blockdevices": [
+    {
+      "name": "sda",
+      "path": "/dev/sda",
+      "type": "disk",
+      "size": 107374182400,
+      "model": "Example Virtual Disk",
+      "serial": "disk-001",
+      "rota": 1,
+      "rm": 0,
+      "children": [
+        {
+          "name": "sda1",
+          "path": "/dev/sda1",
+          "type": "part",
+          "size": 53687091200,
+          "fstype": "ext4",
+          "uuid": "root-uuid",
+          "mountpoints": ["/"]
+        },
+        {
+          "name": "vg-data",
+          "path": "/dev/mapper/vg-data",
+          "type": "lvm",
+          "size": 42949672960,
+          "fstype": "xfs",
+          "uuid": "data-uuid",
+          "mountpoints": ["/data"]
+        }
+      ]
+    }
+  ]
+}

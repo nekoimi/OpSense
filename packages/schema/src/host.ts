@@ -1,6 +1,23 @@
 import { Type, type Static } from '@sinclair/typebox';
 
-import { DateTimeSchema, NonEmptyStringSchema } from './common.js';
+import {
+  CollectionStatusSchema,
+  DateTimeSchema,
+  IdSchema,
+  NonEmptyStringSchema,
+} from './common.js';
+
+export const CommandCapabilitySchema = Type.Object(
+  {
+    command: NonEmptyStringSchema,
+    available: Type.Boolean(),
+    status: CollectionStatusSchema,
+    evidenceIds: Type.Array(IdSchema),
+  },
+  { additionalProperties: false },
+);
+
+export type CommandCapability = Static<typeof CommandCapabilitySchema>;
 
 export const OperatingSystemSchema = Type.Object(
   {
@@ -20,7 +37,7 @@ export const CpuSnapshotSchema = Type.Object(
   {
     architecture: NonEmptyStringSchema,
     model: Type.Optional(Type.String()),
-    logicalCores: Type.Integer({ minimum: 1 }),
+    logicalCores: Type.Integer({ minimum: 0 }),
     physicalCores: Type.Optional(Type.Integer({ minimum: 1 })),
     sockets: Type.Optional(Type.Integer({ minimum: 1 })),
   },
@@ -54,6 +71,7 @@ export const HostSnapshotSchema = Type.Object(
     uptimeSeconds: Type.Integer({ minimum: 0 }),
     virtualization: Type.Optional(Type.String()),
     packageManager: Type.Optional(Type.String()),
+    capabilities: Type.Array(CommandCapabilitySchema),
     collectedAt: DateTimeSchema,
   },
   { additionalProperties: false },

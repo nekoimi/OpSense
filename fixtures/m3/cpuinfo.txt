@@ -1,0 +1,11 @@
+processor   : 0
+vendor_id   : GenuineIntel
+physical id : 0
+core id     : 0
+model name  : Intel(R) Xeon(R) Test CPU
+
+processor   : 1
+vendor_id   : GenuineIntel
+physical id : 0
+core id     : 1
+model name  : Intel(R) Xeon(R) Test CPU

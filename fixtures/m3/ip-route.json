@@ -1,0 +1,4 @@
+[
+  { "dst": "default", "gateway": "192.168.10.1", "dev": "eth0", "metric": 100, "table": "main" },
+  { "dst": "192.168.10.0/24", "dev": "eth0", "scope": "link", "table": "main" }
+]

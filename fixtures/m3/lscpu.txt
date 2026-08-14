@@ -1,0 +1,5 @@
+Architecture:                         aarch64
+CPU(s):                               4
+Model name:                           Example ARM CPU
+Socket(s):                            1
+Core(s) per socket:                   4

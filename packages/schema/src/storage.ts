@@ -19,6 +19,36 @@ export const PartitionRecordSchema = Type.Object(
 
 export type PartitionRecord = Static<typeof PartitionRecordSchema>;
 
+export const SwapDeviceRecordSchema = Type.Object(
+  {
+    id: IdSchema,
+    name: NonEmptyStringSchema,
+    type: NonEmptyStringSchema,
+    sizeBytes: Type.Integer({ minimum: 0 }),
+    usedBytes: Type.Integer({ minimum: 0 }),
+    priority: Type.Optional(Type.Integer()),
+    evidenceIds: Type.Array(IdSchema),
+  },
+  { additionalProperties: false },
+);
+
+export type SwapDeviceRecord = Static<typeof SwapDeviceRecordSchema>;
+
+export const FstabEntrySchema = Type.Object(
+  {
+    source: NonEmptyStringSchema,
+    target: NonEmptyStringSchema,
+    fileSystemType: NonEmptyStringSchema,
+    options: Type.Array(Type.String()),
+    dump: Type.Optional(Type.Integer({ minimum: 0 })),
+    pass: Type.Optional(Type.Integer({ minimum: 0 })),
+    evidenceIds: Type.Array(IdSchema),
+  },
+  { additionalProperties: false },
+);
+
+export type FstabEntry = Static<typeof FstabEntrySchema>;
+
 export const DiskRecordSchema = Type.Object(
   {
     id: IdSchema,
@@ -53,6 +83,7 @@ export const MountRecordSchema = Type.Object(
     readOnly: Type.Boolean(),
     network: Type.Boolean(),
     pseudo: Type.Boolean(),
+    temporary: Type.Boolean(),
     evidenceIds: Type.Array(IdSchema),
   },
   { additionalProperties: false },
@@ -79,6 +110,8 @@ export const StorageSnapshotSchema = Type.Object(
     disks: Type.Array(DiskRecordSchema),
     mounts: Type.Array(MountRecordSchema),
     layers: Type.Array(StorageLayerRecordSchema),
+    swapDevices: Type.Array(SwapDeviceRecordSchema),
+    fstabEntries: Type.Array(FstabEntrySchema),
     collectedAt: DateTimeSchema,
   },
   { additionalProperties: false },

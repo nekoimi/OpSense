@@ -1,0 +1,3 @@
+UUID=root-uuid / ext4 defaults 0 1
+/dev/mapper/vg-data /data xfs ro,nofail 0 2
+nas.example.com:/share /mnt/share nfs4 defaults,_netdev 0 0

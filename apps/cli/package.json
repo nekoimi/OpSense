@@ -17,6 +17,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@opsense/collectors": "workspace:*",
+    "@opsense/schema": "workspace:*",
+    "@opsense/ssh": "workspace:*",
+    "@opsense/workspace": "workspace:*",
     "commander": "^14.0.0"
   }
 }

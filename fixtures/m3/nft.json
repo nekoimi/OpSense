@@ -1,0 +1,7 @@
+{
+  "nftables": [
+    { "table": { "family": "inet", "name": "filter" } },
+    { "chain": { "family": "inet", "table": "filter", "name": "input" } },
+    { "rule": { "family": "inet", "table": "filter", "chain": "input", "expr": [] } }
+  ]
+}

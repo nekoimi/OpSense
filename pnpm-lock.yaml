@@ -38,6 +38,18 @@ importers:
 
   apps/cli:
     dependencies:
+      '@opsense/collectors':
+        specifier: workspace:*
+        version: link:../../packages/collectors
+      '@opsense/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
+      '@opsense/ssh':
+        specifier: workspace:*
+        version: link:../../packages/ssh
+      '@opsense/workspace':
+        specifier: workspace:*
+        version: link:../../packages/workspace
       commander:
         specifier: ^14.0.0
         version: 14.0.3
@@ -62,6 +74,9 @@ importers:
       '@opsense/schema':
         specifier: workspace:*
         version: link:../schema
+      '@opsense/ssh':
+        specifier: workspace:*
+        version: link:../ssh
 
   packages/core:
     dependencies:

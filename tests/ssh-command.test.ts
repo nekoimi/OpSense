@@ -48,7 +48,9 @@ describe('safe command specifications', () => {
       expect.arrayContaining([
         'host.uname',
         'storage.lsblk',
+        'storage.lsblk-pairs',
         'network.addresses',
+        'network.addresses-text',
         'service.systemd-units',
         'directory.stat',
       ]),
@@ -69,6 +71,13 @@ describe('safe command specifications', () => {
       expect(spec.requiredCommands).toContain(spec.executable);
       expect(spec.requiredCommands.length).toBeGreaterThan(0);
     }
+    expect(renderCommand(getCommandSpec('storage.lsblk')).execution).toContain("'-b'");
+    expect(renderCommand(getCommandSpec('storage.swap')).execution).toContain(
+      "'--show=NAME,TYPE,SIZE,USED,PRIO'",
+    );
+    expect(renderCommand(getCommandSpec('storage.mountinfo')).execution).toContain(
+      "'/proc/self/mountinfo'",
+    );
   });
 });
 

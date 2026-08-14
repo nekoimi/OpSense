@@ -1,0 +1,5 @@
+Filesystem          1-blocks        Used   Available Capacity Mounted on
+/dev/sda1         53687091200 10737418240 42949672960      20% /
+/dev/mapper/vg-data 42949672960 21474836480 21474836480      50% /data
+tmpfs              1073741824     1048576  1072693248       1% /run
+nas.example.com:/share 214748364800 107374182400 107374182400 50% /mnt/share

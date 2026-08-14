@@ -1,0 +1,23 @@
+[
+  {
+    "ifname": "lo",
+    "operstate": "UNKNOWN",
+    "address": "00:00:00:00:00:00",
+    "mtu": 65536,
+    "addr_info": [
+      { "family": "inet", "local": "127.0.0.1", "prefixlen": 8, "scope": "host" },
+      { "family": "inet6", "local": "::1", "prefixlen": 128, "scope": "host" }
+    ]
+  },
+  {
+    "ifname": "eth0",
+    "operstate": "UP",
+    "address": "02:42:ac:11:00:02",
+    "mtu": 1500,
+    "addr_info": [
+      { "family": "inet", "local": "192.168.10.20", "prefixlen": 24, "scope": "global" },
+      { "family": "inet", "local": "203.0.113.20", "prefixlen": 24, "scope": "global" },
+      { "family": "inet6", "local": "fe80::42:acff:fe11:2", "prefixlen": 64, "scope": "link" }
+    ]
+  }
+]

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ExitCode } from '../apps/cli/src/exit-code.js';
 import type { Logger, LoggerFactory } from '../apps/cli/src/logger.js';
+import { createCliPasswordProvider } from '../apps/cli/src/commands/scan.js';
 import { createProgram } from '../apps/cli/src/program.js';
 
 afterEach(() => {
@@ -37,11 +38,27 @@ describe('opsense CLI skeleton', () => {
     const loggerFactory: LoggerFactory = () => logger;
     const program = createProgram({ loggerFactory });
 
-    await program.parseAsync(['node', 'opsense', 'scan']);
+    await program.parseAsync(['node', 'opsense', 'analyze']);
 
     expect(logger.error).toHaveBeenCalledWith(
-      "The 'scan' command is not implemented yet (M0 skeleton).",
+      "The 'analyze' command is not implemented yet (M0 skeleton).",
     );
     expect(process.exitCode).toBe(ExitCode.NotImplemented);
+  });
+
+  it('exposes the M3 scan connection options', () => {
+    const program = createProgram();
+    const scan = program.commands.find((command) => command.name() === 'scan');
+
+    expect(scan?.helpInformation()).toContain('--accept-new-host-key');
+    expect(scan?.helpInformation()).toContain('--identity <path>');
+    expect(scan?.helpInformation()).toContain('--password <password>');
+  });
+
+  it('keeps a CLI password in an in-memory provider', async () => {
+    const provider = createCliPasswordProvider('temporary-password');
+
+    await expect(provider?.()).resolves.toBe('temporary-password');
+    expect(createCliPasswordProvider(undefined)).toBeUndefined();
   });
 });

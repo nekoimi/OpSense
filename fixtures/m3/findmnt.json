@@ -1,0 +1,30 @@
+{
+  "filesystems": [
+    {
+      "target": "/",
+      "source": "/dev/sda1",
+      "fstype": "ext4",
+      "options": "rw,relatime",
+      "children": [
+        {
+          "target": "/data",
+          "source": "/dev/mapper/vg-data",
+          "fstype": "xfs",
+          "options": "ro,relatime"
+        },
+        {
+          "target": "/run",
+          "source": "tmpfs",
+          "fstype": "tmpfs",
+          "options": "rw,nosuid,nodev"
+        },
+        {
+          "target": "/mnt/share",
+          "source": "nas.example.com:/share",
+          "fstype": "nfs4",
+          "options": "rw,relatime"
+        }
+      ]
+    }
+  ]
+}

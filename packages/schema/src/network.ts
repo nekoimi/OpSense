@@ -8,6 +8,12 @@ export const NetworkAddressSchema = Type.Object(
     prefixLength: Type.Integer({ minimum: 0, maximum: 128 }),
     family: Type.Union([Type.Literal('ipv4'), Type.Literal('ipv6')]),
     scope: Type.Optional(Type.String()),
+    classification: Type.Union([
+      Type.Literal('loopback'),
+      Type.Literal('private'),
+      Type.Literal('public'),
+      Type.Literal('unknown'),
+    ]),
   },
   { additionalProperties: false },
 );
@@ -34,6 +40,7 @@ export const RouteRecordSchema = Type.Object(
     device: Type.Optional(Type.String()),
     metric: Type.Optional(Type.Integer({ minimum: 0 })),
     table: Type.Optional(Type.String()),
+    isDefault: Type.Boolean(),
   },
   { additionalProperties: false },
 );
