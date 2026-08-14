@@ -31,6 +31,7 @@ export const OpsenseConfigSchema = Type.Object(
       {
         maxDirectoryDepth: Type.Integer({ minimum: 1, maximum: 20 }),
         maxFilesPerDirectory: Type.Integer({ minimum: 1, maximum: 100_000 }),
+        maxConfigFileBytes: Type.Integer({ minimum: 1024, maximum: 5_000_000 }),
         maxCommandOutputBytes: Type.Integer({ minimum: 1024, maximum: 100_000_000 }),
         crossFileSystems: Type.Boolean(),
         useSudo: SudoModeSchema,
@@ -75,6 +76,7 @@ export const DEFAULT_OPSENSE_CONFIG: OpsenseConfig = {
   scan: {
     maxDirectoryDepth: 4,
     maxFilesPerDirectory: 5_000,
+    maxConfigFileBytes: 262_144,
     maxCommandOutputBytes: 5_000_000,
     crossFileSystems: false,
     useSudo: 'auto',

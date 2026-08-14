@@ -9,7 +9,12 @@ import {
   ScanStateSchema,
 } from './common.js';
 import { ComposeProjectRecordSchema, ContainerRecordSchema } from './container.js';
-import { ArtifactRecordSchema, EvidenceRecordSchema, FindingRecordSchema } from './evidence.js';
+import {
+  ArtifactRecordSchema,
+  EvidenceRecordSchema,
+  FindingRecordSchema,
+  PathSeedRecordSchema,
+} from './evidence.js';
 import { HostSnapshotSchema } from './host.js';
 import { NetworkSnapshotSchema } from './network.js';
 import { ProcessRecordSchema, SocketRecordSchema, SystemdUnitRecordSchema } from './runtime.js';
@@ -64,6 +69,7 @@ export const ScanSnapshotSchema = Type.Object(
     systemdUnits: Type.Array(SystemdUnitRecordSchema),
     containers: Type.Array(ContainerRecordSchema),
     composeProjects: Type.Array(ComposeProjectRecordSchema),
+    pathSeeds: Type.Optional(Type.Array(PathSeedRecordSchema)),
     artifacts: Type.Array(ArtifactRecordSchema),
     services: Type.Array(ServiceRecordSchema),
     evidence: Type.Array(EvidenceRecordSchema),

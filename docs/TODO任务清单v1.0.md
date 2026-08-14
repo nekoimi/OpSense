@@ -357,40 +357,40 @@ M0 -> M1 -> M2 -> M3 -> M3.1 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11
 
 ### M5-01 路径种子
 
-- [ ] `Must` 从 systemd `WorkingDirectory` 生成路径种子。
-- [ ] `Must` 从 `ExecStart` 和 `EnvironmentFile` 生成路径种子。
-- [ ] `Must` 从进程 `exe/cwd` 生成路径种子。
-- [ ] `Must` 从 Docker Bind Mount 和 Volume 生成路径种子。
-- [ ] `Must` 从 Compose working directory 生成路径种子。
+- [x] `Must` 从 systemd `WorkingDirectory` 生成路径种子。
+- [x] `Must` 从 `ExecStart` 和 `EnvironmentFile` 生成路径种子。
+- [x] `Must` 从进程 `exe/cwd` 生成路径种子。
+- [x] `Must` 从 Docker Bind Mount 和 Volume 生成路径种子。
+- [x] `Must` 从 Compose working directory 生成路径种子。
 - [ ] `Should` 从 Nginx/Caddy include 和静态目录生成路径种子。
-- [ ] `Must` 每个路径种子关联来源和确定程度。
+- [x] `Must` 每个路径种子关联来源和确定程度。
 
 ### M5-02 路径安全处理
 
-- [ ] `Must` 规范化绝对路径。
-- [ ] `Must` 拒绝空路径、控制字符和非法路径参数。
-- [ ] `Must` 处理符号链接循环。
-- [ ] `Must` 默认不跨文件系统边界。
-- [ ] `Must` 对不可读目录记录权限不足证据。
+- [x] `Must` 规范化绝对路径。
+- [x] `Must` 拒绝空路径、控制字符和非法路径参数。
+- [x] `Must` 处理符号链接循环。
+- [x] `Must` 默认不跨文件系统边界。
+- [x] `Must` 对不可读目录记录权限不足证据。
 
 ### M5-03 受限目录扫描
 
-- [ ] `Must` 默认最大深度为 4。
-- [ ] `Must` 默认单目录最大文件数为 5000。
-- [ ] `Must` 默认只采集名称、类型、大小、属主、权限和修改时间。
-- [ ] `Must` 排除 `/proc`、`/sys`、`/dev`、`/run` 和容器 overlay 存储层。
-- [ ] `Must` 排除 `.git`、`node_modules`、cache 和数据库表空间。
-- [ ] `Must` 对大目录和大文件只记录摘要。
-- [ ] `Must` 支持扫描超时和结果截断标记。
+- [x] `Must` 默认最大深度为 4。
+- [x] `Must` 默认单目录最大文件数为 5000。
+- [x] `Must` 默认只采集名称、类型、大小、属主、权限和修改时间。
+- [x] `Must` 排除 `/proc`、`/sys`、`/dev`、`/run` 和容器 overlay 存储层。
+- [x] `Must` 排除 `.git`、`node_modules`、cache 和数据库表空间。
+- [x] `Must` 对大目录和大文件只记录摘要。
+- [x] `Must` 支持扫描超时和结果截断标记。
 
 ### M5-04 配置文件识别与解析
 
-- [ ] `Must` 识别 Compose YAML、Dockerfile 和 systemd unit。
-- [ ] `Must` 识别 `.env` 文件位置，但不默认读取值。
-- [ ] `Should` 识别常见应用入口文件和部署脚本。
-- [ ] `Must` 使用 YAML、INI、JSON、TOML 等结构化解析方式。
-- [ ] `Must` 为读取配置内容设置文件大小上限。
-- [ ] `Must` 解析失败时保留文件元数据和失败证据。
+- [x] `Must` 识别 Compose YAML、Dockerfile 和 systemd unit。
+- [x] `Must` 识别 `.env` 文件位置，但不默认读取值。
+- [x] `Should` 识别常见应用入口文件和部署脚本。
+- [x] `Must` 使用 YAML、INI、JSON、TOML 等结构化解析方式。
+- [x] `Must` 为读取配置内容设置文件大小上限。
+- [x] `Must` 解析失败时保留文件元数据和失败证据。
 
 验收条件：
 

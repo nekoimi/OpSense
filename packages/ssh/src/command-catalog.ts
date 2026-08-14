@@ -210,6 +210,23 @@ export const COMMAND_CATALOG = [
     maxOutputBytes: 1_000_000,
     sudo: 'allowed',
   }),
+  directoryScanCommand('directory.scan', true, false),
+  directoryScanCommand('directory.scan-cross-filesystems', false, false),
+  directoryScanCommand('directory.scan-stat', true, true),
+  directoryScanCommand('directory.scan-stat-cross-filesystems', false, true),
+  {
+    arguments: [{ parameter: 'path' }],
+    executable: 'cat',
+    id: 'directory.read-config',
+    maxOutputBytes: 5_000_000,
+    parameters: {
+      path: { kind: 'path', maxLength: 4096 },
+    },
+    requiredCommands: ['cat'],
+    sudo: 'allowed',
+    supportedDistributions: ALL_DISTRIBUTIONS,
+    timeoutMs: 10_000,
+  },
   {
     arguments: [
       { literal: '--printf' },
@@ -218,6 +235,23 @@ export const COMMAND_CATALOG = [
     ],
     executable: 'stat',
     id: 'directory.stat',
+    maxOutputBytes: 1_000_000,
+    parameters: {
+      path: { kind: 'path', maxLength: 4096 },
+    },
+    requiredCommands: ['stat'],
+    sudo: 'allowed',
+    supportedDistributions: ALL_DISTRIBUTIONS,
+    timeoutMs: 15_000,
+  },
+  {
+    arguments: [
+      { literal: '-c' },
+      { literal: '%F\t%s\t%U\t%G\t%a\t%Y\t%n' },
+      { parameter: 'path' },
+    ],
+    executable: 'stat',
+    id: 'directory.stat-basic',
     maxOutputBytes: 1_000_000,
     parameters: {
       path: { kind: 'path', maxLength: 4096 },
@@ -255,5 +289,83 @@ function command(
     sudo: overrides.sudo ?? 'never',
     supportedDistributions: ALL_DISTRIBUTIONS,
     timeoutMs: overrides.timeoutMs ?? 30_000,
+  };
+}
+
+function directoryScanCommand(
+  id: string,
+  sameFileSystem: boolean,
+  statFallback: boolean,
+): CommandSpec {
+  const arguments_: Array<{ literal: string } | { parameter: string }> = [
+    { parameter: 'path' },
+    ...(sameFileSystem ? [{ literal: '-xdev' }] : []),
+    { literal: '-mindepth' },
+    { literal: '0' },
+    { literal: '-maxdepth' },
+    { parameter: 'maxDepth' },
+    { literal: '(' },
+    { literal: '-type' },
+    { literal: 'd' },
+    { literal: '(' },
+    { literal: '-name' },
+    { literal: '.git' },
+    { literal: '-o' },
+    { literal: '-name' },
+    { literal: 'node_modules' },
+    { literal: '-o' },
+    { literal: '-name' },
+    { literal: 'vendor' },
+    { literal: '-o' },
+    { literal: '-name' },
+    { literal: '.cache' },
+    { literal: '-o' },
+    { literal: '-name' },
+    { literal: 'cache' },
+    { literal: '-o' },
+    { literal: '-name' },
+    { literal: 'overlay' },
+    { literal: '-o' },
+    { literal: '-name' },
+    { literal: 'overlay2' },
+    { literal: '-o' },
+    { literal: '-name' },
+    { literal: 'pg_wal' },
+    { literal: '-o' },
+    { literal: '-name' },
+    { literal: 'pg_xact' },
+    { literal: '-o' },
+    { literal: '-name' },
+    { literal: '#innodb_redo' },
+    { literal: ')' },
+    { literal: '-prune' },
+    { literal: ')' },
+    { literal: '-o' },
+  ];
+  if (statFallback) {
+    arguments_.push(
+      { literal: '-exec' },
+      { literal: 'stat' },
+      { literal: '-c' },
+      { literal: '%F\t%s\t%U\t%G\t%a\t%Y\t%n' },
+      { literal: '{}' },
+      { literal: '+' },
+    );
+  } else {
+    arguments_.push({ literal: '-printf' }, { literal: '%y\t%s\t%u\t%g\t%m\t%T@\t%p\t%l\\n' });
+  }
+  return {
+    arguments: arguments_,
+    executable: 'find',
+    id,
+    maxOutputBytes: 10_000_000,
+    parameters: {
+      maxDepth: { kind: 'integer', min: 1, max: 20 },
+      path: { kind: 'path', maxLength: 4096 },
+    },
+    requiredCommands: statFallback ? ['find', 'stat'] : ['find'],
+    sudo: 'allowed',
+    supportedDistributions: ALL_DISTRIBUTIONS,
+    timeoutMs: 30_000,
   };
 }

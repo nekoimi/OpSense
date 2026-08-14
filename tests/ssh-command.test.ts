@@ -56,6 +56,10 @@ describe('safe command specifications', () => {
         'service.systemd-details',
         'docker.ps-basic',
         'docker.inspect',
+        'directory.scan',
+        'directory.scan-stat',
+        'directory.read-config',
+        'directory.stat-basic',
         'service.systemd-units',
         'directory.stat',
       ]),
@@ -96,6 +100,20 @@ describe('safe command specifications', () => {
         containerId: 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
       }).audit,
     ).toContain('[containerId]');
+    const directoryScan = renderCommand(getCommandSpec('directory.scan'), {
+      maxDepth: 4,
+      path: "/opt/app'; touch /tmp/owned; echo '",
+    });
+    expect(directoryScan.execution).toContain("'-xdev'");
+    expect(directoryScan.execution).toContain("'.git'");
+    expect(directoryScan.audit).toContain('[path]');
+    expect(directoryScan.audit).not.toContain('/opt/app');
+    expect(() =>
+      renderCommand(getCommandSpec('directory.scan'), { maxDepth: 21, path: '/opt/app' }),
+    ).toThrowError(CommandSpecError);
+    expect(() =>
+      renderCommand(getCommandSpec('directory.read-config'), { path: '/opt/app\tsecret.yml' }),
+    ).toThrowError(CommandSpecError);
   });
 });
 

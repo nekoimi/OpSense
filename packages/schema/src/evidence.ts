@@ -38,6 +38,27 @@ export const EvidenceRecordSchema = Type.Object(
 
 export type EvidenceRecord = Static<typeof EvidenceRecordSchema>;
 
+export const PathSeedSourceSchema = Type.Object(
+  {
+    sourceType: NonEmptyStringSchema,
+    sourceId: NonEmptyStringSchema,
+    evidenceIds: Type.Array(IdSchema),
+  },
+  { additionalProperties: false },
+);
+
+export const PathSeedRecordSchema = Type.Object(
+  {
+    id: IdSchema,
+    path: NonEmptyStringSchema,
+    confidence: ConfidenceSchema,
+    sources: Type.Array(PathSeedSourceSchema, { minItems: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type PathSeedRecord = Static<typeof PathSeedRecordSchema>;
+
 export const ArtifactKindSchema = Type.Union([
   Type.Literal('directory'),
   Type.Literal('config'),
@@ -56,12 +77,21 @@ export const ArtifactRecordSchema = Type.Object(
     id: IdSchema,
     path: NonEmptyStringSchema,
     kind: ArtifactKindSchema,
+    fileType: Type.Optional(
+      Type.Union([
+        Type.Literal('file'),
+        Type.Literal('directory'),
+        Type.Literal('symlink'),
+        Type.Literal('other'),
+      ]),
+    ),
     exists: Type.Boolean(),
     sizeBytes: Type.Optional(Type.Integer({ minimum: 0 })),
     mode: Type.Optional(Type.String()),
     owner: Type.Optional(Type.String()),
     group: Type.Optional(Type.String()),
     modifiedAt: Type.Optional(DateTimeSchema),
+    linkTarget: Type.Optional(Type.String()),
     confidence: ConfidenceSchema,
     evidenceIds: Type.Array(IdSchema),
   },

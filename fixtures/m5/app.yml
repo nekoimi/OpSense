@@ -1,0 +1,8 @@
+server:
+  port: 8080
+database:
+  host: db.internal
+  password: fixture-secret-value
+features:
+  - audit
+  - reports

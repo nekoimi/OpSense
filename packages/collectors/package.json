@@ -20,6 +20,13 @@
   },
   "dependencies": {
     "@opsense/schema": "workspace:*",
-    "@opsense/ssh": "workspace:*"
+    "@opsense/ssh": "workspace:*",
+    "ini": "^6.0.0",
+    "jsonc-parser": "^3.3.1",
+    "smol-toml": "^1.8.0",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/ini": "^4.1.1"
   }
 }

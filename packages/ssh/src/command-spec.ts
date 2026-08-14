@@ -153,6 +153,12 @@ function validateParameter(
 ): string {
   const normalized = String(value);
   validateToken(normalized, `value for '${name}'`);
+  if (hasControlCharacters(normalized)) {
+    throw new CommandSpecError(
+      'COMMAND_PARAMETER_INVALID',
+      `Parameter '${name}' contains control characters.`,
+    );
+  }
 
   if (spec.maxLength !== undefined && normalized.length > spec.maxLength) {
     throw new CommandSpecError('COMMAND_PARAMETER_INVALID', `Parameter '${name}' is too long.`);
@@ -196,6 +202,13 @@ function validateParameter(
   }
 
   return normalized;
+}
+
+function hasControlCharacters(value: string): boolean {
+  return [...value].some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 31 || codePoint === 127;
+  });
 }
 
 function pushToken(target: string[], value: string): void {

@@ -1,4 +1,4 @@
-import { collectM3Snapshot, collectM4Snapshot } from '@opsense/collectors';
+import { collectM3Snapshot, collectM4Snapshot, collectM5Snapshot } from '@opsense/collectors';
 import { SCHEMA_VERSION, ScanSnapshotSchema, assertSchema } from '@opsense/schema';
 import type { ScanSnapshot } from '@opsense/schema';
 import { SafeCommandExecutor, connectSsh, detectPermissions } from '@opsense/ssh';
@@ -36,7 +36,7 @@ interface ScanOptions {
 export function createScanCommand(loggerFactory: LoggerFactory): Command {
   const command = new Command('scan')
     .description(
-      'Collect a read-only system, storage, network, and service snapshot from one Linux server.',
+      'Collect a read-only system, service, and targeted directory snapshot from one Linux server.',
     )
     .requiredOption('--host <host>', 'target host name or IP address')
     .option('--port <port>', 'SSH port', parsePort, 22)
@@ -107,18 +107,38 @@ export function createScanCommand(loggerFactory: LoggerFactory): Command {
         opsenseVersion: VERSION,
         useSudo,
       });
+      const directories = await collectM5Snapshot(
+        executor,
+        {
+          composeProjects: services.composeProjects,
+          containers: services.containers,
+          processes: services.processes,
+          systemdUnits: services.systemdUnits,
+        },
+        {
+          commandTimeoutMs: loaded.config.ssh.commandTimeoutMs,
+          crossFileSystems: loaded.config.scan.crossFileSystems,
+          maxConfigFileBytes: loaded.config.scan.maxConfigFileBytes,
+          maxDirectoryDepth: loaded.config.scan.maxDirectoryDepth,
+          maxFilesPerDirectory: loaded.config.scan.maxFilesPerDirectory,
+          maxOutputBytes: loaded.config.scan.maxCommandOutputBytes,
+          opsenseVersion: VERSION,
+          useSudo,
+        },
+      );
       await auditWrite;
 
       const finishedAt = new Date();
-      const unknowns = [...collected.unknowns, ...services.unknowns];
+      const unknowns = [...collected.unknowns, ...services.unknowns, ...directories.unknowns];
       const snapshot: ScanSnapshot = {
-        artifacts: [],
+        artifacts: directories.artifacts,
         composeProjects: services.composeProjects,
         containers: services.containers,
-        evidence: [...collected.evidence, ...services.evidence],
+        evidence: [...collected.evidence, ...services.evidence, ...directories.evidence],
         findings: [],
         host: collected.host,
         network: collected.network,
+        pathSeeds: directories.pathSeeds,
         processes: services.processes,
         services: [],
         session: {

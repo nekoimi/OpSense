@@ -20,6 +20,7 @@
   "systemdUnits": [],
   "containers": [],
   "composeProjects": [],
+  "pathSeeds": [],
   "artifacts": [],
   "services": [],
   "evidence": [],
