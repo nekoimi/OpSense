@@ -50,6 +50,7 @@ export interface AgentWorkflowOptions {
   resume?: string;
   scan?: string;
   signal?: AbortSignal;
+  turnTimeoutMs?: number;
   user?: string;
   workspace?: string;
 }
@@ -131,8 +132,9 @@ export async function prepareAgentWorkflow(
     tools,
     thread: new CodexAgentThreadAdapter(),
     maxTurns: options.maxAgentRounds,
+    ...(options.turnTimeoutMs === undefined ? {} : { turnTimeoutMs: options.turnTimeoutMs }),
     ...(options.model === undefined ? {} : { model: options.model }),
-    workingDirectory: layout.aiInputDirectory,
+    workingDirectory: layout.agentSandboxDirectory,
   });
   return {
     close: () => source.connection?.close(),

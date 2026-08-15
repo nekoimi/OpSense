@@ -14,6 +14,7 @@ export interface RunWorkspaceLayout extends WorkspaceLayout {
   agentHypothesesFile: string;
   agentProjectionFile: string;
   agentReviewFile: string;
+  agentSandboxDirectory: string;
   agentSessionFile: string;
   agentTranscriptFile: string;
   agentTurnsFile: string;
@@ -56,6 +57,7 @@ export function createRunWorkspaceLayout(
     agentHypothesesFile: path.join(runDirectory, 'agent-hypotheses.json'),
     agentProjectionFile: path.join(runDirectory, 'agent-projection.json'),
     agentReviewFile: path.join(runDirectory, 'agent-review.json'),
+    agentSandboxDirectory: path.join(runDirectory, 'agent-sandbox'),
     agentSessionFile: path.join(runDirectory, 'agent-session.json'),
     agentTranscriptFile: path.join(runDirectory, 'agent-transcript.jsonl'),
     agentTurnsFile: path.join(runDirectory, 'agent-turns.jsonl'),

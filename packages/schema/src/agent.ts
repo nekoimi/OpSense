@@ -68,6 +68,16 @@ export const UpdateProjectionArgumentsSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const AgentToolNameSchema = Type.Union([
+  Type.Literal('read_context'),
+  Type.Literal('read_evidence'),
+  Type.Literal('list_candidates'),
+  Type.Literal('execute_governed_probe'),
+  Type.Literal('update_projection'),
+]);
+
+export type AgentToolName = Static<typeof AgentToolNameSchema>;
+
 export const AgentStageSchema = Type.Union([
   Type.Literal('created'),
   Type.Literal('bootstrapping'),
@@ -174,7 +184,7 @@ export const AgentDecisionSchema = Type.Union([
     {
       ...AgentDecisionShared,
       kind: Type.Literal('tool_call'),
-      toolName: NonEmptyStringSchema,
+      toolName: AgentToolNameSchema,
       arguments: Type.Record(Type.String(), Type.Unknown()),
     },
     { additionalProperties: false },

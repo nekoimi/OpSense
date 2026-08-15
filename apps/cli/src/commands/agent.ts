@@ -29,6 +29,7 @@ interface AgentCommandOptions {
   provider: string;
   resume?: string;
   scan?: string;
+  turnTimeoutMs: number;
   user?: string;
   workspace?: string;
 }
@@ -65,6 +66,12 @@ export function createAgentCommand(loggerFactory: LoggerFactory): Command {
       'maximum governed probes in the session',
       parseNonNegativeInteger,
       4,
+    )
+    .option(
+      '--turn-timeout-ms <milliseconds>',
+      'hard timeout for each Codex turn',
+      parsePositiveInteger,
+      120_000,
     )
     .option('--config <path>', 'configuration file path')
     .option('--workspace <path>', 'local OpSense workspace directory');
@@ -286,6 +293,7 @@ function validateOptions(options: AgentCommandOptions, signal: AbortSignal): Age
     port: options.port,
     maxAgentRounds: options.maxAgentRounds,
     maxProbes: options.maxProbes,
+    turnTimeoutMs: options.turnTimeoutMs,
     signal,
     ...(options.acceptNewHostKey === undefined
       ? {}

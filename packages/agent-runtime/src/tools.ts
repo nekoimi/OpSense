@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import {
   AgentDecisionSchema,
+  AgentToolNameSchema,
   AgentToolActivitySchema,
   ExecuteGovernedProbeArgumentsSchema,
   ListCandidatesArgumentsSchema,
@@ -14,6 +15,7 @@ import type {
   AgentDecision,
   AgentSession,
   AgentToolActivity,
+  AgentToolName,
   InventoryProjection,
 } from '@opsense/schema';
 
@@ -27,7 +29,6 @@ export const AGENT_TOOL_NAMES = [
   'execute_governed_probe',
   'update_projection',
 ] as const;
-export type AgentToolName = (typeof AGENT_TOOL_NAMES)[number];
 
 export interface ToolExecutionResult {
   status: 'completed' | 'failed';
@@ -197,7 +198,16 @@ export class ToolRouter {
 }
 
 function isToolName(value: string): value is AgentToolName {
-  return (AGENT_TOOL_NAMES as readonly string[]).includes(value);
+  return assertToolName(value);
+}
+
+function assertToolName(value: string): value is AgentToolName {
+  try {
+    assertSchema(AgentToolNameSchema, value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 function objectValue(value: unknown): Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value))

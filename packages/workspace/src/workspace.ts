@@ -20,6 +20,7 @@ export async function ensureRunWorkspace(
   const layout = createRunWorkspaceLayout(scanId, explicitRoot);
   await ensureWorkspace(explicitRoot);
   await Promise.all([
+    mkdir(layout.agentSandboxDirectory, { recursive: true }),
     mkdir(layout.runDirectory, { recursive: true }),
     mkdir(layout.aiInputDirectory, { recursive: true }),
   ]);

@@ -45,21 +45,8 @@ export class ContextBuilder {
     recent?: unknown[];
   }): AgentContext {
     const p = this.projection;
-    const candidates =
-      this.evidenceIndex?.candidates ??
-      p.services.map((service) => ({
-        candidateId: service.id,
-        displayName: service.displayName ?? service.name,
-        sourceKind: 'service' as const,
-        sourceIds: [service.id],
-        mergeRule: 'projection.service',
-        evidenceIds: service.evidenceIds,
-        runtimeKind: 'unknown' as const,
-        confidence: 'unknown' as const,
-        signals: [],
-        unknowns: [],
-      }));
-    const rankedCandidates = [...candidates].sort((a, b) => this.candidateRank(a, b));
+    const rankedCandidates = this.rankedCandidates();
+    const contextCandidates = rankedCandidates.slice(0, 20);
     const l0 = this.redact({
       scanId: p.sourceSnapshotId,
       stage: options.stage,
@@ -68,46 +55,57 @@ export class ContextBuilder {
       counts: {
         services: p.services.length,
         candidates: rankedCandidates.length,
+        candidatesShown: contextCandidates.length,
+        candidatesOmitted: Math.max(0, rankedCandidates.length - contextCandidates.length),
         evidence: p.evidence.length,
         findings: p.findings.length,
         filtered: p.filteredCounts,
       },
-      unresolvedQuestions: p.unknowns,
+      unresolvedQuestions: p.unknowns.slice(0, 40),
       recent: options.recent ?? [],
     }) as Record<string, unknown>;
     const l1 = this.redact({
       host: p.host === undefined ? undefined : compactHost(p.host),
       storage: compactStorage(p),
       network: compactNetwork(p),
-      services: rankedCandidates.map(compactCandidate),
-      processes: p.processes.slice(0, 200).map((item) => ({
+      services: contextCandidates.map(compactCandidate),
+      processes: p.processes.slice(0, 20).map((item) => ({
         id: item.id,
         pid: item.pid,
         parentPid: item.parentPid,
-        command: item.command,
-        executablePath: item.executablePath,
-        evidenceIds: item.evidenceIds,
+        command: item.command.slice(0, 240),
+        executablePath: item.executablePath?.slice(0, 240),
+        evidenceIds: item.evidenceIds.slice(0, 4),
       })),
-      containers: p.containers.slice(0, 200).map((item) => ({
+      containers: p.containers.slice(0, 8).map((item) => ({
         id: item.id,
         name: item.name,
         image: item.image,
         state: item.state,
-        ports: item.ports,
-        evidenceIds: item.evidenceIds,
+        ports: item.ports.slice(0, 4).map((port) => ({
+          containerPort: port.containerPort,
+          hostAddress: port.hostAddress,
+          hostPort: port.hostPort,
+          protocol: port.protocol,
+        })),
+        evidenceIds: item.evidenceIds.slice(0, 4),
       })),
-      evidence: p.evidence.map((item) => ({
+      evidence: p.evidence.slice(0, 20).map((item) => ({
         id: item.id,
         kind: item.kind,
         source: item.source,
         status: item.status,
       })),
       systemd_summary: compactSystemd(p),
-      path_candidates: (p.pathSeeds ?? []).map((item) => ({
+      path_candidates: (p.pathSeeds ?? []).slice(0, 10).map((item) => ({
         id: item.id,
         path: item.path,
         confidence: item.confidence,
-        sources: item.sources,
+        sources: item.sources.slice(0, 2).map((source) => ({
+          sourceId: source.sourceId,
+          sourceType: source.sourceType,
+          evidenceIds: source.evidenceIds.slice(0, 3),
+        })),
       })),
       findings: p.findings.map((item) => ({
         id: item.id,
@@ -116,12 +114,7 @@ export class ContextBuilder {
         description: item.description,
         evidenceIds: item.evidenceIds,
       })),
-      visibility_summary: p.visibilityDecisions.map((item) => ({
-        id: item.objectId,
-        placement: item.placement,
-        resourceClass: item.resourceClass,
-        relatedServiceIds: item.relatedServiceIds,
-      })),
+      visibility_summary: compactVisibility(p),
     }) as Record<string, unknown>;
     const context = { l0, l1, hash: hashValue({ l0, l1 }) };
     return context;
@@ -148,10 +141,32 @@ export class ContextBuilder {
   }
 
   public readSection(section: ContextSection, offset = 0, limit = 50): unknown {
+    if (section === 'services')
+      return this.rankedCandidates()
+        .slice(Math.max(0, offset), Math.max(0, offset) + limit)
+        .map(compactCandidate);
     const context = this.build({ stage: 'read', round: 0, budget: {} });
     const value = context.l1[section];
     if (Array.isArray(value)) return value.slice(Math.max(0, offset), Math.max(0, offset) + limit);
     return value ?? null;
+  }
+
+  private rankedCandidates(): DiscoveryCandidate[] {
+    const candidates =
+      this.evidenceIndex?.candidates ??
+      this.projection.services.map((service) => ({
+        candidateId: service.id,
+        displayName: service.displayName ?? service.name,
+        sourceKind: 'service' as const,
+        sourceIds: [service.id],
+        mergeRule: 'projection.service',
+        evidenceIds: service.evidenceIds,
+        runtimeKind: 'unknown' as const,
+        confidence: 'unknown' as const,
+        signals: [],
+        unknowns: [],
+      }));
+    return [...candidates].sort((a, b) => this.candidateRank(a, b));
   }
 
   public readEvidence(ids: readonly string[]): unknown[] {
@@ -179,9 +194,9 @@ function compactCandidate(item: DiscoveryCandidate): unknown {
     sourceKind: item.sourceKind,
     runtimeKind: item.runtimeKind,
     confidence: item.confidence,
-    signals: item.signals,
-    unknowns: item.unknowns,
-    evidenceIds: item.evidenceIds,
+    signals: item.signals.slice(0, 3),
+    unknowns: item.unknowns.slice(0, 3),
+    evidenceIds: item.evidenceIds.slice(0, 4),
   };
 }
 
@@ -200,14 +215,14 @@ function compactHost(host: InventoryProjection['host']): unknown {
 
 function compactStorage(projection: InventoryProjection): unknown {
   return {
-    disks: (projection.storage?.disks ?? []).map((item) => ({
+    disks: (projection.storage?.disks ?? []).slice(0, 40).map((item) => ({
       id: item.id,
       name: item.name,
       path: item.path,
       sizeBytes: item.sizeBytes,
       evidenceIds: item.evidenceIds,
     })),
-    mounts: (projection.storage?.mounts ?? []).map((item) => ({
+    mounts: (projection.storage?.mounts ?? []).slice(0, 60).map((item) => ({
       id: item.id,
       source: item.source,
       target: item.target,
@@ -221,16 +236,27 @@ function compactStorage(projection: InventoryProjection): unknown {
 
 function compactNetwork(projection: InventoryProjection): unknown {
   return {
-    interfaces: (projection.network?.interfaces ?? []).map((item) => ({
+    interfaces: (projection.network?.interfaces ?? []).slice(0, 80).map((item) => ({
       id: item.id,
       name: item.name,
-      addresses: item.addresses,
+      addresses: item.addresses.slice(0, 8),
       mtu: item.mtu,
     })),
     routes: projection.network?.routes ?? [],
     firewall: projection.network?.firewall,
     dns: projection.network?.dns,
   };
+}
+
+function compactVisibility(projection: InventoryProjection): unknown {
+  const counts = new Map<string, number>();
+  for (const item of projection.visibilityDecisions) {
+    const key = `${item.objectType}:${item.placement}:${item.resourceClass}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, count]) => ({ key, count }));
 }
 
 function compactSystemd(projection: InventoryProjection): unknown {

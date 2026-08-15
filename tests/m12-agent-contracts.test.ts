@@ -59,6 +59,16 @@ describe('M12 agent contracts and session workspace', () => {
     expect(validateSchema(AgentDecisionSchema, value).valid).toBe(false);
   });
 
+  it('rejects Agent tool aliases outside the five supported tool names', async () => {
+    const value = JSON.parse(await readFixture('schema/agent-decision.json')) as Record<
+      string,
+      unknown
+    >;
+    value.toolName = 'get_evidence';
+
+    expect(validateSchema(AgentDecisionSchema, value).valid).toBe(false);
+  });
+
   it('persists sessions, turns, and transcripts in the run workspace', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'opsense-m12-session-'));
     temporaryDirectories.push(root);

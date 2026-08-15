@@ -35,6 +35,34 @@ export interface CodexAgentThreadAdapterOptions {
   maxRetries?: number;
 }
 
+const CODEX_AGENT_DECISION_ENVELOPE_SCHEMA = {
+  type: 'object',
+  properties: {
+    decisionId: { type: 'string' },
+    turnId: { type: 'string' },
+    kind: {
+      type: 'string',
+      enum: ['tool_call', 'projection_update', 'final', 'failed'],
+    },
+    reason: { type: 'string' },
+    nextAction: { type: 'string' },
+    unresolvedQuestions: { type: 'array', items: { type: 'string' } },
+    nextSuggestions: { type: 'array', items: { type: 'string' } },
+    payloadJson: { type: 'string' },
+  },
+  required: [
+    'decisionId',
+    'turnId',
+    'kind',
+    'reason',
+    'nextAction',
+    'unresolvedQuestions',
+    'nextSuggestions',
+    'payloadJson',
+  ],
+  additionalProperties: false,
+} as const;
+
 /** Structured Agent Thread bridge. It never exposes the raw Codex response as facts. */
 export class CodexAgentThreadAdapter implements AgentThreadAdapter {
   private readonly client: CodexClient;
@@ -79,11 +107,12 @@ export class CodexAgentThreadAdapter implements AgentThreadAdapter {
     const thread =
       this.threads.get(threadId) ?? this.client.resumeThread(threadId, fixedThreadOptions());
     this.threads.set(threadId, thread);
-    let response = await thread.run(prompt, options);
+    const runOptions = { ...options, outputSchema: CODEX_AGENT_DECISION_ENVELOPE_SCHEMA };
+    let response = await thread.run(envelopePrompt(prompt), runOptions);
     let lastError: unknown;
     for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
       try {
-        const decision = parseAgentDecision(parseJson(response));
+        const decision = parseAgentDecision(parseDecisionEnvelope(response));
         const usage = response.usage;
         if (thread.id !== null) this.threads.set(thread.id, thread);
         return {
@@ -100,8 +129,10 @@ export class CodexAgentThreadAdapter implements AgentThreadAdapter {
         lastError = error;
         if (attempt === this.maxRetries) break;
         response = await thread.run(
-          `上一轮输出不符合 AgentDecision Schema：${error instanceof Error ? error.message : String(error)}\n请只返回完整 JSON，不要 Markdown。`,
-          options,
+          envelopePrompt(
+            `上一轮输出不符合 AgentDecision Schema：${error instanceof Error ? error.message : String(error)}\n请重新生成一个完整 AgentDecision。`,
+          ),
+          runOptions,
         );
       }
     }
@@ -109,9 +140,52 @@ export class CodexAgentThreadAdapter implements AgentThreadAdapter {
   }
 }
 
+function envelopePrompt(prompt: string): string {
+  return `${prompt}\n\nTransport requirement: return one JSON object with exactly these fields: decisionId, turnId, kind, reason, nextAction, unresolvedQuestions, nextSuggestions, payloadJson. nextAction and reason must be strings. payloadJson must be a JSON-encoded object containing only the kind-specific fields:
+- tool_call: {"toolName":"one allowed tool name","arguments":{...}}
+- projection_update: {"changes":[...],"evidenceIds":[...]}
+- final: {"inventoryProjectionId":"...","serviceWikiProjectionId":"...","findingIds":[],"qualitySummary":"..."}
+- failed: {"error":"..."}
+Do not put toolName or arguments inside nextAction. Do not add Markdown or other fields.`;
+}
+
+function parseDecisionEnvelope(result: RunResult): unknown {
+  const envelope = parseJson(result);
+  if (
+    envelope === null ||
+    typeof envelope !== 'object' ||
+    Array.isArray(envelope) ||
+    typeof (envelope as Record<string, unknown>).payloadJson !== 'string'
+  )
+    throw new Error('Codex returned an invalid AgentDecision envelope.');
+  const value = envelope as Record<string, unknown> & { payloadJson: string };
+  let payload: unknown;
+  try {
+    payload = JSON.parse(value.payloadJson) as unknown;
+  } catch (error) {
+    throw new Error(
+      `Codex returned invalid payloadJson: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload))
+    throw new Error('Codex payloadJson must contain a JSON object.');
+  return {
+    ...(payload as Record<string, unknown>),
+    decisionId: value.decisionId,
+    turnId: value.turnId,
+    kind: value.kind,
+    reason: value.reason,
+    nextAction: value.nextAction,
+    unresolvedQuestions: value.unresolvedQuestions,
+    nextSuggestions: value.nextSuggestions,
+  };
+}
+
 function fixedThreadOptions(): ThreadOptions {
   return {
     approvalPolicy: 'never',
+    modelReasoningEffort: 'low',
     networkAccessEnabled: false,
     sandboxMode: 'read-only',
     skipGitRepoCheck: true,

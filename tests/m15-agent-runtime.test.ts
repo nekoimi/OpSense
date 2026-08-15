@@ -118,6 +118,128 @@ describe('M15 agent runtime', () => {
     }
   });
 
+  it('fails and persists the session when a Codex turn exceeds its hard timeout', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'opsense-m15-timeout-'));
+    try {
+      const snapshot = await fixtureSnapshot();
+      const projection = buildInventoryProjection(snapshot);
+      const session = createAgentSession({ scanId: snapshot.session.id });
+      const layout = createRunWorkspaceLayout(snapshot.session.id, root);
+      const store = new FileAgentSessionStore(layout);
+      await store.save(session);
+      const runtime = new AgentRuntime({
+        scanId: snapshot.session.id,
+        store,
+        thread: {
+          start: async () => ({ threadId: 'codex-timeout-thread' }),
+          resume: async (threadId: string) => ({ threadId }),
+          run: () => new Promise(() => undefined),
+        },
+        context: new ContextBuilder({ projection }),
+        tools: new ToolRouter({
+          projection,
+          context: new ContextBuilder({ projection }),
+          governor: new ProbeGovernor({ snapshot, session }),
+        }),
+        turnTimeoutMs: 20,
+      });
+
+      await expect(runtime.start('开始')).rejects.toThrow('Codex turn timed out after 20 ms.');
+      const failed = await store.load();
+      expect(failed.state).toBe('failed');
+      expect(failed.lastError).toBe('Codex turn timed out after 20 ms.');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('does not retry non-transient context-window failures', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'opsense-m15-context-error-'));
+    try {
+      const snapshot = await fixtureSnapshot();
+      const projection = buildInventoryProjection(snapshot);
+      const session = createAgentSession({ scanId: snapshot.session.id });
+      const store = new FileAgentSessionStore(createRunWorkspaceLayout(snapshot.session.id, root));
+      await store.save(session);
+      let calls = 0;
+      const runtime = new AgentRuntime({
+        scanId: snapshot.session.id,
+        store,
+        thread: {
+          start: async () => ({ threadId: 'codex-context-thread' }),
+          resume: async (threadId: string) => ({ threadId }),
+          run: async () => {
+            calls += 1;
+            throw new Error("Codex ran out of room in the model's context window.");
+          },
+        },
+        context: new ContextBuilder({ projection }),
+        tools: new ToolRouter({
+          projection,
+          context: new ContextBuilder({ projection }),
+          governor: new ProbeGovernor({ snapshot, session }),
+        }),
+      });
+
+      await expect(runtime.start('开始')).rejects.toThrow('context window');
+      expect(calls).toBe(1);
+      expect((await store.load()).state).toBe('failed');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('retries a transient Codex transport failure and then completes', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'opsense-m15-transient-'));
+    try {
+      const snapshot = await fixtureSnapshot();
+      const projection = buildInventoryProjection(snapshot);
+      const session = createAgentSession({ scanId: snapshot.session.id });
+      const store = new FileAgentSessionStore(createRunWorkspaceLayout(snapshot.session.id, root));
+      await store.save(session);
+      let calls = 0;
+      const runtime = new AgentRuntime({
+        scanId: snapshot.session.id,
+        store,
+        thread: {
+          start: async () => ({ threadId: 'codex-retry-thread' }),
+          resume: async (threadId: string) => ({ threadId }),
+          run: async () => {
+            calls += 1;
+            if (calls === 1) throw new Error('temporary connection failure');
+            return {
+              decision: {
+                decisionId: 'decision:final-after-retry',
+                turnId: 'model-turn',
+                kind: 'final' as const,
+                inventoryProjectionId: projection.projectionId,
+                serviceWikiProjectionId: 'wiki:test',
+                findingIds: [],
+                qualitySummary: '重试后完成。',
+                reason: '证据充分。',
+                nextAction: 'wiki',
+                unresolvedQuestions: [],
+                nextSuggestions: [],
+              },
+            };
+          },
+        },
+        context: new ContextBuilder({ projection }),
+        tools: new ToolRouter({
+          projection,
+          context: new ContextBuilder({ projection }),
+          governor: new ProbeGovernor({ snapshot, session }),
+        }),
+      });
+
+      await expect(runtime.start('开始')).resolves.toMatchObject({ message: '重试后完成。' });
+      expect(calls).toBe(2);
+      expect((await store.load()).state).toBe('completed');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('feeds tool results into the next turn and persists the real thread id', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'opsense-m15-loop-'));
     try {

@@ -40,6 +40,7 @@ export interface AgentRuntimeOptions {
   maxDurationMs?: number;
   maxTokens?: number;
   maxOutputBytes?: number;
+  turnTimeoutMs?: number;
   now?: () => Date;
 }
 
@@ -112,12 +113,15 @@ export class AgentRuntime {
     let responseId: string | undefined;
     let tokenUsage: number | undefined;
     const controller = new AbortController();
+    const turnTimeoutMs = this.options.turnTimeoutMs ?? 120_000;
+    const timeoutSignal = AbortSignal.timeout(turnTimeoutMs);
+    const turnSignal = AbortSignal.any([controller.signal, timeoutSignal]);
     this.abortController = controller;
     try {
       const result = await this.callThread(
         this.session.threadId,
         this.prompt(userMessage, context),
-        controller.signal,
+        turnSignal,
       );
       decision = parseDecision(result.decision);
       decision.turnId = turnId;
@@ -132,9 +136,14 @@ export class AgentRuntime {
         await this.options.store.save(this.session);
         throw error;
       }
-      const message = error instanceof Error ? error.message : String(error);
+      const failure = timeoutSignal.aborted
+        ? new Error(`Codex turn timed out after ${turnTimeoutMs} ms.`, { cause: error })
+        : error instanceof Error
+          ? error
+          : new Error(String(error));
+      const message = failure.message;
       await this.fail(message);
-      throw error;
+      throw failure;
     } finally {
       if (this.abortController === controller) this.abortController = undefined;
     }
@@ -311,21 +320,39 @@ export class AgentRuntime {
     let lastError: unknown;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        return await this.options.thread.run(
-          threadId,
-          prompt,
-          signal === undefined ? {} : { signal },
+        return await raceWithAbort(
+          this.options.thread.run(threadId, prompt, signal === undefined ? {} : { signal }),
+          signal,
         );
       } catch (error) {
         lastError = error;
         if (signal?.aborted) throw error;
+        const maxAttempts = isTimeoutError(error) ? 2 : 3;
+        if (!isTransientThreadError(error) || attempt + 1 >= maxAttempts) throw error;
+        await waitForRetry(250 * (attempt + 1), signal);
       }
     }
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 
   private prompt(userMessage: string, context: { l0: unknown; l1: unknown; hash: string }): string {
-    return `OpSense Agent structured turn. Only use the five structured tools; never emit shell, network actions, secrets, or raw snapshot data. Return one JSON AgentDecision object.\nUser: ${userMessage}\nContext hash: ${context.hash}\nL0: ${JSON.stringify(context.l0)}\nL1 index: ${JSON.stringify(context.l1)}`;
+    return `OpSense Agent structured turn. Return exactly one JSON AgentDecision object matching the supplied output schema.
+
+You are not a coding agent in this thread. Do not inspect files, run shell commands, access the network, or use built-in Codex tools. The sandbox directory is intentionally empty. All server facts must come from L0/L1 below or later OpSense tool results.
+
+Allowed toolName values and arguments:
+- read_context: {"section":"host|storage|network|services|processes|containers|systemd_summary|path_candidates|findings|visibility_summary","offset"?:number,"limit"?:number}
+- read_evidence: {"ids":["existing-evidence-id"]}
+- list_candidates: {"section"?:"services|paths|network|storage|findings"}
+- execute_governed_probe: {"request": ProbeRequest}; use only for a concrete evidence gap
+- update_projection: {"changes":[...],"evidenceIds":[...],"reason"?:string}
+
+Never invent aliases such as get_evidence. Prefer one focused tool call per turn. Use kind=final only when the server Wiki projection is sufficiently supported by evidence.
+
+User: ${userMessage}
+Context hash: ${context.hash}
+L0: ${JSON.stringify(context.l0)}
+L1 index: ${JSON.stringify(context.l1)}`;
   }
 
   private canContinue(): boolean {
@@ -391,4 +418,58 @@ export class AgentRuntime {
 function parseDecision(value: unknown): AgentDecision {
   assertSchema(AgentDecisionSchema, value);
   return value;
+}
+
+function isTransientThreadError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /overload|temporar|try again|stream disconnected|connection|ECONN|rate limit|socket hang up|ETIMEDOUT|timeout/i.test(
+    message,
+  );
+}
+
+function isTimeoutError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /timeout|timed out|ETIMEDOUT/i.test(message);
+}
+
+function raceWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (signal === undefined) return promise;
+  if (signal.aborted) return Promise.reject(abortReason(signal));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => {
+      signal.removeEventListener('abort', onAbort);
+      reject(abortReason(signal));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
+function waitForRetry(durationMs: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted === true) return Promise.reject(abortReason(signal));
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, durationMs);
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      reject(signal === undefined ? new Error('Codex turn aborted.') : abortReason(signal));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function abortReason(signal: AbortSignal): Error {
+  return signal.reason instanceof Error ? signal.reason : new Error('Codex turn aborted.');
 }
