@@ -1,6 +1,72 @@
 import { Type, type Static } from '@sinclair/typebox';
 
 import { DateTimeSchema, IdSchema, NonEmptyStringSchema } from './common.js';
+import { ProbeRequestSchema } from './ai.js';
+
+export const AgentContextSectionSchema = Type.Union([
+  Type.Literal('host'),
+  Type.Literal('storage'),
+  Type.Literal('network'),
+  Type.Literal('services'),
+  Type.Literal('processes'),
+  Type.Literal('containers'),
+  Type.Literal('systemd_summary'),
+  Type.Literal('path_candidates'),
+  Type.Literal('findings'),
+  Type.Literal('visibility_summary'),
+]);
+
+export const ReadContextArgumentsSchema = Type.Object(
+  {
+    section: AgentContextSectionSchema,
+    offset: Type.Optional(Type.Integer({ minimum: 0 })),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200 })),
+  },
+  { additionalProperties: false },
+);
+
+export const ReadEvidenceArgumentsSchema = Type.Object(
+  { ids: Type.Array(IdSchema, { minItems: 1, maxItems: 20 }) },
+  { additionalProperties: false },
+);
+
+export const ListCandidatesArgumentsSchema = Type.Object(
+  {
+    section: Type.Optional(
+      Type.Union([
+        Type.Literal('services'),
+        Type.Literal('paths'),
+        Type.Literal('network'),
+        Type.Literal('storage'),
+        Type.Literal('findings'),
+      ]),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const ExecuteGovernedProbeArgumentsSchema = Type.Object(
+  { request: ProbeRequestSchema },
+  { additionalProperties: false },
+);
+
+export const ProjectionChangeSchema = Type.Object(
+  {
+    objectId: IdSchema,
+    operation: Type.Union([Type.Literal('add'), Type.Literal('update'), Type.Literal('remove')]),
+    summary: NonEmptyStringSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const UpdateProjectionArgumentsSchema = Type.Object(
+  {
+    changes: Type.Array(ProjectionChangeSchema, { minItems: 1 }),
+    evidenceIds: Type.Array(IdSchema, { minItems: 1 }),
+    reason: Type.Optional(NonEmptyStringSchema),
+  },
+  { additionalProperties: false },
+);
 
 export const AgentStageSchema = Type.Union([
   Type.Literal('created'),
@@ -117,20 +183,7 @@ export const AgentDecisionSchema = Type.Union([
     {
       ...AgentDecisionShared,
       kind: Type.Literal('projection_update'),
-      changes: Type.Array(
-        Type.Object(
-          {
-            objectId: IdSchema,
-            operation: Type.Union([
-              Type.Literal('add'),
-              Type.Literal('update'),
-              Type.Literal('remove'),
-            ]),
-            summary: NonEmptyStringSchema,
-          },
-          { additionalProperties: false },
-        ),
-      ),
+      changes: Type.Array(ProjectionChangeSchema),
       evidenceIds: Type.Array(IdSchema),
     },
     { additionalProperties: false },

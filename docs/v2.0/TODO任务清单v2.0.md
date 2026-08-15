@@ -160,48 +160,48 @@ M12 -> M13 -> M14 -> M15 -> M16 -> M17 -> M18
 
 ### M15-01 Agent Loop
 
-- [ ] `Must` 实现 `AgentRuntime.start()`、`runTurn()`、`resume()` 和 `interrupt()`。
-- [ ] `Must` 实现“读取上下文 -> 模型决策 -> 工具执行 -> 结果回写 -> 收敛”的循环。
-- [ ] `Must` 由本地代码控制轮数、时间、Token、补探测和输出预算。
-- [ ] `Must` 由模型决定下一步最有价值的观察或判断，不把流程硬编码为固定 Prompt 串联。
-- [ ] `Must` 连续两轮无有效变化时结束 Agent。
-- [ ] `Must` Codex Thread 创建、恢复或调用失败时重试并持久化失败现场，不静默切换为 v2 基线 Wiki。
+- [x] `Must` 实现 `AgentRuntime.start()`、`runTurn()`、`resume()` 和 `interrupt()`。
+- [x] `Must` 实现“读取上下文 -> 模型决策 -> 工具执行 -> 结果回写 -> 收敛”的循环。
+- [x] `Must` 由本地代码控制轮数、时间、Token、补探测和输出预算。
+- [x] `Must` 由模型决定下一步最有价值的观察或判断，不把流程硬编码为固定 Prompt 串联。
+- [x] `Must` 连续两轮无有效变化时结束 Agent。
+- [x] `Must` Codex Thread 创建、恢复或调用失败时重试并持久化失败现场，不静默切换为 v2 基线 Wiki。
 
 ### M15-02 上下文构建
 
-- [ ] `Must` 实现 L0 运行摘要、L1 结构化索引和 L2 证据详情。
-- [ ] `Must` 默认不将完整快照一次性写入 Prompt。
-- [ ] `Must` 对普通 systemd 服务、容器网络和运行时挂载做聚合压缩。
-- [ ] `Must` 按异常、对外暴露和服务关联程度排序候选。
-- [ ] `Must` 对上下文中的所有敏感字段执行二次脱敏扫描。
+- [x] `Must` 实现 L0 运行摘要、L1 结构化索引和 L2 证据详情。
+- [x] `Must` 默认不将完整快照一次性写入 Prompt。
+- [x] `Must` 对普通 systemd 服务、容器网络和运行时挂载做聚合压缩。
+- [x] `Must` 按异常、对外暴露和服务关联程度排序候选。
+- [x] `Must` 对上下文中的所有敏感字段执行二次脱敏扫描。
 
 ### M15-03 五类结构化能力
 
-- [ ] `Must` 实现 `read_context`。
-- [ ] `Must` 实现 `read_evidence`。
-- [ ] `Must` 实现 `list_candidates`。
-- [ ] `Must` 实现 `execute_governed_probe`。
-- [ ] `Must` 实现 `update_projection`。
-- [ ] `Must` 所有能力使用固定 JSON Schema，不接受 Shell 字符串。
-- [ ] `Must` 所有工具调用记录 ToolActivity、参数摘要、结果状态和 Evidence ID。
+- [x] `Must` 实现 `read_context`。
+- [x] `Must` 实现 `read_evidence`。
+- [x] `Must` 实现 `list_candidates`。
+- [x] `Must` 实现 `execute_governed_probe`。
+- [x] `Must` 实现 `update_projection`。
+- [x] `Must` 所有能力使用固定 JSON Schema，不接受 Shell 字符串。
+- [x] `Must` 所有工具调用记录 ToolActivity、参数摘要、结果状态和 Evidence ID。
 
 ### M15-04 ProbeGovernor
 
-- [ ] `Must` 将现有 `ProbePlanValidator` 改造成会话级预算控制器。
-- [ ] `Must` 持久化最大轮数、请求数、读取字节、超时和已消耗量。
-- [ ] `Must` 每次执行前校验服务、证据、路径来源、深度、命中数和禁止目录。
-- [ ] `Must` 每次执行后重新归一化、脱敏并更新投影。
-- [ ] `Must` 单个探测失败只影响对应字段，不导致整个 Agent 失败。
+- [x] `Must` 将现有 `ProbePlanValidator` 改造成会话级预算控制器。
+- [x] `Must` 持久化最大轮数、请求数、读取字节、超时和已消耗量。
+- [x] `Must` 每次执行前校验服务、证据、路径来源、深度、命中数和禁止目录。
+- [x] `Must` 每次执行后重新归一化、脱敏并更新投影。
+- [x] `Must` 单个探测失败只影响对应字段，不导致整个 Agent 失败。
 - [ ] `Should` 支持短时 SSH 连接复用，但不得把连接对象持久化到 AgentSession。
 
 ### M15-05 Codex Thread Adapter
 
-- [ ] `Must` 将现有 `CodexProvider.analyze()` 保留为兼容入口。
-- [ ] `Must` 新增结构化 Thread turn 适配器。
-- [ ] `Must` 固定 `approvalPolicy=never`、`networkAccessEnabled=false`、`sandboxMode=read-only`。
-- [ ] `Must` 支持 Thread 创建、恢复、超时、格式修复和失败现场保存。
-- [ ] `Must` 不向 Thread 写入 SSH 密码、私钥、未脱敏快照或完整环境变量。
-- [ ] `Must` 将模型决策映射为 `tool_call`、`projection_update` 或 `final`。
+- [x] `Must` 将现有 `CodexProvider.analyze()` 保留为兼容入口。
+- [x] `Must` 新增结构化 Thread turn 适配器。
+- [x] `Must` 固定 `approvalPolicy=never`、`networkAccessEnabled=false`、`sandboxMode=read-only`。
+- [x] `Must` 支持 Thread 创建、恢复、超时、格式修复和失败现场保存。
+- [x] `Must` 不向 Thread 写入 SSH 密码、私钥、未脱敏快照或完整环境变量。
+- [x] `Must` 将模型决策映射为 `tool_call`、`projection_update` 或 `final`。
 
 ## 7. M16：CLI Agent 会话
 

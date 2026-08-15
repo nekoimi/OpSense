@@ -18,6 +18,8 @@ import {
   SchemaValidationError,
   assertSchema,
 } from '@opsense/schema';
+import type { AgentThreadAdapter } from '@opsense/agent-runtime';
+import { parseAgentDecision } from '@opsense/agent-runtime';
 import type {
   AiAnalysis,
   AiAnalysisProposal,
@@ -27,6 +29,104 @@ import type {
 } from '@opsense/schema';
 
 export * from './preflight.js';
+
+export interface CodexAgentThreadAdapterOptions {
+  client?: CodexClient;
+  maxRetries?: number;
+}
+
+/** Structured Agent Thread bridge. It never exposes the raw Codex response as facts. */
+export class CodexAgentThreadAdapter implements AgentThreadAdapter {
+  private readonly client: CodexClient;
+  private readonly maxRetries: number;
+  private readonly threads = new Map<string, Thread>();
+
+  public constructor(options: CodexAgentThreadAdapterOptions = {}) {
+    this.client = options.client ?? new Codex();
+    this.maxRetries = options.maxRetries ?? 2;
+  }
+
+  public start(options: {
+    model?: string;
+    workingDirectory?: string;
+  }): Promise<{ threadId: string }> {
+    const thread = this.client.startThread(threadOptions(options));
+    const threadId = thread.id ?? `codex-thread-${Math.random().toString(36).slice(2)}`;
+    this.threads.set(threadId, thread);
+    return Promise.resolve({ threadId });
+  }
+
+  public resume(
+    threadId: string,
+    options: { model?: string; workingDirectory?: string },
+  ): Promise<{ threadId: string }> {
+    const thread =
+      this.threads.get(threadId) ?? this.client.resumeThread(threadId, threadOptions(options));
+    this.threads.set(threadId, thread);
+    return Promise.resolve({ threadId });
+  }
+
+  public async run(
+    threadId: string,
+    prompt: string,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<{
+    decision: unknown;
+    threadId?: string;
+    responseId?: string;
+    tokenUsage?: number;
+  }> {
+    const thread =
+      this.threads.get(threadId) ?? this.client.resumeThread(threadId, fixedThreadOptions());
+    this.threads.set(threadId, thread);
+    let response = await thread.run(prompt, options);
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
+      try {
+        const decision = parseAgentDecision(parseJson(response));
+        const usage = response.usage;
+        if (thread.id !== null) this.threads.set(thread.id, thread);
+        return {
+          decision,
+          ...(thread.id === null ? {} : { threadId: thread.id }),
+          ...(usage === null
+            ? {}
+            : {
+                tokenUsage:
+                  usage.input_tokens + usage.output_tokens + usage.reasoning_output_tokens,
+              }),
+        };
+      } catch (error) {
+        lastError = error;
+        if (attempt === this.maxRetries) break;
+        response = await thread.run(
+          `上一轮输出不符合 AgentDecision Schema：${error instanceof Error ? error.message : String(error)}\n请只返回完整 JSON，不要 Markdown。`,
+          options,
+        );
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+}
+
+function fixedThreadOptions(): ThreadOptions {
+  return {
+    approvalPolicy: 'never',
+    networkAccessEnabled: false,
+    sandboxMode: 'read-only',
+    skipGitRepoCheck: true,
+  };
+}
+
+function threadOptions(options: { model?: string; workingDirectory?: string }): ThreadOptions {
+  return {
+    ...fixedThreadOptions(),
+    ...(options.model === undefined ? {} : { model: options.model }),
+    ...(options.workingDirectory === undefined
+      ? {}
+      : { workingDirectory: options.workingDirectory }),
+  };
+}
 
 interface CodexClient {
   resumeThread(id: string, options?: ThreadOptions): Thread;

@@ -74,6 +74,9 @@ importers:
 
   packages/agent-runtime:
     dependencies:
+      '@opsense/ai-provider':
+        specifier: workspace:*
+        version: link:../ai-provider
       '@opsense/schema':
         specifier: workspace:*
         version: link:../schema
