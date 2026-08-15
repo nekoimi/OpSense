@@ -9,6 +9,7 @@
   "updatedAt": "2026-08-14T03:00:00.000Z",
   "turnCount": 0,
   "probeRound": 0,
+  "completedProbeRequestIds": [],
   "budgets": {
     "maxRounds": 1,
     "maxRequests": 8,

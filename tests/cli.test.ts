@@ -17,7 +17,19 @@ describe('opsense CLI skeleton', () => {
       'analyze',
       'report',
       'inspect',
+      'agent',
     ]);
+  });
+
+  it('exposes the M16 agent options', () => {
+    const program = createProgram();
+    const agent = program.commands.find((command) => command.name() === 'agent');
+
+    expect(agent?.helpInformation()).toContain('--scan <scan-id>');
+    expect(agent?.helpInformation()).toContain('--resume <agent-session-id>');
+    expect(agent?.helpInformation()).toContain('--prompt <text>');
+    expect(agent?.helpInformation()).toContain('--max-agent-rounds <count>');
+    expect(agent?.helpInformation()).toContain('--max-probes <count>');
   });
 
   it('exposes version and help information', () => {

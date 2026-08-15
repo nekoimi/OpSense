@@ -38,6 +38,9 @@ importers:
 
   apps/cli:
     dependencies:
+      '@opsense/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/agent-runtime
       '@opsense/ai-codex':
         specifier: workspace:*
         version: link:../../packages/ai-codex
@@ -50,6 +53,9 @@ importers:
       '@opsense/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@opsense/discovery':
+        specifier: workspace:*
+        version: link:../../packages/discovery
       '@opsense/projection':
         specifier: workspace:*
         version: link:../../packages/projection
@@ -168,6 +174,9 @@ importers:
       '@opsense/schema':
         specifier: workspace:*
         version: link:../schema
+      '@opsense/wiki':
+        specifier: workspace:*
+        version: link:../wiki
       docx:
         specifier: ^9.7.1
         version: 9.7.1

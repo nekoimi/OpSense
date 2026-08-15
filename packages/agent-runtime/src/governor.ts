@@ -23,7 +23,7 @@ export interface ProbeGovernorOptions {
 
 export class ProbeGovernor {
   private readonly snapshot: ScanSnapshot;
-  private readonly session: AgentSession;
+  private session: AgentSession;
   private readonly executor: ProbeExecutor | undefined;
   private readonly reconcile: ProbeGovernorOptions['reconcile'];
   private readonly now: () => Date;
@@ -51,8 +51,14 @@ export class ProbeGovernor {
     return { ...this.session.budgets };
   }
 
+  public setSession(session: AgentSession): void {
+    this.session = session;
+  }
+
   public validate(request: unknown): ProbeRequest {
     assertSchema(ProbeRequestSchema, request);
+    if (this.session.completedProbeRequestIds.includes(request.id))
+      throw new ProbeGovernorError('该探测请求已成功执行，不允许在恢复会话中重复执行。');
     const validation = this.validator.validate(this.snapshot, [request], this.now);
     const record = validation.audit.records[0];
     if (record === undefined || record.status !== 'accepted')
@@ -82,6 +88,7 @@ export class ProbeGovernor {
         this.session.budgets.usedDurationMs - checked.timeoutMs + elapsed,
       );
       await this.reconcile?.(checked, result);
+      if (result.status === 'completed') this.session.completedProbeRequestIds.push(checked.id);
       return result;
     } catch (error) {
       return {

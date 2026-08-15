@@ -69,19 +69,27 @@ export class AgentRuntime {
     return this.session;
   }
 
+  public async addOutputFiles(files: readonly string[]): Promise<AgentSession> {
+    this.session.outputFiles = [...new Set([...this.session.outputFiles, ...files])];
+    this.session.updatedAt = this.now().toISOString();
+    await this.options.store.save(this.session);
+    return this.session;
+  }
+
   public async start(
     userMessage = '请开始整理服务器 Wiki，优先确认主要服务和证据缺口。',
   ): Promise<AgentResponse> {
     if (this.session.state !== 'created') return this.resume(userMessage);
     this.session = await this.bootstrap(false);
+    this.options.tools.setSession(this.session);
     return this.runUntilSettled(userMessage);
   }
 
   public async resume(userMessage = '继续调查未解决的服务和证据缺口。'): Promise<AgentResponse> {
     this.session = await this.options.store.load();
-    if (this.session.state === 'completed')
-      return this.response('会话已完成，没有新的调查动作。', [], [], []);
+    this.options.tools.setSession(this.session);
     this.session = await this.bootstrap(true);
+    this.options.tools.setSession(this.session);
     return this.runUntilSettled(userMessage);
   }
 
@@ -120,6 +128,7 @@ export class AgentRuntime {
     } catch (error) {
       if (controller.signal.aborted) {
         this.session = this.finish('interrupted');
+        this.options.tools.setSession(this.session);
         await this.options.store.save(this.session);
         throw error;
       }
@@ -168,6 +177,7 @@ export class AgentRuntime {
       });
     } else if (decision.kind === 'final') {
       this.session = this.finish('completed');
+      this.options.tools.setSession(this.session);
       message = decision.qualitySummary;
     } else {
       await this.fail(decision.error);
@@ -182,6 +192,7 @@ export class AgentRuntime {
       observations.reduce((total, item) => total + Buffer.byteLength(item), 0);
     if (decision.kind !== 'final' && decision.kind !== 'failed' && this.unchangedRounds >= 2)
       this.session = this.finish('partial');
+    this.options.tools.setSession(this.session);
     const turn: AgentTurn = {
       turnId,
       sessionId: this.session.sessionId,
@@ -224,6 +235,7 @@ export class AgentRuntime {
   public async interrupt(): Promise<AgentSession> {
     this.abortController?.abort();
     this.session = this.finish('interrupted');
+    this.options.tools.setSession(this.session);
     await this.options.store.save(this.session);
     return this.session;
   }
@@ -234,6 +246,7 @@ export class AgentRuntime {
       response = await this.runTurn('根据上一轮结果继续调查最有价值的证据，并在信息充分时结束。');
     if (this.session.state === 'running') {
       this.session = this.finish('partial');
+      this.options.tools.setSession(this.session);
       await this.options.store.save(this.session);
     }
     return response;
@@ -279,6 +292,7 @@ export class AgentRuntime {
       );
       await this.options.store.save(failed);
       this.session = failed;
+      this.options.tools.setSession(this.session);
       throw error;
     }
   }
@@ -335,6 +349,7 @@ export class AgentRuntime {
       ['检查 Codex 输出是否符合 AgentDecision Schema 后 resume。'],
       this.now,
     );
+    this.options.tools.setSession(this.session);
     await this.options.store.save(this.session);
   }
   private finish(state: 'completed' | 'partial' | 'interrupted'): AgentSession {

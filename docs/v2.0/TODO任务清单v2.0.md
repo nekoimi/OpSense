@@ -207,68 +207,68 @@ M12 -> M13 -> M14 -> M15 -> M16 -> M17 -> M18
 
 ### M16-01 `opsense agent` 命令
 
-- [ ] `Must` 支持 `--host --port --user --provider codex` 新建会话，v2 不提供非 Codex Provider。
-- [ ] `Must` 支持 `--scan <scan-id>` 基于已有快照进入会话。
-- [ ] `Must` 支持 `--resume <agent-session-id>` 恢复会话。
-- [ ] `Must` 支持 `--prompt <text>` 和 `--once` 非交互模式。
-- [ ] `Must` 支持 `--focus-service`、`--max-agent-rounds` 和 `--max-probes`。
-- [ ] `Must` 启动时输出 Agent session ID 和本地目录。
+- [x] `Must` 支持 `--host --port --user --provider codex` 新建会话，v2 不提供非 Codex Provider。
+- [x] `Must` 支持 `--scan <scan-id>` 基于已有快照进入会话。
+- [x] `Must` 支持 `--resume <agent-session-id>` 恢复会话。
+- [x] `Must` 支持 `--prompt <text>` 和 `--once` 非交互模式。
+- [x] `Must` 支持 `--focus-service`、`--max-agent-rounds` 和 `--max-probes`。
+- [x] `Must` 启动时输出 Agent session ID 和本地目录。
 
 ### M16-02 REPL 交互
 
-- [ ] `Must` 支持自然语言问题。
-- [ ] `Must` 支持 `status`、`services`、`show <service-id>`、`review`、`wiki`、`resume` 和 `exit`。
-- [ ] `Must` 显示当前阶段、轮数、预算、Codex 状态和工具调用摘要。
-- [ ] `Must` 对长响应支持分页、折叠或摘要显示。
-- [ ] `Must` 同一 session 连续追问至少三个问题且共享上下文。
-- [ ] `Must` Ctrl+C 后安全取消当前动作、保存 transcript 并关闭活动 SSH 连接。
+- [x] `Must` 支持自然语言问题。
+- [x] `Must` 支持 `status`、`services`、`show <service-id>`、`review`、`wiki`、`resume` 和 `exit`。
+- [x] `Must` 显示当前阶段、轮数、预算、Codex 状态和工具调用摘要。
+- [x] `Must` 对长响应支持分页、折叠或摘要显示。
+- [x] `Must` 同一 session 连续追问至少三个问题且共享上下文。
+- [x] `Must` Ctrl+C 后安全取消当前动作、保存 transcript 并关闭活动 SSH 连接。
 
 ### M16-03 会话持久化和恢复
 
-- [ ] `Must` 新增 `agent-session.json`、`agent-turns.jsonl` 和 `agent-transcript.jsonl`。
-- [ ] `Must` 持久化假设、工具调用、预算、投影变更、错误和未解决问题。
-- [ ] `Must` 恢复原 Codex Thread、上下文摘要、已成功 ProbeRequest 和当前投影。
-- [ ] `Must` 恢复时不得重复执行已成功的补探测。
-- [ ] `Must` 会话文件经过 Schema 校验和敏感信息扫描。
+- [x] `Must` 新增 `agent-session.json`、`agent-turns.jsonl` 和 `agent-transcript.jsonl`。
+- [x] `Must` 持久化假设、工具调用、预算、投影变更、错误和未解决问题。
+- [x] `Must` 恢复原 Codex Thread、上下文摘要、已成功 ProbeRequest 和当前投影。
+- [x] `Must` 恢复时不得重复执行已成功的补探测。
+- [x] `Must` 会话文件经过 Schema 校验和敏感信息扫描。
 
 ## 8. M17：服务器 Wiki 文档与质量门禁
 
 ### M17-01 Projection Builder
 
-- [ ] `Must` 实现 `InventoryProjection` 构建。
-- [ ] `Must` 实现主机网络过滤：隐藏 bridge、veth、overlay 和容器内部网络。
-- [ ] `Must` 实现主机存储过滤：隐藏 overlay2、rootfs、shm、proc、sysfs 和临时挂载。
-- [ ] `Must` 将宿主机数据挂载映射到对应服务知识条目。
-- [ ] `Must` 为每个过滤对象保存类别、原因和统计。
-- [ ] `Must` 普通系统服务只进入摘要、异常列表或附录。
+- [x] `Must` 实现 `InventoryProjection` 构建。
+- [x] `Must` 实现主机网络过滤：隐藏 bridge、veth、overlay 和容器内部网络。
+- [x] `Must` 实现主机存储过滤：隐藏 overlay2、rootfs、shm、proc、sysfs 和临时挂载。
+- [x] `Must` 将宿主机数据挂载映射到对应服务知识条目。
+- [x] `Must` 为每个过滤对象保存类别、原因和统计。
+- [x] `Must` 普通系统服务只进入摘要、异常列表或附录。
 
 ### M17-02 WikiBuilder
 
-- [ ] `Must` 从 `ServiceWikiProjection` 生成服务器概览和服务知识条目。
-- [ ] `Must` 生成服务索引、服务角色、用途摘要、部署位置、端口、配置、日志和数据章节。
-- [ ] `Must` 对生命周期命令执行证据门禁。
-- [ ] `Must` 将事实、推断、未知和待确认事项分栏展示。
-- [ ] `Must` 生成 Evidence ID 交叉引用。
-- [ ] `Must` 支持 `wiki`、`summary` 和 `audit` 三种报告 profile。
+- [x] `Must` 从 `ServiceWikiProjection` 生成服务器概览和服务知识条目。
+- [x] `Must` 生成服务索引、服务角色、用途摘要、部署位置、端口、配置、日志和数据章节。
+- [x] `Must` 对生命周期命令执行证据门禁。
+- [x] `Must` 将事实、推断、未知和待确认事项分栏展示。
+- [x] `Must` 生成 Evidence ID 交叉引用。
+- [x] `Must` 支持 `wiki`、`summary` 和 `audit` 三种报告 profile。
 
 ### M17-03 ReportQualityGate
 
-- [ ] `Must` 检查正文是否出现容器网络和运行时挂载噪声。
-- [ ] `Must` 检查正文是否逐条展开普通 systemd 服务。
-- [ ] `Must` 检查每个主要服务是否具备用途、状态、部署方式和证据。
-- [ ] `Must` 检查每个重要端口是否能关联主机暴露面或待确认项。
-- [ ] `Must` 检查确定性结论是否引用 Evidence ID。
-- [ ] `Must` 检查未知字段是否进入 `unknowns` 或 `reviewItems`。
-- [ ] `Must` 通过脱敏和敏感数据扫描后才能渲染。
+- [x] `Must` 检查正文是否出现容器网络和运行时挂载噪声。
+- [x] `Must` 检查正文是否逐条展开普通 systemd 服务。
+- [x] `Must` 检查每个主要服务是否具备用途、状态、部署方式和证据。
+- [x] `Must` 检查每个重要端口是否能关联主机暴露面或待确认项。
+- [x] `Must` 检查确定性结论是否引用 Evidence ID。
+- [x] `Must` 检查未知字段是否进入 `unknowns` 或 `reviewItems`。
+- [x] `Must` 通过脱敏和敏感数据扫描后才能渲染。
 
 ### M17-04 Word/HTML/Markdown 输出
 
-- [ ] `Must` 将 `packages/report` 改为只接收最终投影。
-- [ ] `Must` 保持 Word、HTML、Markdown 使用同一份 Wiki 数据。
-- [ ] `Must` 保留中文文件名、服务器标识、常见扫描时间和 OpSense 版权标识。
-- [ ] `Must` HTML 支持背景水印、离线打开和长路径换行。
-- [ ] `Must` Word 支持页眉、页脚、版权标识、合理水印和目录。
-- [ ] `Must` 报告产物写入 `AgentResponse.wikiArtifacts` 和 session 输出索引。
+- [x] `Must` 将 `packages/report` 改为只接收最终投影。
+- [x] `Must` 保持 Word、HTML、Markdown 使用同一份 Wiki 数据。
+- [x] `Must` 保留中文文件名、服务器标识、常见扫描时间和 OpSense 版权标识。
+- [x] `Must` HTML 支持背景水印、离线打开和长路径换行。
+- [x] `Must` Word 支持页眉、页脚、版权标识、合理水印和目录。
+- [x] `Must` 报告产物写入 `AgentResponse.wikiArtifacts` 和 session 输出索引。
 
 ## 9. M18：样本评估与发布验收
 

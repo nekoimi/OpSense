@@ -41,6 +41,7 @@ export function createAgentSession(options: CreateAgentSessionOptions): AgentSes
     budgets,
     coverage: {},
     currentStage: 'created',
+    completedProbeRequestIds: [],
     outputFiles: [],
     probeRound: 0,
     provider: 'codex',
@@ -216,11 +217,23 @@ export function createTranscriptEntry(
     kind,
     sequence,
     sessionId,
-    text,
+    text: sanitizeTranscriptText(text),
     ...(responseId === undefined ? {} : { responseId }),
   };
   assertSchema(TranscriptEntrySchema, entry);
   return entry;
+}
+
+function sanitizeTranscriptText(value: string): string {
+  return value
+    .replace(
+      /\b(password|passwd|passphrase|secret|token|api[_-]?key)\s*[:=]\s*([^\s,;]+)/gi,
+      '$1=[REDACTED]',
+    )
+    .replace(
+      /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+      '[REDACTED PRIVATE KEY]',
+    );
 }
 
 export * from './context.js';

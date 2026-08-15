@@ -10,7 +10,12 @@ import {
   UpdateProjectionArgumentsSchema,
   assertSchema,
 } from '@opsense/schema';
-import type { AgentDecision, AgentToolActivity, InventoryProjection } from '@opsense/schema';
+import type {
+  AgentDecision,
+  AgentSession,
+  AgentToolActivity,
+  InventoryProjection,
+} from '@opsense/schema';
 
 import type { ContextBuilder, ContextSection } from './context.js';
 import type { ProbeGovernor } from './governor.js';
@@ -56,6 +61,10 @@ export class ToolRouter {
     this.governor = options.governor;
     this.applyProjectionUpdate = options.applyProjectionUpdate;
     this.now = options.now ?? (() => new Date());
+  }
+
+  public setSession(session: AgentSession): void {
+    this.governor.setSession(session);
   }
 
   public async execute(

@@ -1,5 +1,5 @@
 import { Command, InvalidArgumentError } from 'commander';
-import type { ReportFormat } from '@opsense/report';
+import type { ReportFormat, ReportProfile } from '@opsense/report';
 
 import { ExitCode } from '../exit-code.js';
 import type { LoggerFactory } from '../logger.js';
@@ -8,6 +8,7 @@ import { parseReportFormats, runReportWorkflow } from '../workflows/report-workf
 interface ReportOptions {
   config?: string;
   format?: ReportFormat[];
+  profile: ReportProfile;
   scan: string;
   timeZone?: string;
   workspace?: string;
@@ -23,6 +24,7 @@ export function createReportCommand(loggerFactory: LoggerFactory): Command {
     .description('Render a local report from an existing scan.')
     .requiredOption('--scan <scan-id>', 'scan ID to render')
     .option('--format <formats>', 'comma-separated report formats', parseFormats, ['docx', 'html'])
+    .option('--profile <profile>', 'report profile: wiki, summary, or audit', parseProfile, 'wiki')
     .option('--time-zone <time-zone>', 'report display timezone')
     .option('--config <path>', 'configuration file path')
     .option('--workspace <path>', 'local OpSense workspace directory');
@@ -33,6 +35,7 @@ export function createReportCommand(loggerFactory: LoggerFactory): Command {
       const result = await runReportWorkflow({
         ...options,
         formats: options.format ?? ['docx', 'html'],
+        profile: options.profile,
       });
       logger.info(`Report generated in: ${result.artifacts.outputDirectory}`);
       if (result.artifacts.docxFile !== undefined)
@@ -48,6 +51,12 @@ export function createReportCommand(loggerFactory: LoggerFactory): Command {
   });
 
   return command;
+}
+
+function parseProfile(value: string): ReportProfile {
+  if (value !== 'wiki' && value !== 'summary' && value !== 'audit')
+    throw new InvalidArgumentError('Report profile must be wiki, summary, or audit.');
+  return value;
 }
 
 function parseFormats(value: string): ReportFormat[] {

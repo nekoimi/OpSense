@@ -52,6 +52,34 @@ export const ReportSummarySchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const ReportProfileSchema = Type.Union([
+  Type.Literal('wiki'),
+  Type.Literal('summary'),
+  Type.Literal('audit'),
+]);
+
+export const ReportQualityIssueSchema = Type.Object(
+  {
+    code: NonEmptyStringSchema,
+    message: NonEmptyStringSchema,
+    severity: Type.Union([Type.Literal('error'), Type.Literal('warning')]),
+    serviceId: Type.Optional(IdSchema),
+    evidenceIds: Type.Array(IdSchema),
+  },
+  { additionalProperties: false },
+);
+
+export const ReportQualityResultSchema = Type.Object(
+  {
+    checkedAt: DateTimeSchema,
+    issueCount: Type.Integer({ minimum: 0 }),
+    issues: Type.Array(ReportQualityIssueSchema),
+    passed: Type.Boolean(),
+    profile: ReportProfileSchema,
+  },
+  { $id: 'ReportQualityResult', additionalProperties: false },
+);
+
 export const ReportHostSchema = Type.Object(
   {
     architecture: Type.Optional(Type.String()),
@@ -211,3 +239,6 @@ export type ReportNetworkInterface = Static<typeof ReportNetworkInterfaceSchema>
 export type ReportService = Static<typeof ReportServiceSchema>;
 export type ReportSummary = Static<typeof ReportSummarySchema>;
 export type ReportSystemServiceSummary = Static<typeof ReportSystemServiceSummarySchema>;
+export type ReportProfile = Static<typeof ReportProfileSchema>;
+export type ReportQualityIssue = Static<typeof ReportQualityIssueSchema>;
+export type ReportQualityResult = Static<typeof ReportQualityResultSchema>;

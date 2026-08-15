@@ -6,4 +6,5 @@ export * from './generate.js';
 export * from './html.js';
 export * from './markdown.js';
 export * from './model.js';
+export * from './quality.js';
 export * from './validation.js';

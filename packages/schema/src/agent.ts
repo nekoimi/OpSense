@@ -287,6 +287,7 @@ export const AgentSessionSchema = Type.Object(
     finishedAt: Type.Optional(DateTimeSchema),
     turnCount: Type.Integer({ minimum: 0 }),
     probeRound: Type.Integer({ minimum: 0 }),
+    completedProbeRequestIds: Type.Array(IdSchema),
     budgets: ProbeBudgetSchema,
     coverage: Type.Record(Type.String(), Type.Number({ minimum: 0, maximum: 1 })),
     unresolvedQuestions: Type.Array(Type.String()),

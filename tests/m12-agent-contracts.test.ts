@@ -105,4 +105,15 @@ describe('M12 agent contracts and session workspace', () => {
       state: 'failed',
     });
   });
+
+  it('redacts credentials before writing transcript text', () => {
+    const entry = createTranscriptEntry(
+      'agent:test',
+      1,
+      'user',
+      'password=plain-text token:abc123',
+    );
+
+    expect(entry.text).toBe('password=[REDACTED] token=[REDACTED]');
+  });
 });

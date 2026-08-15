@@ -96,6 +96,9 @@ describe('M8 report generation', () => {
         'evidence.md',
       ]),
     );
+    expect(path.basename(artifacts.wikiProjectionFile)).toBe('wiki-projection.json');
+    expect(path.basename(artifacts.qualityFile)).toBe('report-quality.json');
+    expect(artifacts.quality.passed).toBe(true);
 
     const html = await readFile(artifacts.htmlFile ?? '', 'utf8');
     const model = JSON.parse(await readFile(artifacts.modelFile, 'utf8')) as unknown;
