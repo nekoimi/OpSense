@@ -39,6 +39,7 @@ export interface GenerateReportOptions {
   now?: () => Date;
   outputDirectory: string;
   profile?: ReportProfile;
+  requireCodexClassification?: boolean;
   sourceSnapshot?: ScanSnapshot;
   timeZone?: string;
   wikiProjection?: ServiceWikiProjection;
@@ -66,6 +67,7 @@ export async function generateReportArtifacts(
   const formats = new Set(options.formats ?? ['docx', 'html', 'markdown']);
   const now = options.now ?? (() => new Date());
   assertSchema(InventoryProjectionSchema, projection);
+  if (options.requireCodexClassification === true) assertCodexClassification(projection);
   const reportProjection = redactForReport(projection, now);
   assertSchema(InventoryProjectionSchema, reportProjection.value);
   const wiki =
@@ -142,6 +144,28 @@ export async function generateReportArtifacts(
   }
 
   return result;
+}
+
+function assertCodexClassification(projection: InventoryProjection): void {
+  const reviewed = new Set(projection.reviewedServiceIds ?? []);
+  const reviewedPaths = new Set(projection.reviewedPathKeys ?? []);
+  const unreviewed = projection.services.filter((service) => !reviewed.has(service.id));
+  const unreviewedPaths = (projection.candidatePathKeys ?? []).filter(
+    (key) => !reviewedPaths.has(key),
+  );
+  if (
+    projection.classificationProvider !== 'codex' ||
+    projection.classificationCompleted !== true ||
+    projection.reviewedServiceCount !== projection.services.length ||
+    unreviewed.length > 0 ||
+    projection.reviewedPathCount !== (projection.candidatePathKeys ?? []).length ||
+    unreviewedPaths.length > 0
+  )
+    throw new Error(
+      `v2 Wiki 要求 Codex 完成全部语义审查：服务 ${projection.reviewedServiceCount ?? 0}/${projection.services.length}，路径 ${projection.reviewedPathCount ?? 0}/${(projection.candidatePathKeys ?? []).length}。`,
+    );
+  if (projection.classificationThreadId === undefined)
+    throw new Error('v2 Wiki 缺少 Codex Thread 审计标识。');
 }
 
 async function writeAtomic(filePath: string, content: string | Uint8Array): Promise<void> {

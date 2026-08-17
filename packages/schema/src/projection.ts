@@ -1,6 +1,6 @@
 import { Type, type Static } from '@sinclair/typebox';
 
-import { AiAnalysisSchema, AiServiceAssessmentSchema } from './ai.js';
+import { AiAnalysisSchema, AiPathAssessmentSchema, AiServiceAssessmentSchema } from './ai.js';
 import { DateTimeSchema, IdSchema, NonEmptyStringSchema } from './common.js';
 import { EvidenceRecordSchema, FindingRecordSchema } from './evidence.js';
 import { HostSnapshotSchema } from './host.js';
@@ -65,6 +65,99 @@ export const RiskFindingSchema = Type.Object(
 
 export type RiskFinding = Static<typeof RiskFindingSchema>;
 
+export const DiscoveryWorkflowVersionSchema = Type.Union([
+  Type.Literal('m19_full_candidate_review'),
+  Type.Literal('m20_evidence_driven'),
+]);
+
+export type DiscoveryWorkflowVersion = Static<typeof DiscoveryWorkflowVersionSchema>;
+
+export const DiscoveryInvestigationStatusSchema = Type.Union([
+  Type.Literal('selected'),
+  Type.Literal('investigating'),
+  Type.Literal('resolved'),
+  Type.Literal('needs_review'),
+]);
+
+export const DiscoveryInvestigationSchema = Type.Object(
+  {
+    investigationId: IdSchema,
+    label: NonEmptyStringSchema,
+    status: DiscoveryInvestigationStatusSchema,
+    priority: Type.Union([
+      Type.Literal('critical'),
+      Type.Literal('high'),
+      Type.Literal('medium'),
+      Type.Literal('low'),
+    ]),
+    serviceIds: Type.Array(IdSchema),
+    sourceObjectIds: Type.Array(IdSchema),
+    evidenceIds: Type.Array(IdSchema, { minItems: 1 }),
+    reason: NonEmptyStringSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type DiscoveryInvestigation = Static<typeof DiscoveryInvestigationSchema>;
+
+export const DiscoveredServiceSchema = Type.Object(
+  {
+    serviceId: IdSchema,
+    name: NonEmptyStringSchema,
+    displayName: Type.Optional(Type.String()),
+    deploymentType: Type.Union([
+      Type.Literal('systemd'),
+      Type.Literal('process'),
+      Type.Literal('docker'),
+      Type.Literal('compose'),
+      Type.Literal('unknown'),
+    ]),
+    status: Type.Union([
+      Type.Literal('running'),
+      Type.Literal('stopped'),
+      Type.Literal('failed'),
+      Type.Literal('unknown'),
+    ]),
+    sourceObjectIds: Type.Array(IdSchema, { minItems: 1 }),
+    evidenceIds: Type.Array(IdSchema, { minItems: 1 }),
+    unknownFields: Type.Array(NonEmptyStringSchema),
+    reason: NonEmptyStringSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type DiscoveredService = Static<typeof DiscoveredServiceSchema>;
+
+export const DiscoveryFilterGroupSchema = Type.Object(
+  {
+    groupId: IdSchema,
+    label: NonEmptyStringSchema,
+    resourceClass: NonEmptyStringSchema,
+    sourceObjectIds: Type.Array(IdSchema, { minItems: 1 }),
+    evidenceIds: Type.Array(IdSchema, { minItems: 1 }),
+    reason: NonEmptyStringSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type DiscoveryFilterGroup = Static<typeof DiscoveryFilterGroupSchema>;
+
+export const DiscoveryWorkspaceSchema = Type.Object(
+  {
+    workflowVersion: DiscoveryWorkflowVersionSchema,
+    planningCompleted: Type.Boolean(),
+    discoveryCompleted: Type.Boolean(),
+    investigations: Type.Array(DiscoveryInvestigationSchema),
+    discoveredServices: Type.Array(DiscoveredServiceSchema),
+    filteredGroups: Type.Array(DiscoveryFilterGroupSchema),
+    unresolvedQuestions: Type.Array(Type.String()),
+    updatedAt: DateTimeSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type DiscoveryWorkspace = Static<typeof DiscoveryWorkspaceSchema>;
+
 export const ServiceWikiProjectionSchema = Type.Object(
   {
     projectionId: IdSchema,
@@ -100,6 +193,21 @@ export const InventoryProjectionSchema = Type.Object(
     artifacts: Type.Array(ArtifactRecordSchema),
     services: Type.Array(ServiceRecordSchema),
     serviceAssessments: Type.Array(AiServiceAssessmentSchema),
+    pathAssessments: Type.Optional(Type.Array(AiPathAssessmentSchema)),
+    classificationProvider: Type.Optional(
+      Type.Union([Type.Literal('codex'), Type.Literal('baseline'), Type.Literal('legacy')]),
+    ),
+    classificationCompleted: Type.Optional(Type.Boolean()),
+    candidateServiceCount: Type.Optional(Type.Integer({ minimum: 0 })),
+    reviewedServiceCount: Type.Optional(Type.Integer({ minimum: 0 })),
+    reviewedServiceIds: Type.Optional(Type.Array(IdSchema)),
+    candidatePathCount: Type.Optional(Type.Integer({ minimum: 0 })),
+    candidatePathKeys: Type.Optional(Type.Array(NonEmptyStringSchema)),
+    reviewedPathCount: Type.Optional(Type.Integer({ minimum: 0 })),
+    reviewedPathKeys: Type.Optional(Type.Array(NonEmptyStringSchema)),
+    classificationThreadId: Type.Optional(NonEmptyStringSchema),
+    classificationUpdatedAt: Type.Optional(DateTimeSchema),
+    discoveryWorkspace: Type.Optional(DiscoveryWorkspaceSchema),
     evidence: Type.Array(EvidenceRecordSchema),
     findings: Type.Array(FindingRecordSchema),
     unknowns: Type.Array(Type.String()),

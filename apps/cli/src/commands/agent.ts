@@ -2,6 +2,7 @@ import { createInterface } from 'node:readline/promises';
 
 import { Command, InvalidArgumentError } from 'commander';
 import { generateReportArtifacts } from '@opsense/report';
+import type { AgentResponse, AgentSession } from '@opsense/schema';
 import { createReportDirectory } from '@opsense/workspace';
 
 import { ExitCode, exitCodeForError } from '../exit-code.js';
@@ -15,16 +16,19 @@ import { parsePort } from './scan.js';
 
 interface AgentCommandOptions {
   acceptNewHostKey?: boolean;
+  complete?: boolean;
   config?: string;
   focusService?: string;
   host?: string;
   identity?: string;
   maxAgentRounds: number;
+  maxAgentRuns: number;
   maxProbes: number;
   model?: string;
   once?: boolean;
   password?: string;
   port: number;
+  preflightTimeoutMs: number;
   prompt?: string;
   provider: string;
   resume?: string;
@@ -53,19 +57,35 @@ export function createAgentCommand(loggerFactory: LoggerFactory): Command {
     .option('--provider <provider>', 'AI provider (v2 requires codex)', 'codex')
     .option('--model <model>', 'Codex model override')
     .option('--prompt <text>', 'initial natural-language request')
-    .option('--once', 'run to convergence once without opening the REPL')
+    .option('--once', 'run one bounded Agent session without opening the REPL')
+    .option(
+      '--complete',
+      'scan once, complete Codex classification, then generate HTML, Word, and Markdown Wiki files',
+    )
     .option('--focus-service <service-id>', 'prioritize one service candidate')
     .option(
       '--max-agent-rounds <count>',
       'maximum model turns per request',
       parsePositiveInteger,
-      8,
+      16,
+    )
+    .option(
+      '--max-agent-runs <count>',
+      'maximum automatic Agent runs for --complete',
+      parsePositiveInteger,
+      200,
     )
     .option(
       '--max-probes <count>',
       'maximum governed probes in the session',
       parseNonNegativeInteger,
       4,
+    )
+    .option(
+      '--preflight-timeout-ms <milliseconds>',
+      'hard timeout for the Codex availability check',
+      parsePositiveInteger,
+      120_000,
     )
     .option(
       '--turn-timeout-ms <milliseconds>',
@@ -99,7 +119,12 @@ export function createAgentCommand(loggerFactory: LoggerFactory): Command {
           ? await prepared.runtime.start(initialPrompt)
           : await prepared.runtime.resume(initialPrompt);
       printResponse(logger, response);
-      if (options.once !== true) await runRepl(prepared, logger, controller.signal);
+      if (options.complete === true) {
+        await runAgentToCompletion(prepared.runtime, response, logger, options.maxAgentRuns);
+        await generateWikiArtifacts(prepared, logger);
+      } else if (options.once !== true) {
+        await runRepl(prepared, logger, controller.signal);
+      }
       process.exitCode = ExitCode.Success;
     } catch (error) {
       logger.error(`Agent failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -110,6 +135,40 @@ export function createAgentCommand(loggerFactory: LoggerFactory): Command {
     }
   });
   return command;
+}
+
+interface CompletionRuntime {
+  currentSession: Pick<AgentSession, 'coverage' | 'state' | 'turnCount' | 'workflowVersion'>;
+  resume(userMessage?: string): Promise<AgentResponse>;
+}
+
+export async function runAgentToCompletion(
+  runtime: CompletionRuntime,
+  initialResponse: AgentResponse,
+  logger: Logger,
+  maxRuns: number,
+): Promise<AgentResponse> {
+  let response = initialResponse;
+  for (let run = 1; run <= maxRuns; run += 1) {
+    const session = runtime.currentSession;
+    if (session.state === 'completed') return response;
+    if (session.state !== 'partial')
+      throw new Error(`自动编排无法继续，Agent 当前状态为 ${session.state}。`);
+    if (run === maxRuns) break;
+    logger.info(
+      `Auto-resume ${run + 1}/${maxRuns}: turns=${session.turnCount}, ${progressLabel(session)}=${formatCoverage(session.coverage.classification)}.`,
+    );
+    response = await runtime.resume(
+      session.workflowVersion === 'm20_evidence_driven'
+        ? '继续完成证据筛选、按需调查和服务归并，直到可以生成服务器 Wiki。'
+        : '继续审查未完成的服务候选和路径，直到完成分类。',
+    );
+    printResponse(logger, response);
+  }
+  const session = runtime.currentSession;
+  throw new Error(
+    `自动编排达到 ${maxRuns} 次运行上限，${progressLabel(session)}仍未完成：turns=${session.turnCount}, ${progressLabel(session)}=${formatCoverage(session.coverage.classification)}。可使用 --resume 继续，或提高 --max-agent-runs。`,
+  );
 }
 
 async function runRepl(
@@ -156,6 +215,14 @@ async function generateWikiArtifacts(
   prepared: PreparedAgentWorkflow,
   logger: Logger,
 ): Promise<void> {
+  const session = prepared.runtime.currentSession;
+  if (session.state !== 'completed')
+    throw new Error(`v2 Wiki 只能从 completed AgentSession 生成，当前状态为 ${session.state}。`);
+  if (
+    session.threadId === undefined ||
+    prepared.projection.classificationThreadId !== session.threadId
+  )
+    throw new Error('v2 Wiki 的 Projection 与 AgentSession Codex Thread 审计信息不一致。');
   const scannedAt = new Date(
     prepared.snapshot.session.finishedAt ?? prepared.snapshot.session.startedAt,
   );
@@ -164,11 +231,20 @@ async function generateWikiArtifacts(
     scannedAt,
     prepared.layout.rootDirectory,
   );
-  const artifacts = await generateReportArtifacts(prepared.projection, {
-    formats: ['docx', 'html', 'markdown'],
-    outputDirectory,
-    sourceSnapshot: prepared.snapshot,
-  });
+  let artifacts: Awaited<ReturnType<typeof generateReportArtifacts>>;
+  try {
+    artifacts = await generateReportArtifacts(prepared.projection, {
+      formats: ['docx', 'html', 'markdown'],
+      outputDirectory,
+      requireCodexClassification: true,
+      sourceSnapshot: prepared.snapshot,
+    });
+  } catch (error) {
+    await prepared.runtime.recordQualityGateFailure(
+      error instanceof Error ? error.message : String(error),
+    );
+    throw error;
+  }
   const files = [
     artifacts.docxFile,
     artifacts.htmlFile,
@@ -204,6 +280,11 @@ function printStatus(logger: Logger, prepared: PreparedAgentWorkflow): void {
   logger.info(
     `Probes=${session.budgets.usedRequests}/${session.budgets.maxRequests} Bytes=${session.budgets.usedBytes}/${session.budgets.maxBytes} Duration=${session.budgets.usedDurationMs}/${session.budgets.maxDurationMs}ms`,
   );
+  const discovery = prepared.projection.discoveryWorkspace;
+  if (discovery !== undefined)
+    logger.info(
+      `Discovery=${discovery.discoveryCompleted ? 'completed' : 'in_progress'} Investigations=${discovery.investigations.length} FilteredGroups=${discovery.filteredGroups.length} RawServices=${prepared.projection.services.length}`,
+    );
 }
 
 function printServices(logger: Logger, prepared: PreparedAgentWorkflow): void {
@@ -211,7 +292,11 @@ function printServices(logger: Logger, prepared: PreparedAgentWorkflow): void {
     prepared.projection.serviceAssessments.map((item) => [item.serviceId, item]),
   );
   const lines = prepared.projection.services
-    .filter((service) => assessment.get(service.id)?.reportPlacement !== 'system_summary')
+    .filter(
+      (service) =>
+        assessment.has(service.id) &&
+        assessment.get(service.id)?.reportPlacement !== 'system_summary',
+    )
     .map((service) => {
       const current = assessment.get(service.id);
       return `${service.id}\t${service.displayName ?? service.name}\t${service.status}\t${current?.role ?? 'unknown'}\t${current?.reportPlacement ?? 'needs_review'}`;
@@ -293,6 +378,7 @@ function validateOptions(options: AgentCommandOptions, signal: AbortSignal): Age
     port: options.port,
     maxAgentRounds: options.maxAgentRounds,
     maxProbes: options.maxProbes,
+    preflightTimeoutMs: options.preflightTimeoutMs,
     turnTimeoutMs: options.turnTimeoutMs,
     signal,
     ...(options.acceptNewHostKey === undefined
@@ -313,6 +399,14 @@ function validateOptions(options: AgentCommandOptions, signal: AbortSignal): Age
 
 function withFocus(prompt: string, focusService: string | undefined): string {
   return focusService === undefined ? prompt : `${prompt}\n优先调查服务：${focusService}`;
+}
+
+function formatCoverage(value: number | undefined): string {
+  return value === undefined ? 'unknown' : `${(value * 100).toFixed(1)}%`;
+}
+
+function progressLabel(session: Pick<AgentSession, 'workflowVersion'>): string {
+  return session.workflowVersion === 'm20_evidence_driven' ? 'discovery' : 'classification';
 }
 
 function parsePositiveInteger(value: string): number {

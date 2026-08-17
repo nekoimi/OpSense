@@ -27,6 +27,10 @@ export const ReportMetadataSchema = Type.Object(
     targetPort: Type.Integer({ minimum: 1, maximum: 65_535 }),
     targetUser: Type.Optional(NonEmptyStringSchema),
     title: NonEmptyStringSchema,
+    classificationProvider: Type.Optional(
+      Type.Union([Type.Literal('codex'), Type.Literal('baseline'), Type.Literal('legacy')]),
+    ),
+    classificationCompleted: Type.Optional(Type.Boolean()),
   },
   { additionalProperties: false },
 );

@@ -7,7 +7,17 @@ export const AiServiceRoleSchema = Type.Union([
   Type.Literal('application'),
   Type.Literal('middleware'),
   Type.Literal('infrastructure'),
+  Type.Literal('edge'),
+  Type.Literal('container_platform'),
   Type.Literal('system'),
+  Type.Literal('unknown'),
+]);
+
+export const AiServiceImportanceSchema = Type.Union([
+  Type.Literal('critical'),
+  Type.Literal('high'),
+  Type.Literal('medium'),
+  Type.Literal('low'),
   Type.Literal('unknown'),
 ]);
 
@@ -35,6 +45,18 @@ export const AiServiceAssessmentSchema = Type.Object(
     role: AiServiceRoleSchema,
     reportPlacement: ReportPlacementSchema,
     purpose: Type.Optional(Type.String()),
+    importance: Type.Optional(AiServiceImportanceSchema),
+    statusInterpretation: Type.Optional(Type.String()),
+    unknowns: Type.Optional(Type.Array(Type.String())),
+    reviewItems: Type.Optional(Type.Array(Type.String())),
+    classificationSource: Type.Optional(
+      Type.Union([
+        Type.Literal('codex'),
+        Type.Literal('baseline'),
+        Type.Literal('legacy'),
+        Type.Literal('local_candidate'),
+      ]),
+    ),
     reason: NonEmptyStringSchema,
     confidence: AiConfidenceSchema,
     evidenceIds: Type.Array(IdSchema),
@@ -105,11 +127,81 @@ export const PathSearchProbeRequestSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const SystemdUnitProbeRequestSchema = Type.Object(
+  {
+    ...ProbeCommon,
+    kind: Type.Literal('systemd_unit'),
+    unitName: NonEmptyStringSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const ProcessRuntimeProbeRequestSchema = Type.Object(
+  {
+    ...ProbeCommon,
+    kind: Type.Literal('process_runtime'),
+    pid: Type.Integer({ minimum: 1, maximum: 4_194_304 }),
+  },
+  { additionalProperties: false },
+);
+
+export const ProcessCgroupProbeRequestSchema = Type.Object(
+  {
+    ...ProbeCommon,
+    kind: Type.Literal('process_cgroup'),
+    pid: Type.Integer({ minimum: 1, maximum: 4_194_304 }),
+  },
+  { additionalProperties: false },
+);
+
+export const SocketOwnershipProbeRequestSchema = Type.Object(
+  {
+    ...ProbeCommon,
+    kind: Type.Literal('socket_ownership'),
+    socketId: IdSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const ContainerInspectProbeRequestSchema = Type.Object(
+  {
+    ...ProbeCommon,
+    kind: Type.Literal('container_inspect'),
+    containerId: IdSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const ComposeMetadataProbeRequestSchema = Type.Object(
+  {
+    ...ProbeCommon,
+    kind: Type.Literal('compose_metadata'),
+    composeProjectId: IdSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const LogMetadataProbeRequestSchema = Type.Object(
+  {
+    ...ProbeCommon,
+    kind: Type.Literal('log_metadata'),
+    path: NonEmptyStringSchema,
+  },
+  { additionalProperties: false },
+);
+
 export const ProbeRequestSchema = Type.Union([
   DirectoryMetadataProbeRequestSchema,
   DirectoryListingProbeRequestSchema,
   ConfigSummaryProbeRequestSchema,
   PathSearchProbeRequestSchema,
+  SystemdUnitProbeRequestSchema,
+  ProcessRuntimeProbeRequestSchema,
+  ProcessCgroupProbeRequestSchema,
+  SocketOwnershipProbeRequestSchema,
+  ContainerInspectProbeRequestSchema,
+  ComposeMetadataProbeRequestSchema,
+  LogMetadataProbeRequestSchema,
 ]);
 
 export const AiPlanSchema = Type.Object(
@@ -231,6 +323,7 @@ export type AiPlanProposal = Static<typeof AiPlanProposalSchema>;
 export type AiProbeAudit = Static<typeof AiProbeAuditSchema>;
 export type AiRun = Static<typeof AiRunSchema>;
 export type AiServiceAssessment = Static<typeof AiServiceAssessmentSchema>;
+export type AiServiceImportance = Static<typeof AiServiceImportanceSchema>;
 export type AiServiceRole = Static<typeof AiServiceRoleSchema>;
 export type ProbeAuditRecord = Static<typeof ProbeAuditRecordSchema>;
 export type ProbeRequest = Static<typeof ProbeRequestSchema>;

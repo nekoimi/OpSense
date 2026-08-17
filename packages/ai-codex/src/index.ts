@@ -244,7 +244,7 @@ export class CodexProvider implements AiProvider {
           ? this.client.startThread(threadOptions)
           : this.client.resumeThread(threadId, threadOptions);
       const proposals: AiPlanProposal[] = [];
-      for (const batch of classificationBatches(input.snapshot, input.baselinePlan)) {
+      for (const batch of buildCodexClassificationBatches(input.snapshot, input.baselinePlan)) {
         const planResult = await runStructured<AiPlanProposal>(
           thread,
           classificationPrompt(batch),
@@ -430,21 +430,21 @@ function repairPrompt(error: unknown): string {
   return `上一轮输出未通过本地校验：${detail}\n请只返回符合上一轮 JSON Schema 的完整 JSON 对象，不要添加 Markdown、解释或命令。`;
 }
 
-interface ClassificationBatch {
+export interface ClassificationBatch {
   candidates: unknown[];
   evidenceIndex: unknown[];
 }
 
 function classificationPrompt(batch: ClassificationBatch): string {
-  return `下面是 OpSense 本地基线已保留的服务候选和对应 Evidence 索引：
+  return `下面是 OpSense 本地采集到的全部服务候选、非权威 candidateHints 和对应 Evidence 索引：
 ${JSON.stringify(batch)}
 
-任务：审查本批候选。只在基线分类需要调整时输出对应 serviceAssessments 或 pathAssessments；无需复制未变化的条目。在确有证据缺口时提出 probeRequests。
+任务：逐项审查本批全部候选。每个候选必须输出一个 serviceAssessment，本地提示不能作为最终判断；路径语义有证据时输出 pathAssessments。在确有证据缺口时提出 probeRequests。
 
 硬约束：
 1. 不得调用工具、执行命令、修改文件、访问网络、连接服务器或输出远程 Shell 命令。
 2. 不得删除候选或修改状态、端口、路径、ID、部署方式等事实字段。
-3. role 仅可为 application、middleware、infrastructure、system、unknown。
+3. role 仅可为 application、middleware、infrastructure、edge、container_platform、system、unknown。
 4. reportPlacement 仅可为 primary、supporting、system_summary、needs_review。
 5. 普通 Linux 系统 unit 可归入 system_summary；失败、外部监听、自定义路径、Docker、Compose 候选不得静默隐藏。
 6. ProbeRequest 只允许 directory_metadata、directory_listing、config_summary、path_search，禁止输出 Shell。
@@ -466,86 +466,86 @@ ${JSON.stringify(finalAnalysisPayload(snapshot, plan, probeAudit))}
 6. 只返回符合 JSON Schema 的完整 JSON，不要 Markdown、命令或额外说明。`;
 }
 
-function classificationBatches(snapshot: ScanSnapshot, baseline: AiPlan): ClassificationBatch[] {
+export function buildCodexClassificationBatches(
+  snapshot: ScanSnapshot,
+  baseline: AiPlan,
+): ClassificationBatch[] {
   const assessmentById = new Map(baseline.serviceAssessments.map((item) => [item.serviceId, item]));
   const units = new Map(snapshot.systemdUnits.map((item) => [item.id, item]));
   const processes = new Map(snapshot.processes.map((item) => [item.pid, item]));
   const sockets = new Map(snapshot.sockets.map((item) => [item.id, item]));
   const containers = new Map(snapshot.containers.map((item) => [item.id, item]));
-  const candidates = snapshot.services.flatMap((service) => {
+  const candidates = snapshot.services.map((service) => {
     const baselineAssessment = assessmentById.get(service.id);
-    if (baselineAssessment?.reportPlacement === 'system_summary') return [];
-    return [
-      {
-        baseline: baselineAssessment,
-        service: {
-          id: service.id,
-          name: service.name,
-          displayName: service.displayName,
-          status: service.status,
-          deploymentType: service.deploymentType,
-          enabledAtBoot: service.enabledAtBoot,
-          startCommand: service.startCommand,
-          paths: {
-            deploy: service.deployDirectories,
-            config: service.configFiles,
-            environment: service.environmentFiles,
-            log: service.logLocations,
-            data: service.dataDirectories,
-          },
-          units: service.systemdUnitIds.flatMap((id) => {
-            const unit = units.get(id);
-            return unit === undefined
-              ? []
-              : [
-                  {
-                    id,
-                    name: unit.name,
-                    description: unit.description,
-                    execStart: unit.execStart,
-                    fragmentPath: unit.fragmentPath,
-                  },
-                ];
-          }),
-          processes: service.processIds.flatMap((pid) => {
-            const process = processes.get(pid);
-            return process === undefined
-              ? []
-              : [{ pid, command: process.command, executablePath: process.executablePath }];
-          }),
-          sockets: service.socketIds.flatMap((id) => {
-            const socket = sockets.get(id);
-            return socket === undefined
-              ? []
-              : [
-                  {
-                    id,
-                    protocol: socket.protocol,
-                    address: socket.localAddress,
-                    port: socket.localPort,
-                    exposed: socket.exposed,
-                  },
-                ];
-          }),
-          containers: service.containerIds.flatMap((id) => {
-            const container = containers.get(id);
-            return container === undefined
-              ? []
-              : [
-                  {
-                    id,
-                    name: container.name,
-                    image: container.image,
-                    state: container.state,
-                    mounts: container.mounts,
-                    ports: container.ports,
-                  },
-                ];
-          }),
-          evidenceIds: service.evidenceIds,
+    return {
+      candidateHints: baselineAssessment,
+      service: {
+        id: service.id,
+        name: service.name,
+        displayName: service.displayName,
+        status: service.status,
+        deploymentType: service.deploymentType,
+        enabledAtBoot: service.enabledAtBoot,
+        startCommand: service.startCommand,
+        paths: {
+          deploy: service.deployDirectories,
+          config: service.configFiles,
+          environment: service.environmentFiles,
+          log: service.logLocations,
+          data: service.dataDirectories,
         },
+        units: service.systemdUnitIds.flatMap((id) => {
+          const unit = units.get(id);
+          return unit === undefined
+            ? []
+            : [
+                {
+                  id,
+                  name: unit.name,
+                  description: unit.description,
+                  execStart: unit.execStart,
+                  fragmentPath: unit.fragmentPath,
+                },
+              ];
+        }),
+        processes: service.processIds.flatMap((pid) => {
+          const process = processes.get(pid);
+          return process === undefined
+            ? []
+            : [{ pid, command: process.command, executablePath: process.executablePath }];
+        }),
+        sockets: service.socketIds.flatMap((id) => {
+          const socket = sockets.get(id);
+          return socket === undefined
+            ? []
+            : [
+                {
+                  id,
+                  protocol: socket.protocol,
+                  address: socket.localAddress,
+                  port: socket.localPort,
+                  exposed: socket.exposed,
+                },
+              ];
+        }),
+        containers: service.containerIds.flatMap((id) => {
+          const container = containers.get(id);
+          return container === undefined
+            ? []
+            : [
+                {
+                  id,
+                  name: container.name,
+                  image: container.image,
+                  state: container.state,
+                  mounts: container.mounts,
+                  ports: container.ports,
+                },
+              ];
+        }),
+        evidenceIds: service.evidenceIds,
       },
-    ];
+    };
   });
   const batches: ClassificationBatch[] = [];
   for (let index = 0; index < candidates.length; index += 30) {

@@ -23,6 +23,7 @@ export interface CreateAgentSessionOptions {
   now?: () => Date;
   model?: string;
   budgets?: Partial<ProbeBudget>;
+  workflowVersion?: 'm19_full_candidate_review' | 'm20_evidence_driven';
 }
 
 export function createAgentSession(options: CreateAgentSessionOptions): AgentSession {
@@ -54,6 +55,7 @@ export function createAgentSession(options: CreateAgentSessionOptions): AgentSes
     unresolvedQuestions: [],
     updatedAt: now,
     ...(options.model === undefined ? {} : { model: options.model }),
+    ...(options.workflowVersion === undefined ? {} : { workflowVersion: options.workflowVersion }),
   };
   assertSchema(AgentSessionSchema, session);
   return session;
@@ -132,6 +134,7 @@ export function failSessionForCodex(
     lastError: error,
     repairSuggestions: [...repairSuggestions],
     state: 'failed',
+    stopReason: 'codex_failed',
     updatedAt: finishedAt,
   };
   assertSchema(AgentSessionSchema, failed);

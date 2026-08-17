@@ -42,6 +42,7 @@ function renderOverview(model: ReportModel): string {
 | 扫描状态 | ${statusLabel(model.metadata.state)} |
 | 扫描时间 | ${formatDateTime(model.metadata.scannedAt)} |
 | 报告时间 | ${formatDateTime(model.metadata.generatedAt)} |
+| 语义来源 | ${classificationLabel(model.metadata.classificationProvider, model.metadata.classificationCompleted)} |
 | OpSense 版本 | ${cell(model.metadata.opsenseVersion)} |
 
 ${heading(2, '执行摘要')}
@@ -62,6 +63,13 @@ ${heading(2, '报告文件')}
 - [未知项](unknowns.md)
 - [证据附录](evidence.md)
 `;
+}
+
+function classificationLabel(provider: string | undefined, completed: boolean | undefined): string {
+  if (provider === 'codex')
+    return completed === true ? 'Codex Agent（完整审查）' : 'Codex Agent（未完成）';
+  if (provider === 'legacy') return 'Legacy AI 分析（兼容模式）';
+  return 'Baseline 本地规则（兼容模式）';
 }
 
 function renderSystem(model: ReportModel): string {

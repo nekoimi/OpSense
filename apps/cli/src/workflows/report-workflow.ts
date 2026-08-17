@@ -3,8 +3,13 @@ import { access, constants, readFile } from 'node:fs/promises';
 import { generateReportArtifacts } from '@opsense/report';
 import type { GeneratedReportArtifacts, ReportFormat, ReportProfile } from '@opsense/report';
 import { buildInventoryProjection } from '@opsense/projection';
-import { AgentSessionSchema, AiAnalysisSchema, assertSchema } from '@opsense/schema';
-import type { AiAnalysis, ScanSnapshot } from '@opsense/schema';
+import {
+  AgentSessionSchema,
+  AiAnalysisSchema,
+  InventoryProjectionSchema,
+  assertSchema,
+} from '@opsense/schema';
+import type { AiAnalysis, InventoryProjection, ScanSnapshot } from '@opsense/schema';
 import {
   createReportDirectory,
   createRunWorkspaceLayout,
@@ -42,10 +47,13 @@ export async function runReportWorkflow(
   const layout = createRunWorkspaceLayout(options.scan, workspaceRoot);
   const snapshot = await readSnapshotFile(layout.snapshotFile);
   const analysis = await readOptionalAnalysis(layout.aiOutputFile);
-  const projection = buildInventoryProjection(snapshot, {
-    ...(analysis === undefined ? {} : { analysis }),
-  });
-  await writeJsonAtomic(layout.agentProjectionFile, projection);
+  const projection =
+    options.profile === 'wiki'
+      ? await readAgentProjection(layout.agentProjectionFile)
+      : buildInventoryProjection(snapshot, {
+          ...(analysis === undefined ? {} : { analysis }),
+        });
+  if (options.profile !== 'wiki') await writeJsonAtomic(layout.agentProjectionFile, projection);
   const scannedAt = new Date(snapshot.session.finishedAt ?? snapshot.session.startedAt);
   const outputDirectory = createReportDirectory(
     snapshot.session.target.host,
@@ -56,11 +64,18 @@ export async function runReportWorkflow(
     formats: options.formats,
     outputDirectory,
     ...(options.profile === undefined ? {} : { profile: options.profile }),
+    requireCodexClassification: options.profile === 'wiki',
     sourceSnapshot: snapshot,
     ...(options.timeZone === undefined ? {} : { timeZone: options.timeZone }),
   });
   await recordAgentArtifacts(layout.agentSessionFile, artifacts);
   return { ...(analysis === undefined ? {} : { analysis }), artifacts, snapshot };
+}
+
+async function readAgentProjection(file: string): Promise<InventoryProjection> {
+  const value = JSON.parse(await readFile(file, 'utf8')) as unknown;
+  assertSchema(InventoryProjectionSchema, value);
+  return value;
 }
 
 async function recordAgentArtifacts(

@@ -42,7 +42,12 @@ export function buildServiceWikiProjection(
 ): ServiceWikiProjection {
   const now = options.now ?? (() => new Date());
   const generatedAt = now().toISOString();
-  const entries = projection.services.map((service) =>
+  const evidenceDriven = projection.discoveryWorkspace?.workflowVersion === 'm20_evidence_driven';
+  const assessedServiceIds = new Set(projection.serviceAssessments.map((item) => item.serviceId));
+  const wikiServices = evidenceDriven
+    ? projection.services.filter((service) => assessedServiceIds.has(service.id))
+    : projection.services;
+  const entries = wikiServices.map((service) =>
     buildServiceWikiEntry(service, projection, generatedAt, options),
   );
   const reviewServiceIds = entries
@@ -112,6 +117,21 @@ export function buildWikiEntryDraft(
   options: BuildServiceWikiOptions = {},
 ): WikiEntryDraft {
   const assessment = assessmentFor(projection, service.id);
+  const classifiedPaths = pathsFor(service, projection);
+  const pathEvidence = (
+    semantic: NonNullable<InventoryProjection['pathAssessments']>[number]['semantic'],
+  ): string[] =>
+    projection.classificationProvider !== 'codex'
+      ? [...new Set(service.evidenceIds)]
+      : [
+          ...new Set(
+            (projection.pathAssessments ?? [])
+              .filter((item) => item.serviceIds.includes(service.id) && item.semantic === semantic)
+              .flatMap((item) => item.evidenceIds),
+          ),
+        ];
+  const pathConfidence: Confidence =
+    projection.classificationProvider === 'codex' ? 'inferred' : service.confidence;
   const serviceEvidenceIds = [...new Set(service.evidenceIds)];
   const linkedUnits = projection.systemdUnits.filter((unit) =>
     service.systemdUnitIds.includes(unit.id),
@@ -197,21 +217,16 @@ export function buildWikiEntryDraft(
   claim('purpose', purpose, assessment?.evidenceIds ?? serviceEvidenceIds, purposeConfidence);
   claim('status', service.status, serviceEvidenceIds, service.confidence);
   claim('deploymentType', service.deploymentType, serviceEvidenceIds, service.confidence);
-  claim('deployDirectory', service.deployDirectories[0], serviceEvidenceIds, service.confidence);
+  claim('deployDirectory', classifiedPaths.deploy[0], pathEvidence('deploy'), pathConfidence);
   claim(
     'ports',
     ports.length === 0 ? undefined : ports.map(formatPort).join(', '),
     ports.flatMap((port) => port.evidenceIds),
     ports.some((port) => port.evidenceIds.length > 0) ? 'confirmed' : 'unknown',
   );
-  claim('configFiles', service.configFiles.join(', '), serviceEvidenceIds, service.confidence);
-  claim('logLocations', service.logLocations.join(', '), serviceEvidenceIds, service.confidence);
-  claim(
-    'dataDirectories',
-    service.dataDirectories.join(', '),
-    serviceEvidenceIds,
-    service.confidence,
-  );
+  claim('configFiles', classifiedPaths.config.join(', '), pathEvidence('config'), pathConfidence);
+  claim('logLocations', classifiedPaths.log.join(', '), pathEvidence('log'), pathConfidence);
+  claim('dataDirectories', classifiedPaths.data.join(', '), pathEvidence('data'), pathConfidence);
   claim(
     'lifecycle',
     lifecycle.start?.command,
@@ -224,12 +239,14 @@ export function buildWikiEntryDraft(
   const unknowns = [
     ...new Set([
       ...service.unknownFields,
+      ...(assessment?.unknowns ?? []),
       ...missingFields.map((field) => `缺少 ${field} 的有效证据。`),
     ]),
   ];
   const reviewItems = [
     ...(service.conflictFields ?? []).map((field) => `字段存在冲突：${field}`),
     ...(assessment?.reportPlacement === 'needs_review' ? ['服务分类需要人工确认。'] : []),
+    ...(assessment?.reviewItems ?? []),
     ...(coverage < (options.minimumCoverage ?? 0.8)
       ? [`服务证据覆盖率 ${(coverage * 100).toFixed(0)}%，低于建议阈值。`]
       : []),
@@ -265,9 +282,9 @@ export function buildWikiEntryDraft(
   const identityName = service.displayName ?? service.name;
   return {
     configuration: {
-      backupPaths: [],
-      configFiles: [...service.configFiles],
-      environmentFiles: [...service.environmentFiles],
+      backupPaths: classifiedPaths.backup,
+      configFiles: classifiedPaths.config,
+      environmentFiles: classifiedPaths.environment,
     },
     confidence,
     conflicts,
@@ -283,7 +300,7 @@ export function buildWikiEntryDraft(
         name: container.name,
         state: container.state,
       })),
-      deployDirectories: [...service.deployDirectories],
+      deployDirectories: classifiedPaths.deploy,
       deploymentType: service.deploymentType,
       processIds: [...service.processIds],
       systemdUnitIds: [...service.systemdUnitIds],
@@ -304,7 +321,7 @@ export function buildWikiEntryDraft(
     },
     inferences,
     lifecycle,
-    logging: { logLocations: [...service.logLocations] },
+    logging: { logLocations: classifiedPaths.log },
     oneLineSummary: purpose ?? `${identityName} 服务，当前用途尚未确认。`,
     purpose: {
       ...(purpose === undefined ? {} : { summary: purpose }),
@@ -314,8 +331,8 @@ export function buildWikiEntryDraft(
     reviewItems,
     serviceId: service.id,
     storage: {
-      backupPaths: [],
-      dataDirectories: [...service.dataDirectories],
+      backupPaths: classifiedPaths.backup,
+      dataDirectories: classifiedPaths.data,
       mountIds: linkedMountIds,
     },
     unknowns,
@@ -330,25 +347,56 @@ function assessmentFor(
 }
 
 function wikiRoleFor(
-  service: ServiceRecord,
+  _service: ServiceRecord,
   assessment: AiServiceAssessment | undefined,
 ): WikiServiceRole {
   if (assessment?.reportPlacement === 'system_summary' || assessment?.role === 'system') {
     return 'system_service';
   }
-  if (/^(?:nginx|haproxy|traefik|caddy)(?:[-_.]|$)/i.test(service.name)) {
-    return 'edge_service';
-  }
-  if (
-    (service.deploymentType === 'docker' || service.deploymentType === 'compose') &&
-    /^(?:docker|containerd|podman|cri-o)(?:[-_.]|$)/i.test(service.name)
-  ) {
-    return 'container_platform';
-  }
+  if (assessment?.role === 'edge') return 'edge_service';
+  if (assessment?.role === 'container_platform') return 'container_platform';
   if (assessment?.role === 'infrastructure') return 'infrastructure_service';
   if (assessment?.role === 'middleware') return 'supporting_component';
   if (assessment?.role === 'application') return 'primary_application';
   return 'unknown';
+}
+
+function pathsFor(
+  service: ServiceRecord,
+  projection: InventoryProjection,
+): {
+  backup: string[];
+  config: string[];
+  data: string[];
+  deploy: string[];
+  environment: string[];
+  log: string[];
+} {
+  if (projection.classificationProvider !== 'codex') {
+    return {
+      backup: [],
+      config: [...service.configFiles],
+      data: [...service.dataDirectories],
+      deploy: [...service.deployDirectories],
+      environment: [...service.environmentFiles],
+      log: [...service.logLocations],
+    };
+  }
+  const assessments = (projection.pathAssessments ?? []).filter((item) =>
+    item.serviceIds.includes(service.id),
+  );
+  const forSemantic = (semantic: (typeof assessments)[number]['semantic']): string[] => [
+    ...new Set(assessments.filter((item) => item.semantic === semantic).map((item) => item.path)),
+  ];
+  const config = forSemantic('config');
+  return {
+    backup: forSemantic('backup'),
+    config,
+    data: forSemantic('data'),
+    deploy: forSemantic('deploy'),
+    environment: service.environmentFiles.filter((item) => config.includes(item)),
+    log: forSemantic('log'),
+  };
 }
 
 function lifecycleFor(

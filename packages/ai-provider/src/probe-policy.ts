@@ -75,12 +75,8 @@ export class ProbePlanValidator {
     if (!request.evidenceIds.every((id) => snapshot.evidence.some((item) => item.id === id))) {
       return '引用了不存在的 Evidence ID。';
     }
-    if (
-      request.targetServiceId !== undefined &&
-      !snapshot.services.some((item) => item.id === request.targetServiceId)
-    ) {
-      return '目标服务不存在。';
-    }
+    const targetService = snapshot.services.find((item) => item.id === request.targetServiceId);
+    if (targetService === undefined) return '目标服务不存在。';
     if (request.kind === 'path_search') {
       if (unsafePath(request.searchRoot)) return '搜索根目录被安全策略禁止。';
       if (!approvedRoots(snapshot).some((root) => within(root, request.searchRoot))) {
@@ -91,6 +87,28 @@ export class ProbePlanValidator {
       }
       return undefined;
     }
+    if (request.kind === 'systemd_unit') {
+      const unit = snapshot.systemdUnits.find((item) => item.name === request.unitName);
+      return unit !== undefined && targetService.systemdUnitIds.includes(unit.id)
+        ? undefined
+        : 'systemd unit 不属于目标服务的既有证据。';
+    }
+    if (request.kind === 'process_runtime' || request.kind === 'process_cgroup')
+      return targetService.processIds.includes(request.pid)
+        ? undefined
+        : 'PID 不属于目标服务的既有证据。';
+    if (request.kind === 'socket_ownership')
+      return targetService.socketIds.includes(request.socketId)
+        ? undefined
+        : 'socket 不属于目标服务的既有证据。';
+    if (request.kind === 'container_inspect')
+      return targetService.containerIds.includes(request.containerId)
+        ? undefined
+        : '容器不属于目标服务的既有证据。';
+    if (request.kind === 'compose_metadata')
+      return targetService.composeProjectIds.includes(request.composeProjectId)
+        ? undefined
+        : 'Compose 项目不属于目标服务的既有证据。';
     if (unsafePath(request.path)) return '目标路径被安全策略禁止。';
     if (!knownPaths(snapshot).some((known) => within(known, request.path))) {
       return '目标路径无法追溯到已采集路径证据。';
@@ -98,6 +116,11 @@ export class ProbePlanValidator {
     if (request.kind === 'config_summary' && !looksLikeConfig(request.path)) {
       return '配置摘要仅允许读取已知配置文件类型。';
     }
+    if (
+      request.kind === 'log_metadata' &&
+      !targetService.logLocations.some((location) => within(location, request.path))
+    )
+      return '日志目录不属于目标服务的既有证据。';
     return undefined;
   }
 }

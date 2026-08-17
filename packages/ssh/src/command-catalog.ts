@@ -176,6 +176,37 @@ export const COMMAND_CATALOG = [
     supportedDistributions: ALL_DISTRIBUTIONS,
     timeoutMs: 15_000,
   },
+  {
+    arguments: [
+      { literal: '-p' },
+      { parameter: 'pid' },
+      { literal: '-o' },
+      { literal: 'pid=,ppid=,user=,etimes=,args=' },
+    ],
+    executable: 'ps',
+    id: 'runtime.process-details',
+    maxOutputBytes: 500_000,
+    parameters: {
+      pid: { kind: 'integer', max: 4_194_304, min: 1 },
+    },
+    requiredCommands: ['ps'],
+    sudo: 'never',
+    supportedDistributions: ALL_DISTRIBUTIONS,
+    timeoutMs: 15_000,
+  },
+  {
+    arguments: [{ parameter: 'path' }],
+    executable: 'cat',
+    id: 'runtime.process-cgroup',
+    maxOutputBytes: 100_000,
+    parameters: {
+      path: { kind: 'path', maxLength: 64, pattern: /^\/proc\/[0-9]+\/cgroup$/ },
+    },
+    requiredCommands: ['cat'],
+    sudo: 'never',
+    supportedDistributions: ALL_DISTRIBUTIONS,
+    timeoutMs: 15_000,
+  },
   command('docker.ps', 'docker', ['ps', '-a', '--no-trunc', '--format', '{{json .}}'], {
     maxOutputBytes: 5_000_000,
     sudo: 'allowed',

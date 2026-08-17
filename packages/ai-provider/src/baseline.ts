@@ -14,7 +14,6 @@ const MIDDLEWARE_PATTERN =
   /(?:nginx|apache|httpd|haproxy|traefik|mysql|mariadb|postgres|redis|memcached|mongo|elasticsearch|opensearch|kafka|zookeeper|rabbitmq|rocketmq|nacos|etcd|minio|doris|hadoop|hdfs|yarn|spark|flink|clickhouse|prometheus|grafana|loki|jaeger|consul|vault)/i;
 const INFRASTRUCTURE_PATTERN =
   /(?:docker|containerd|podman|kubelet|kubernetes|node-exporter|cadvisor)/i;
-const SEARCHABLE_PLATFORM_PATTERN = /(?:doris|hadoop|hdfs|yarn|minio)/i;
 const CUSTOM_ROOT_PATTERN = /^\/(?:apps?|data|home|opt|srv|usr\/local)(?:\/|$)/;
 const SYSTEM_PATH_PATTERN =
   /^\/(?:bin|boot|dev|etc|lib(?:32|64)?|proc|run|sbin|sys|usr\/(?:bin|lib|libexec|sbin)|var\/(?:cache|lib\/systemd|log\/journal|run))(?:\/|$)/;
@@ -85,9 +84,24 @@ export function governAiPlan(
   const serviceAssessments = snapshot.services.map((service) => {
     const fallback = baselineByService.get(service.id) ?? classifyService(snapshot, service);
     const proposed = candidateByService.get(service.id);
-    if (proposed === undefined) return fallback;
+    if (proposed === undefined) {
+      if (candidate.provider !== 'codex') return fallback;
+      return {
+        classificationSource: 'local_candidate' as const,
+        confidence: 'unknown' as const,
+        evidenceIds: [...service.evidenceIds],
+        importance: 'unknown' as const,
+        reason: 'Codex 未返回该候选的语义判断，保留为待审查项。',
+        reportPlacement: 'needs_review' as const,
+        reviewItems: ['Codex 分类结果缺失，需要恢复 Agent 后继续审查。'],
+        role: 'unknown' as const,
+        serviceId: service.id,
+        unknowns: ['服务角色、用途和重要性尚未完成 Codex 审查。'],
+      };
+    }
     const governed = {
       ...proposed,
+      classificationSource: 'codex' as const,
       evidenceIds: proposed.evidenceIds.filter((id) => evidenceIds.has(id)),
     };
     if (mustRemainVisible(snapshot, service) && governed.reportPlacement === 'system_summary') {
@@ -101,7 +115,12 @@ export function governAiPlan(
   });
   const candidatePaths = new Set(allCandidatePaths(snapshot));
   const pathAssessments = candidate.pathAssessments.filter((item) => candidatePaths.has(item.path));
-  const baselinePaths = new Map(baseline.pathAssessments.map((item) => [item.path, item]));
+  const baselinePaths = new Map(
+    (candidate.provider === 'codex' ? [] : baseline.pathAssessments).map((item) => [
+      item.path,
+      item,
+    ]),
+  );
   for (const item of pathAssessments) baselinePaths.set(item.path, item);
   return {
     generatedAt: now().toISOString(),
@@ -254,9 +273,8 @@ function classifyPaths(snapshot: ScanSnapshot): AiPathAssessment[] {
 function createBaselineProbeRequests(snapshot: ScanSnapshot): ProbeRequest[] {
   const roots = approvedSearchRoots(snapshot);
   if (roots.length === 0) return [];
-  return snapshot.services.flatMap((service) => {
-    if (!SEARCHABLE_PLATFORM_PATTERN.test(service.name) || servicePaths(service).length > 0)
-      return [];
+  return snapshot.services.slice(0, 20).flatMap((service) => {
+    if (servicePaths(service).length > 0) return [];
     const root = roots[0];
     const evidenceId = service.evidenceIds[0];
     if (root === undefined || evidenceId === undefined) return [];

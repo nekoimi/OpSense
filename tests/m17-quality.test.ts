@@ -58,6 +58,19 @@ describe('M17 report quality gate', () => {
     );
     expect(() => assertReportQuality(result)).toThrow('报告质量门禁失败');
   });
+
+  it('accepts service unknown fields surfaced by the corresponding Wiki entry', async () => {
+    const snapshot = await fixtureSnapshot();
+    snapshot.services[0]!.unknownFields = ['status', 'purpose'];
+    const projection = buildInventoryProjection(snapshot);
+    const model = createReportModel(projection);
+    const wiki = buildServiceWikiProjection(projection);
+    const result = evaluateReportQuality(projection, model, wiki);
+
+    expect(wiki.entries[0]?.unknowns).toEqual(expect.arrayContaining(['status', 'purpose']));
+    expect(result.issues.some((item) => item.code === 'UNKNOWN_NOT_SURFACED')).toBe(false);
+    expect(result.passed).toBe(true);
+  });
 });
 
 async function fixtureSnapshot(): Promise<ScanSnapshot> {

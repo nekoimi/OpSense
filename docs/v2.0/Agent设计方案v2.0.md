@@ -208,7 +208,7 @@ opsense agent --scan <scan-id> --prompt "列出对外暴露的主要服务" --on
 * `resume`：从当前状态继续未完成的调查。
 * `exit`：安全结束会话并持久化状态。
 
-自然语言问题和固定命令共用同一个 AgentSession。`--once` 只执行一轮并输出 AgentResponse，不进入 REPL。
+自然语言问题和固定命令共用同一个 AgentSession。`--once` 只执行一轮并输出 AgentResponse，不进入 REPL。`--complete` 在首次 SSH 扫描后自动恢复本地 AgentSession，直到 Codex 完成全部服务与路径审查，并自动生成 HTML、Word 和 Markdown 服务器 Wiki；该模式不重新连接服务器。
 
 每轮返回统一的 `AgentResponse`：
 

@@ -31,10 +31,33 @@ describe('M12 Codex hard dependency preflight', () => {
     expect(result.checkedAt).toBe('2026-08-14T05:00:00.000Z');
     expect(optionsSeen[0]).toMatchObject({
       approvalPolicy: 'never',
+      modelReasoningEffort: 'low',
       networkAccessEnabled: false,
       sandboxMode: 'read-only',
       workingDirectory: 'C:/opsense-fixture',
     });
+  });
+
+  it('reports a dedicated timeout instead of a generic abort error', async () => {
+    const probe = new CodexSdkPreflightProbe({
+      client: {
+        startThread() {
+          return {
+            id: 'thread-timeout',
+            run: async (_prompt: string, options: { signal?: AbortSignal }) =>
+              new Promise((_, reject) => {
+                options.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
+                  once: true,
+                });
+              }),
+          } as never;
+        },
+      } as never,
+      timeoutMs: 1,
+      workingDirectory: 'C:/opsense-fixture',
+    });
+
+    await expect(requireCodex(probe)).rejects.toThrow('Codex preflight timed out after 1 ms.');
   });
 
   it('rejects non-exact structured output', async () => {

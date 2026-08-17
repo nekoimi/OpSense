@@ -7,11 +7,16 @@ import {
   ProbeGovernor,
   ToolRouter,
   createAgentSession,
+  requireCodex,
 } from '@opsense/agent-runtime';
-import { CodexAgentThreadAdapter } from '@opsense/ai-codex';
+import { CodexAgentThreadAdapter, CodexSdkPreflightProbe } from '@opsense/ai-codex';
 import { executeAiProbeRequests } from '@opsense/collectors';
 import { buildEvidenceIndex } from '@opsense/discovery';
-import { buildInventoryProjection } from '@opsense/projection';
+import {
+  applyProjectionDecision,
+  applyDiscoveryPlan,
+  buildInventoryProjection,
+} from '@opsense/projection';
 import { redactSnapshot } from '@opsense/redaction';
 import {
   AgentSessionSchema,
@@ -25,9 +30,11 @@ import type {
   ProbeRequest,
   ScanSnapshot,
 } from '@opsense/schema';
+import type { CodexPreflightProbe } from '@opsense/agent-runtime';
 import {
   createRunWorkspaceLayout,
   createWorkspaceLayout,
+  ensureWorkspace,
   ensureRunWorkspace,
   writeJsonAtomic,
 } from '@opsense/workspace';
@@ -46,6 +53,7 @@ export interface AgentWorkflowOptions {
   model?: string;
   password?: string;
   port: number;
+  preflightTimeoutMs?: number;
   provider: 'codex';
   resume?: string;
   scan?: string;
@@ -53,6 +61,7 @@ export interface AgentWorkflowOptions {
   turnTimeoutMs?: number;
   user?: string;
   workspace?: string;
+  preflight?: CodexPreflightProbe;
 }
 
 export interface PreparedAgentWorkflow {
@@ -66,6 +75,26 @@ export interface PreparedAgentWorkflow {
 export async function prepareAgentWorkflow(
   options: AgentWorkflowOptions,
 ): Promise<PreparedAgentWorkflow> {
+  const workspace = createWorkspaceLayout(options.workspace);
+  await ensureWorkspace(workspace.rootDirectory);
+  const preflight =
+    options.preflight ??
+    new CodexSdkPreflightProbe({
+      workingDirectory: workspace.rootDirectory,
+      ...(options.model === undefined ? {} : { model: options.model }),
+      ...(options.preflightTimeoutMs === undefined
+        ? {}
+        : { timeoutMs: options.preflightTimeoutMs }),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    });
+  const checked = await requireCodex(preflight);
+  const cachedPreflight: CodexPreflightProbe = {
+    check: async () => ({
+      available: checked.available,
+      checks: checked.checks,
+      ...(checked.threadId === undefined ? {} : { threadId: checked.threadId }),
+    }),
+  };
   const source = await resolveSource(options);
   const { layout } = source;
   const snapshot = source.snapshot;
@@ -81,6 +110,9 @@ export async function prepareAgentWorkflow(
         maxRequests: options.maxProbes,
         maxRounds: options.maxProbes,
       },
+      ...(projection.discoveryWorkspace === undefined
+        ? {}
+        : { workflowVersion: projection.discoveryWorkspace.workflowVersion }),
     });
   const store = new FileAgentSessionStore(layout);
   if (existingSession === undefined) await store.save(session);
@@ -122,7 +154,20 @@ export async function prepareAgentWorkflow(
     projection,
     context,
     governor,
-    applyProjectionUpdate: (decision) => decision.changes.map((item) => item.objectId),
+    applyProjectionUpdate: async (decision, currentSession) => {
+      const changedIds = applyProjectionDecision(projection, decision, {
+        ...(currentSession.threadId === undefined ? {} : { threadId: currentSession.threadId }),
+      });
+      await writeJsonAtomic(layout.agentProjectionFile, projection);
+      return changedIds;
+    },
+    applyDiscoveryPlan: async (plan, currentSession) => {
+      const changedIds = applyDiscoveryPlan(projection, plan, {
+        ...(currentSession.threadId === undefined ? {} : { threadId: currentSession.threadId }),
+      });
+      await writeJsonAtomic(layout.agentProjectionFile, projection);
+      return changedIds;
+    },
   });
   const runtime = new AgentRuntime({
     scanId: snapshot.session.id,
@@ -130,8 +175,10 @@ export async function prepareAgentWorkflow(
     store,
     context,
     tools,
+    preflight: cachedPreflight,
     thread: new CodexAgentThreadAdapter(),
     maxTurns: options.maxAgentRounds,
+    requireClassificationComplete: true,
     ...(options.turnTimeoutMs === undefined ? {} : { turnTimeoutMs: options.turnTimeoutMs }),
     ...(options.model === undefined ? {} : { model: options.model }),
     workingDirectory: layout.agentSandboxDirectory,
@@ -221,9 +268,16 @@ async function loadOrBuildProjection(
   try {
     const value = JSON.parse(await readFile(layout.agentProjectionFile, 'utf8')) as unknown;
     assertSchema(InventoryProjectionSchema, value);
-    return value;
+    return buildInventoryProjection(snapshot, {
+      mode: 'agent',
+      previousProjection: value,
+      workflowVersion: value.discoveryWorkspace?.workflowVersion ?? 'm19_full_candidate_review',
+    });
   } catch {
-    return buildInventoryProjection(snapshot);
+    return buildInventoryProjection(snapshot, {
+      mode: 'agent',
+      workflowVersion: 'm20_evidence_driven',
+    });
   }
 }
 
@@ -245,7 +299,15 @@ async function reconcileProbeResult(
   };
   const redacted = redactSnapshot(merged).value;
   Object.assign(snapshot, redacted);
-  Object.assign(projection, buildInventoryProjection(snapshot));
+  Object.assign(
+    projection,
+    buildInventoryProjection(snapshot, {
+      mode: 'agent',
+      previousProjection: projection,
+      workflowVersion:
+        projection.discoveryWorkspace?.workflowVersion ?? 'm19_full_candidate_review',
+    }),
+  );
   Object.assign(evidenceIndex, buildEvidenceIndex(projection));
   await Promise.all([
     writeJsonAtomic(layout.snapshotFile, snapshot),

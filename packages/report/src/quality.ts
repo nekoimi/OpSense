@@ -78,6 +78,11 @@ export function evaluateReportQuality(
   }
 
   const visibleServiceIds = new Set(model.services.map((item) => item.id));
+  const wikiEntryByServiceId = new Map(wiki.entries.map((entry) => [entry.serviceId, entry]));
+  const projectionServiceById = new Map(
+    projection.services.map((service) => [service.id, service]),
+  );
+  const systemdUnitById = new Map(projection.systemdUnits.map((unit) => [unit.id, unit]));
   for (const item of model.services) {
     if (item.role === 'system' || item.reportPlacement === 'system_summary')
       add(
@@ -113,7 +118,14 @@ export function evaluateReportQuality(
           item.id,
         );
     }
-    if (item.startCommand !== undefined && item.evidenceIds.length === 0)
+    const projectionService = projectionServiceById.get(item.id);
+    const lifecycleEvidenceIds = [
+      ...(projectionService?.evidenceIds ?? []),
+      ...(projectionService?.systemdUnitIds ?? []).flatMap(
+        (unitId) => systemdUnitById.get(unitId)?.evidenceIds ?? [],
+      ),
+    ];
+    if (item.startCommand !== undefined && lifecycleEvidenceIds.length === 0)
       add(
         'LIFECYCLE_EVIDENCE_MISSING',
         `生命周期命令没有证据门禁：${item.name}。`,
@@ -132,7 +144,11 @@ export function evaluateReportQuality(
         );
     }
     for (const unknown of item.unknownFields) {
-      if (!model.unknowns.includes(unknown))
+      const wikiEntry = wikiEntryByServiceId.get(item.id);
+      const surfacedInWiki =
+        wikiEntry?.unknowns.includes(unknown) === true ||
+        wikiEntry?.reviewItems.some((review) => review.includes(unknown)) === true;
+      if (!model.unknowns.includes(unknown) && !surfacedInWiki)
         add(
           'UNKNOWN_NOT_SURFACED',
           `服务未知字段未进入 unknowns/reviewItems：${item.name} / ${unknown}。`,

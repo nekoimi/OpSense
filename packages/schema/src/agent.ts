@@ -1,7 +1,18 @@
 import { Type, type Static } from '@sinclair/typebox';
 
-import { DateTimeSchema, IdSchema, NonEmptyStringSchema } from './common.js';
-import { ProbeRequestSchema } from './ai.js';
+import { AiConfidenceSchema, DateTimeSchema, IdSchema, NonEmptyStringSchema } from './common.js';
+import {
+  AiPathSemanticSchema,
+  AiServiceImportanceSchema,
+  AiServiceRoleSchema,
+  ProbeRequestSchema,
+  ReportPlacementSchema,
+} from './ai.js';
+import {
+  DiscoveredServiceSchema,
+  DiscoveryFilterGroupSchema,
+  DiscoveryInvestigationSchema,
+} from './projection.js';
 
 export const AgentContextSectionSchema = Type.Union([
   Type.Literal('host'),
@@ -14,20 +25,25 @@ export const AgentContextSectionSchema = Type.Union([
   Type.Literal('path_candidates'),
   Type.Literal('findings'),
   Type.Literal('visibility_summary'),
+  Type.Literal('discovery'),
 ]);
 
 export const ReadContextArgumentsSchema = Type.Object(
   {
     section: AgentContextSectionSchema,
     offset: Type.Optional(Type.Integer({ minimum: 0 })),
-    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200 })),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 5 })),
   },
   { additionalProperties: false },
 );
 
 export const ReadEvidenceArgumentsSchema = Type.Object(
-  { ids: Type.Array(IdSchema, { minItems: 1, maxItems: 20 }) },
-  { additionalProperties: false },
+  {
+    ids: Type.Optional(Type.Array(IdSchema, { minItems: 1, maxItems: 20 })),
+    serviceId: Type.Optional(IdSchema),
+    field: Type.Optional(NonEmptyStringSchema),
+  },
+  { additionalProperties: false, minProperties: 1 },
 );
 
 export const ListCandidatesArgumentsSchema = Type.Object(
@@ -41,6 +57,8 @@ export const ListCandidatesArgumentsSchema = Type.Object(
         Type.Literal('findings'),
       ]),
     ),
+    offset: Type.Optional(Type.Integer({ minimum: 0 })),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 5 })),
   },
   { additionalProperties: false },
 );
@@ -50,19 +68,85 @@ export const ExecuteGovernedProbeArgumentsSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const ProjectionChangeSchema = Type.Object(
+export const PlanDiscoveryArgumentsSchema = Type.Object(
   {
-    objectId: IdSchema,
-    operation: Type.Union([Type.Literal('add'), Type.Literal('update'), Type.Literal('remove')]),
-    summary: NonEmptyStringSchema,
+    planningCompleted: Type.Boolean(),
+    discoveryCompleted: Type.Boolean(),
+    investigations: Type.Array(DiscoveryInvestigationSchema),
+    discoveredServices: Type.Array(DiscoveredServiceSchema),
+    filteredGroups: Type.Array(DiscoveryFilterGroupSchema),
+    unresolvedQuestions: Type.Array(Type.String()),
+    reason: NonEmptyStringSchema,
   },
   { additionalProperties: false },
 );
 
+export type PlanDiscoveryArguments = Static<typeof PlanDiscoveryArgumentsSchema>;
+
+export const ServiceAssessmentUpdateSchema = Type.Object(
+  {
+    serviceId: IdSchema,
+    role: AiServiceRoleSchema,
+    reportPlacement: ReportPlacementSchema,
+    importance: AiServiceImportanceSchema,
+    purpose: Type.Optional(Type.String()),
+    statusInterpretation: Type.Optional(Type.String()),
+    reason: NonEmptyStringSchema,
+    confidence: AiConfidenceSchema,
+    evidenceIds: Type.Array(IdSchema),
+    unknowns: Type.Array(Type.String()),
+    reviewItems: Type.Array(Type.String()),
+  },
+  { additionalProperties: false },
+);
+
+export type ServiceAssessmentUpdate = Static<typeof ServiceAssessmentUpdateSchema>;
+
+export const PathAssessmentUpdateSchema = Type.Object(
+  {
+    serviceId: IdSchema,
+    path: NonEmptyStringSchema,
+    semantic: AiPathSemanticSchema,
+    reason: NonEmptyStringSchema,
+    confidence: AiConfidenceSchema,
+    evidenceIds: Type.Array(IdSchema),
+  },
+  { additionalProperties: false },
+);
+
+export type PathAssessmentUpdate = Static<typeof PathAssessmentUpdateSchema>;
+
+const ProjectionChangeShared = {
+  objectId: IdSchema,
+  operation: Type.Union([Type.Literal('add'), Type.Literal('update')]),
+  summary: NonEmptyStringSchema,
+};
+
+export const ProjectionChangeSchema = Type.Union([
+  Type.Object(
+    {
+      ...ProjectionChangeShared,
+      changeType: Type.Literal('service_assessment'),
+      assessment: ServiceAssessmentUpdateSchema,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...ProjectionChangeShared,
+      changeType: Type.Literal('path_assessment'),
+      assessment: PathAssessmentUpdateSchema,
+    },
+    { additionalProperties: false },
+  ),
+]);
+
+export type ProjectionChange = Static<typeof ProjectionChangeSchema>;
+
 export const UpdateProjectionArgumentsSchema = Type.Object(
   {
     changes: Type.Array(ProjectionChangeSchema, { minItems: 1 }),
-    evidenceIds: Type.Array(IdSchema, { minItems: 1 }),
+    evidenceIds: Type.Array(IdSchema),
     reason: Type.Optional(NonEmptyStringSchema),
   },
   { additionalProperties: false },
@@ -73,6 +157,7 @@ export const AgentToolNameSchema = Type.Union([
   Type.Literal('read_evidence'),
   Type.Literal('list_candidates'),
   Type.Literal('execute_governed_probe'),
+  Type.Literal('plan_discovery'),
   Type.Literal('update_projection'),
 ]);
 
@@ -104,6 +189,16 @@ export const AgentSessionStateSchema = Type.Union([
 ]);
 
 export type AgentSessionState = Static<typeof AgentSessionStateSchema>;
+
+export const AgentStopReasonSchema = Type.Union([
+  Type.Literal('classification_complete'),
+  Type.Literal('budget_exhausted'),
+  Type.Literal('user_interrupted'),
+  Type.Literal('codex_failed'),
+  Type.Literal('quality_gate_failed'),
+]);
+
+export type AgentStopReason = Static<typeof AgentStopReasonSchema>;
 
 export const AgentToolActivityStatusSchema = Type.Union([
   Type.Literal('requested'),
@@ -245,6 +340,7 @@ export const AgentTurnSchema = Type.Object(
   {
     turnId: IdSchema,
     sessionId: IdSchema,
+    threadId: Type.Optional(NonEmptyStringSchema),
     sequence: Type.Integer({ minimum: 1 }),
     startedAt: DateTimeSchema,
     finishedAt: Type.Optional(DateTimeSchema),
@@ -288,6 +384,9 @@ export const AgentSessionSchema = Type.Object(
     sessionId: IdSchema,
     scanId: IdSchema,
     provider: Type.Literal('codex'),
+    workflowVersion: Type.Optional(
+      Type.Union([Type.Literal('m19_full_candidate_review'), Type.Literal('m20_evidence_driven')]),
+    ),
     model: Type.Optional(Type.String()),
     threadId: Type.Optional(NonEmptyStringSchema),
     state: AgentSessionStateSchema,
@@ -304,6 +403,7 @@ export const AgentSessionSchema = Type.Object(
     lastError: Type.Optional(Type.String()),
     repairSuggestions: Type.Array(Type.String()),
     outputFiles: Type.Array(Type.String()),
+    stopReason: Type.Optional(AgentStopReasonSchema),
   },
   { $id: 'AgentSession', additionalProperties: false },
 );

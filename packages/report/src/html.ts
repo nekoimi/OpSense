@@ -31,6 +31,7 @@ export function renderHtmlReport(model: ReportModel): string {
     <dl class="top-meta">
       <div><dt>扫描 ID</dt><dd>${escapeHtml(model.metadata.scanId)}</dd></div>
       <div><dt>报告生成</dt><dd>${escapeHtml(formatDateTime(model.metadata.generatedAt))}</dd></div>
+      <div><dt>语义来源</dt><dd>${escapeHtml(classificationLabel(model.metadata.classificationProvider, model.metadata.classificationCompleted))}</dd></div>
     </dl>
   </header>
   <div class="layout">
@@ -250,11 +251,20 @@ function renderServiceDetails(service: ReportService, index: number): string {
 function roleLabel(value: ReportService['role']): string {
   return {
     application: '应用',
+    container_platform: '容器平台',
+    edge: '边缘入口',
     infrastructure: '基础设施',
     middleware: '中间件',
     system: '系统服务',
     unknown: '未知',
   }[value];
+}
+
+function classificationLabel(provider: string | undefined, completed: boolean | undefined): string {
+  if (provider === 'codex')
+    return completed === true ? 'Codex Agent（完整审查）' : 'Codex Agent（未完成）';
+  if (provider === 'legacy') return 'Legacy AI 分析（兼容模式）';
+  return 'Baseline 本地规则（兼容模式）';
 }
 
 function placementLabel(value: ReportService['reportPlacement']): string {

@@ -230,11 +230,25 @@ function cover(model: ReportModel): Paragraph[] {
       children: [text(`报告时间：${formatDateTime(model.metadata.generatedAt)}`)],
     }),
     new Paragraph({
+      children: [
+        text(
+          `语义来源：${classificationLabel(model.metadata.classificationProvider, model.metadata.classificationCompleted)}`,
+        ),
+      ],
+    }),
+    new Paragraph({
       alignment: AlignmentType.CENTER,
       children: [text(`扫描 ID：${model.metadata.scanId}`, { mono: true })],
       spacing: { before: 600 },
     }),
   ];
+}
+
+function classificationLabel(provider: string | undefined, completed: boolean | undefined): string {
+  if (provider === 'codex')
+    return completed === true ? 'Codex Agent（完整审查）' : 'Codex Agent（未完成）';
+  if (provider === 'legacy') return 'Legacy AI 分析（兼容模式）';
+  return 'Baseline 本地规则（兼容模式）';
 }
 
 function summaryTable(model: ReportModel): Table {

@@ -43,21 +43,27 @@ export function buildReportModel(
           );
         }
       }
+      const classifiedPaths = servicePathsForReport(projection, service);
+      const semanticEvidenceIds = (projection.pathAssessments ?? [])
+        .filter((item) => item.serviceIds.includes(service.id))
+        .flatMap((item) => item.evidenceIds);
       return {
         assessmentConfidence: assessment.confidence,
         assessmentReason: assessment.reason,
         confidence: service.confidence,
-        configFiles: [...service.configFiles],
+        configFiles: classifiedPaths.config,
         conflictFields: [...(service.conflictFields ?? [])],
-        dataDirectories: [...service.dataDirectories],
-        deployDirectories: [...service.deployDirectories],
+        dataDirectories: classifiedPaths.data,
+        deployDirectories: classifiedPaths.deploy,
         deploymentType: service.deploymentType,
         ...(service.displayName === undefined ? {} : { displayName: service.displayName }),
         ...(service.enabledAtBoot === undefined ? {} : { enabledAtBoot: service.enabledAtBoot }),
-        environmentFiles: [...service.environmentFiles],
-        evidenceIds: [...service.evidenceIds],
+        environmentFiles: classifiedPaths.environment,
+        evidenceIds: [
+          ...new Set([...service.evidenceIds, ...assessment.evidenceIds, ...semanticEvidenceIds]),
+        ],
         id: service.id,
-        logLocations: [...service.logLocations],
+        logLocations: classifiedPaths.log,
         name: service.name,
         ports: [...ports].sort(),
         processIds: [...service.processIds],
@@ -157,10 +163,19 @@ export function buildReportModel(
       state: projection.session.state,
       targetHost: projection.session.target.host,
       targetPort: projection.session.target.port,
+      ...(projection.classificationProvider === undefined
+        ? {}
+        : { classificationProvider: projection.classificationProvider }),
+      ...(projection.classificationCompleted === undefined
+        ? {}
+        : { classificationCompleted: projection.classificationCompleted }),
       ...(projection.session.target.user === undefined
         ? {}
         : { targetUser: projection.session.target.user }),
-      title: `${displayHost} 服务器巡检报告`,
+      title:
+        projection.classificationProvider === 'codex' && projection.classificationCompleted === true
+          ? `${displayHost} 服务器 Wiki 文档`
+          : `${displayHost} 服务器巡检报告`,
     },
     mounts: (projection.storage?.mounts ?? []).map((mount) => {
       const percent = usagePercent(mount.usedBytes, mount.totalBytes);
@@ -240,6 +255,41 @@ export function buildReportModel(
   };
   assertSchema(ReportModelSchema, model);
   return model;
+}
+
+function servicePathsForReport(
+  projection: InventoryProjection,
+  service: InventoryProjection['services'][number],
+): {
+  config: string[];
+  data: string[];
+  deploy: string[];
+  environment: string[];
+  log: string[];
+} {
+  if (projection.classificationProvider !== 'codex') {
+    return {
+      config: [...service.configFiles],
+      data: [...service.dataDirectories],
+      deploy: [...service.deployDirectories],
+      environment: [...service.environmentFiles],
+      log: [...service.logLocations],
+    };
+  }
+  const assessments = (projection.pathAssessments ?? []).filter((item) =>
+    item.serviceIds.includes(service.id),
+  );
+  const values = (semantic: (typeof assessments)[number]['semantic']): string[] => [
+    ...new Set(assessments.filter((item) => item.semantic === semantic).map((item) => item.path)),
+  ];
+  const config = values('config');
+  return {
+    config,
+    data: values('data'),
+    deploy: values('deploy'),
+    environment: service.environmentFiles.filter((item) => config.includes(item)),
+    log: values('log'),
+  };
 }
 
 function formatEndpoint(address: string, port: number): string {

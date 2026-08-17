@@ -21,10 +21,15 @@ interface GlobalOptions {
 
 export function createReportCommand(loggerFactory: LoggerFactory): Command {
   const command = new Command('report')
-    .description('Render a local report from an existing scan.')
+    .description('Render a completed Codex Agent Wiki or a legacy summary/audit report.')
     .requiredOption('--scan <scan-id>', 'scan ID to render')
     .option('--format <formats>', 'comma-separated report formats', parseFormats, ['docx', 'html'])
-    .option('--profile <profile>', 'report profile: wiki, summary, or audit', parseProfile, 'wiki')
+    .option(
+      '--profile <profile>',
+      'wiki requires a completed Codex Agent projection; summary/audit are compatibility modes',
+      parseProfile,
+      'wiki',
+    )
     .option('--time-zone <time-zone>', 'report display timezone')
     .option('--config <path>', 'configuration file path')
     .option('--workspace <path>', 'local OpSense workspace directory');

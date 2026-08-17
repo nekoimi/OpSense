@@ -17,8 +17,13 @@ export function createReportFileNames(
 ): ReportFileNames {
   const identifier = sanitizeReportIdentifier(model.metadata.targetHost);
   const timestamp = formatLocalFileTimestamp(new Date(model.metadata.scannedAt), options.timeZone);
+  const documentName =
+    model.metadata.classificationProvider === 'codex' &&
+    model.metadata.classificationCompleted === true
+      ? '服务器Wiki文档'
+      : '服务器巡检报告';
   return {
-    docx: `服务器巡检报告-${identifier}-${timestamp}.docx`,
+    docx: `${documentName}-${identifier}-${timestamp}.docx`,
     html: 'index.html',
   };
 }
