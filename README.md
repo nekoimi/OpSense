@@ -1,68 +1,270 @@
 # OpSense
 
-OpSense is a local CLI that inspects one Linux server over SSH and generates an operations report.
+> 本地优先、Codex 驱动的 Linux 服务器发现 Agent。通过只读 SSH 收集运行证据，识别真实部署服务，并生成 HTML、Word 和 Markdown 服务器 Wiki。
 
-## Development
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![pnpm](https://img.shields.io/badge/pnpm-10.x-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Status](https://img.shields.io/badge/status-alpha-E5A50A)](#项目状态)
 
-```powershell
-fnm use
-pnpm install
-pnpm check
+OpSense 面向需要快速理解陌生 Linux 服务器的开发和运维人员。它不会只输出一份系统巡检摘要，而是关联 systemd unit、进程、监听端口、Docker/Compose、目录、配置、日志和数据路径，让 Codex 完成服务筛选、按需调查、服务归并和 Wiki 撰写。
+
+项目当前以本地 CLI 运行，不包含 Web 管理后台。每次任务只调查一台服务器，扫描数据、Agent 会话和报告均保存在本地工作区。
+
+## 核心能力
+
+- **多来源服务发现**：关联 systemd、`ps` 进程树、socket、cgroup、Docker/Compose 和非标准部署目录，避免只识别容器服务。
+- **证据驱动 Agent**：Codex 先过滤普通 Linux 系统服务，再对有效部署候选进行调查；证据不足时可以申请受控只读补探测。
+- **发行版适配**：支持 Debian、RHEL、Alpine 及未知 Linux 发行版，并为命令缺失、选项差异和非 JSON 输出提供降级路径。
+- **服务器 Wiki**：由 AI 组织服务器定位、部署架构、服务分组、服务用途、端口、配置、日志、数据路径、风险和待确认事项。
+- **多格式报告**：生成自包含 HTML、Word（DOCX）和 Markdown；HTML/Word 包含 OpSense 水印与版权标识。
+- **本地可恢复会话**：扫描、Projection、Codex Thread、ToolActivity 和报告产物可审计；超时或限流后可以通过 Session ID 继续。
+- **安全与脱敏**：命令白名单、主机密钥校验、结构化探测治理、敏感字段分级和报告前二次脱敏均为默认行为。
+
+## 工作流程
+
+```mermaid
+flowchart LR
+    A[只读 SSH 扫描] --> B[Snapshot 原始证据]
+    B --> C[轻量服务过滤索引]
+    C --> D[Codex 调查计划]
+    D --> E[按需只读补探测]
+    E --> F[服务归并与语义判断]
+    F --> G[Codex 撰写服务器 Wiki]
+    G --> H[HTML / Word / Markdown]
 ```
 
-Run the CLI in development mode:
+本地规则只负责采集、关联、安全约束和防遗漏门禁，不负责最终业务语义判断。Docker/Compose、监听端口、直接运行进程、自定义 systemd unit、失败服务和非标准路径候选不能被静默过滤。
+
+## 项目状态
+
+OpSense 目前处于 **Alpha** 阶段，适合在可控环境中试用和参与开发：
+
+- v1 已完成系统、存储、服务、目录、归一化、脱敏和基础报告链路。
+- v2 已切换为必须依赖 Codex 的证据驱动 Agent 工作流。
+- 当前仍在持续优化大规模服务清单下的 Token 消耗、调查收敛速度和真实服务器兼容性。
+- CLI、Schema 和本地工作区可能在后续版本发生不兼容调整。
+
+## 环境要求
+
+本地环境：
+
+- Node.js `>= 22`，仓库当前使用 `24.14.0`
+- pnpm `10.x`
+- 可用并已登录的 Codex CLI/SDK
+- Windows PowerShell、PowerShell 7 或其他能够运行 Node.js 的终端
+
+目标服务器：
+
+- Linux 服务器和可用的 SSH 账户
+- 账户能够读取需要调查的系统、进程、容器和部署目录信息
+- Docker 信息的完整度取决于 SSH 账户是否有权访问 Docker daemon
+
+## 快速开始
+
+### 1. 获取源码
 
 ```powershell
+git clone https://github.com/nekoimi/OpSense.git
+cd OpSense
+fnm use
+pnpm install
+```
+
+仓库默认使用 `https://registry.npmmirror.com/` 作为 npm registry。
+
+### 2. 检查 Codex 和项目环境
+
+```powershell
+codex --version
+pnpm run check
 pnpm dev -- --help
 ```
 
-Run a read-only M3-M7 system, service, targeted directory, normalization, and redaction scan with SSH Agent authentication:
+OpSense v2 不会在 Codex 不可用时降级生成一份看似完整的 Wiki。请先确保本机 Codex 登录状态、模型和 Thread 能力正常。
+
+### 3. 完整扫描并生成 Wiki
+
+推荐使用 SSH 私钥：
 
 ```powershell
-pnpm dev -- scan --host server.example.com --user ops --accept-new-host-key
+pnpm --filter @opsense/cli dev -- agent `
+  --host server.example.com `
+  --port 22 `
+  --user ops `
+  --identity "C:\Users\me\.ssh\id_ed25519" `
+  --accept-new-host-key `
+  --provider codex `
+  --model gpt-5.6-luna `
+  --workspace "$HOME\.opsense" `
+  --complete `
+  --max-agent-rounds 16 `
+  --max-agent-runs 200 `
+  --max-probes 20 `
+  --turn-timeout-ms 300000
 ```
 
-Or use a private key file:
+在可信内网中也可以临时使用密码。下面的写法不会把密码明文写入 PowerShell 历史：
 
 ```powershell
-pnpm dev -- scan --host server.example.com --user ops --identity C:\Users\me\.ssh\id_ed25519 --accept-new-host-key
+$sshPassword = Read-Host "SSH password" -MaskInput
+
+pnpm --filter @opsense/cli dev -- agent `
+  --host server.example.com `
+  --port 22 `
+  --user ops `
+  --password $sshPassword `
+  --accept-new-host-key `
+  --provider codex `
+  --model gpt-5.6-luna `
+  --workspace "$HOME\.opsense" `
+  --complete `
+  --max-agent-rounds 16 `
+  --max-agent-runs 200 `
+  --max-probes 20 `
+  --turn-timeout-ms 300000
 ```
 
-For trusted internal environments, a plaintext password can be supplied for the current process:
+命令行密码仍可能短暂出现在本机进程参数中，生产环境应优先使用 SSH Agent 或私钥认证。OpSense 不会把密码写入配置、Snapshot、审计日志或报告。
+
+## 继续中断的任务
+
+发生 Codex 超时、限流或手动中断时，使用日志中的 `Agent session` 继续。恢复不需要重新扫描服务器，也不需要再次提供 SSH 密码：
 
 ```powershell
-pnpm dev -- scan --host server.example.com --user ops --password '<password>' --accept-new-host-key
+pnpm --filter @opsense/cli dev -- agent `
+  --resume <agent-session-id> `
+  --provider codex `
+  --model gpt-5.6-luna `
+  --workspace "$HOME\.opsense" `
+  --complete `
+  --max-agent-runs 200 `
+  --turn-timeout-ms 300000
 ```
 
-Command-line passwords may be visible in shell history and process listings. OpSense does not write the password to its config, audit log, snapshot, or report files. The command writes `snapshot.json`, `meta.json`, `audit.jsonl`, and `redaction-report.json` under the local OpSense workspace. The v2 `agent` command requires a working Codex CLI/SDK, login state, model, and Thread capability; it does not fall back to a baseline Wiki when Codex is unavailable. The legacy `analyze` command may still run offline baseline analysis for compatibility, while `inspect` runs the v1-compatible end-to-end workflow.
-
-Start the v2 Codex Agent from an existing scan:
+也可以从已有 Snapshot 创建新的 Agent 会话：
 
 ```powershell
-pnpm dev -- agent --scan <scan-id> --provider codex --prompt "整理主要服务和部署路径" --once
-
-# Scan a server once, complete the local Codex classification loop, then generate HTML, Word, and Markdown Wiki files.
-pnpm dev -- agent --host <host> --user <user> --provider codex --complete
+pnpm --filter @opsense/cli dev -- agent `
+  --scan <scan-id> `
+  --provider codex `
+  --model gpt-5.6-luna `
+  --workspace "$HOME\.opsense" `
+  --complete
 ```
 
-The Agent reviews every service and service-associated path. Local name and directory rules are candidate hints only; Codex decisions are applied through a schema-validated Projection update and remain traceable to Evidence IDs and the Codex Thread. A v2 Wiki cannot be generated until service and path review coverage is complete.
+## CLI 命令
 
-Generate Word, HTML, and Markdown Wiki artifacts from a completed Agent Projection:
+| 命令              | 用途                                 |
+| ----------------- | ------------------------------------ |
+| `opsense scan`    | 只执行只读 SSH 采集并保存 Snapshot   |
+| `opsense agent`   | 启动或恢复 Codex 服务器 Wiki Agent   |
+| `opsense report`  | 从已完成的 Agent Projection 生成报告 |
+| `opsense analyze` | 兼容旧版 Codex/Baseline 分析流程     |
+| `opsense inspect` | 兼容 v1 的扫描、分析、报告端到端流程 |
+
+查看完整参数：
 
 ```powershell
-pnpm dev -- report --scan <scan-id> --profile wiki --format docx,html,markdown
+pnpm dev -- --help
+pnpm dev -- agent --help
+pnpm dev -- report --help
 ```
 
-`--profile wiki` requires a completed Codex Agent Projection. `--profile summary` and `--profile audit` are compatibility modes and visibly identify their semantic source as Baseline or Legacy analysis.
+单独从已完成的 Agent Projection 生成报告：
 
-M3 collection detects Debian, RHEL, Alpine, or an unknown Linux family from `/etc/os-release`. Logical probes use audited read-only fallback commands when JSON output, command options, or utilities are unavailable, and every attempted variant remains traceable in the snapshot evidence.
+```powershell
+pnpm dev -- report `
+  --scan <scan-id> `
+  --profile wiki `
+  --format docx,html,markdown `
+  --workspace "$HOME\.opsense"
+```
 
-M4 adds systemd units, processes, listening sockets, Docker containers, and Compose projects. Process environment values are not read, Docker environment values are reduced to key names, and direct PID/container/socket ownership is preserved for later service normalization.
+## 本地工作区
 
-M5 derives path seeds from M4 runtime evidence and scans only those absolute paths. Directory reads are depth-, count-, output-, timeout-, and filesystem-bounded; pseudo filesystems, caches, source-control metadata, dependency trees, database internals, and container overlay layers are excluded. Small JSON, YAML, TOML, and INI files produce key-only structural summaries, while `.env` values are never read.
+默认工作区为 `~/.opsense`，可通过 `--workspace` 修改：
 
-M6 normalizes the collected entities and deterministically merges systemd units, process trees, listening sockets, Docker containers, Compose services, and discovered artifacts into `ServiceRecord` entries. Merge evidence references its source evidence IDs, rule-derived services remain `inferred`, conflicts and unknown fields remain separate, and no business dependency graph is inferred.
+```text
+~/.opsense/
+|-- config.json
+|-- known-hosts.json
+|-- runs/
+|   `-- <scan-id>/
+|       |-- snapshot.json
+|       |-- agent-session.json
+|       |-- agent-projection.json
+|       |-- agent-turns.jsonl
+|       |-- agent-transcript.jsonl
+|       |-- audit.jsonl
+|       `-- redaction-report.json
+`-- reports/
+    `-- <host>/
+        `-- <scan-time>/
+            |-- index.html
+            |-- 服务器Wiki文档-<host>-<time>.docx
+            `-- README.md
+```
 
-M7 classifies operational data as `public`, `internal`, `sensitive`, or `secret` and applies versioned redaction before snapshots and audit records are persisted. Secret fields, environment values, private key blocks, credentials in URLs and database connection strings, authorization tokens, and sensitive command options are replaced with `[REDACTED]`. AI input uses a mandatory second pass, and report payloads use the same fail-closed residual secret scan.
+报告不会展示内部 Evidence 附录或 Evidence ID。底层证据仍保存在本地 Projection 和审计文件中，用于质量门禁、问题追踪和恢复调查。
 
-M8 converts a redacted snapshot into a format-independent `ReportModel` and renders Markdown, a self-contained offline HTML report, and a Word document. Compatibility reports use `服务器巡检报告-{server}-{YYYY-MM-DD_HH-mm-ss}.docx`; completed v2 Agent output uses `服务器Wiki文档-{server}-{YYYY-MM-DD_HH-mm-ss}.docx`. HTML is written as `index.html`. Both formats contain the system, storage, network, service, finding, unknown, and evidence sections, with OpSense copyright notices and low-contrast watermarks. DOCX output is validated as Open XML before it is written, and the default configured report formats are `docx` and `html`. CLI report orchestration remains part of M10.
+## 安全模型
+
+OpSense 的目标是调查服务器，而不是管理或修改服务器：
+
+- 初始扫描只能执行版本化的只读命令目录。
+- Codex 不能提交任意 Shell 字符串，只能申请结构化、受预算约束的探测请求。
+- 路径探测受根目录、深度、数量、输出大小、超时和文件系统边界限制。
+- 默认排除 `/proc`、`/sys`、容器 overlay、缓存、依赖树和数据库内部数据目录。
+- 不读取进程环境变量值；Docker 环境变量只保留键名。
+- 已知主机密钥保存在本地，首次连接必须显式使用 `--accept-new-host-key`。
+- Secret、Token、连接串凭据、私钥和敏感命令参数会在持久化和 AI 输入前脱敏。
+- 报告输出执行独立的残留敏感信息检查。
+
+尽管如此，请使用最小权限 SSH 账户，并在生产服务器首次运行前审阅命令目录与配置。
+
+## Monorepo 架构
+
+| 模块                     | 职责                                             |
+| ------------------------ | ------------------------------------------------ |
+| `apps/cli`               | CLI 命令、进度显示和端到端编排                   |
+| `packages/ssh`           | SSH 连接、known-hosts 和安全命令执行             |
+| `packages/collectors`    | 系统、存储、网络、systemd、进程、容器和目录采集  |
+| `packages/discovery`     | 原始证据索引、候选发现和高价值服务保护           |
+| `packages/projection`    | 服务归并、调查计划和 AI 语义投影                 |
+| `packages/agent-runtime` | Agent 上下文、工具路由、预算、恢复和完成门禁     |
+| `packages/ai-codex`      | Codex Thread、结构化输出和决策修复               |
+| `packages/report`        | HTML、DOCX、Markdown 渲染与质量检查              |
+| `packages/schema`        | Snapshot、Agent、Projection、Wiki 和报告数据契约 |
+| `packages/redaction`     | 数据分级、脱敏和残留 Secret 检查                 |
+| `packages/workspace`     | 本地目录、配置、原子写入和会话持久化             |
+
+## 开发
+
+```powershell
+pnpm run build
+pnpm run typecheck
+pnpm run lint
+pnpm run test
+pnpm run check
+```
+
+提交 Pull Request 前请确保 `pnpm run check` 通过。测试使用 Vitest，SSH 和采集器测试默认基于本地 Fixture，不会连接真实服务器。
+
+## 文档
+
+- [v2 需求迭代](docs/v2.0/需求迭代v2.0.md)
+- [v2 Agent 设计方案](docs/v2.0/Agent设计方案v2.0.md)
+- [v2 迭代任务清单](docs/v2.0/TODO任务清单v2.0.md)
+- [证据收敛与按需探测任务](docs/v2.0/Agent证据收敛与按需探测TODO-v2.0.md)
+- [v1 文档归档](docs/v1.0/)
+
+## 参与贡献
+
+欢迎通过 [GitHub Issues](https://github.com/nekoimi/OpSense/issues) 提交发行版兼容问题、服务漏识别样本、报告建议和安全问题复现。Pull Request 应尽量保持改动范围清晰，并为行为变化补充测试。
+
+提交问题时请先移除 IP、用户名、路径中的个人信息、配置内容和任何凭据。不要上传真实 `~/.opsense` 工作区。
+
+## 许可证
+
+仓库当前尚未添加开源许可证。在 `LICENSE` 文件明确发布前，代码仍保留所有权利；公开可见不等同于已获得复制、修改或分发授权。
