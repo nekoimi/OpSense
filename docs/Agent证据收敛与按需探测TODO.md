@@ -1,4 +1,4 @@
-# OpSense v2 Agent 证据收敛与按需探测 TODO
+# OpSense Agent 证据收敛与按需探测 TODO
 
 ## 1. 背景与目标
 
@@ -161,7 +161,7 @@ Codex 必须决定：
 - [x] `Must` 将完整已评估服务、容器名、镜像名、端口、路径和 Evidence ID 作为 `wiki_source` 提供给最终撰写阶段。
 - [x] `Must` 对能够从服务名、容器名或镜像名可靠识别的产品生成详细服务说明；无法识别的服务允许省略，不强制编造。
 - [x] `Must` 服务详细说明和重点发现引用已有 Evidence ID，本地拒绝未知服务、重复描述和虚构 Evidence ID。
-- [x] `Must` 调查完成但 `compose_wiki` 未完成时拒绝 `final` 和 v2 Wiki 报告生成。
+- [x] `Must` 调查完成但 `compose_wiki` 未完成时拒绝 `final` 和 Wiki 报告生成。
 - [x] `Must` 综合稿件 Thread 必须存在成功的 `compose_wiki` ToolActivity，可与分类 Thread、最终 Thread 不同。
 - [x] `Must` HTML、Word、Markdown 以同一份 `WikiNarrative` 作为主叙事，同时保留结构化事实表格和证据附录。
 - [x] `Must` 服务或调查投影发生变更时使旧综合稿件失效，防止过期总结进入报告。
@@ -170,7 +170,7 @@ Codex 必须决定：
 
 - MinIO、Nexus、数据库等可识别服务具有面向运维人员的产品用途和部署说明，而不是只展示名称与字段表格。
 - 报告包含由 Codex 撰写的服务器级概览、部署架构、服务分组和运维说明。
-- Codex 不可用或综合稿件不符合 Schema 时，不生成声称完成的 v2 Wiki。
+- Codex 不可用或综合稿件不符合 Schema 时，不生成声称完成的 Wiki。
 
 ## 5. 测试与验收
 

@@ -35,7 +35,7 @@ import { runReportWorkflow } from '../apps/cli/src/workflows/report-workflow.js'
 import { readFixture } from './support/read-fixture.js';
 
 describe('M19 Codex semantic classification loop', () => {
-  it('starts the v2 Agent projection with neutral candidates instead of baseline facts', async () => {
+  it('starts the Agent projection with neutral candidates instead of baseline facts', async () => {
     const snapshot = await snapshotWithService('cron');
     snapshot.systemdUnits = [
       {
@@ -338,7 +338,7 @@ describe('M19 Codex semantic classification loop', () => {
     expect(createReportModel(projection).services[0]?.configFiles).toEqual([]);
   });
 
-  it('rejects v2 Wiki output until Codex review and Thread auditing are complete', async () => {
+  it('rejects Wiki output until Codex review and Thread auditing are complete', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'opsense-m19-report-'));
     try {
       const snapshot = await snapshotWithService('order-api');

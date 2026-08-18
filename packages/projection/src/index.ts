@@ -757,10 +757,10 @@ export function assertCodexClassificationComplete(projection: InventoryProjectio
   const status = codexClassificationStatus(projection);
   if (!status.completed)
     throw new Error(
-      `v2 Wiki 要求 Codex 完成全部语义审查：服务 ${status.reviewedServiceCount}/${status.candidateServiceCount}，路径 ${status.reviewedPathCount}/${status.candidatePathCount}。`,
+      `Wiki 要求 Codex 完成全部语义审查：服务 ${status.reviewedServiceCount}/${status.candidateServiceCount}，路径 ${status.reviewedPathCount}/${status.candidatePathCount}。`,
     );
   if (projection.classificationThreadId === undefined)
-    throw new Error('v2 Wiki 缺少 Codex Thread 审计标识。');
+    throw new Error('Wiki 缺少 Codex Thread 审计标识。');
 }
 
 export function applyWikiNarrative(

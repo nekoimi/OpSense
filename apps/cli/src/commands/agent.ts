@@ -63,7 +63,7 @@ export function createAgentCommand(loggerFactory: LoggerFactory): Command {
     .option('--accept-new-host-key', 'trust and store the host key on first connection')
     .option('--scan <scan-id>', 'start from an existing scan snapshot')
     .option('--resume <agent-session-id>', 'resume an existing Agent session')
-    .option('--provider <provider>', 'AI provider (v2 requires codex)', 'codex')
+    .option('--provider <provider>', 'AI provider (requires codex)', 'codex')
     .option('--model <model>', 'Codex model override')
     .option('--prompt <text>', 'initial natural-language request')
     .option('--once', 'run one bounded Agent session without opening the REPL')
@@ -322,7 +322,7 @@ async function generateWikiArtifacts(
 ): Promise<void> {
   const session = prepared.runtime.currentSession;
   if (session.state !== 'completed')
-    throw new Error(`v2 Wiki 只能从 completed AgentSession 生成，当前状态为 ${session.state}。`);
+    throw new Error(`Wiki 只能从 completed AgentSession 生成，当前状态为 ${session.state}。`);
   assertWikiThreadAudit(
     session,
     prepared.projection,
@@ -396,9 +396,9 @@ export function assertWikiThreadAudit(
   turns: readonly AgentTurn[],
 ): void {
   if (session.threadId === undefined)
-    throw new Error('v2 Wiki 审计失败：completed AgentSession 缺少最终 Codex Thread ID。');
+    throw new Error('Wiki 审计失败：completed AgentSession 缺少最终 Codex Thread ID。');
   if (projection.classificationThreadId === undefined)
-    throw new Error('v2 Wiki 审计失败：Projection 缺少 Codex 分类 Thread ID。');
+    throw new Error('Wiki 审计失败：Projection 缺少 Codex 分类 Thread ID。');
   const sessionTurns = turns.filter((turn) => turn.sessionId === session.sessionId);
   const finalTurnAudited = sessionTurns.some(
     (turn) =>
@@ -407,7 +407,7 @@ export function assertWikiThreadAudit(
       turn.decisionKind === 'final',
   );
   if (!finalTurnAudited)
-    throw new Error('v2 Wiki 审计失败：最终 Session Thread 没有对应的 final Turn。');
+    throw new Error('Wiki 审计失败：最终 Session Thread 没有对应的 final Turn。');
   const classificationTurnAudited = sessionTurns.some(
     (turn) =>
       turn.threadId === projection.classificationThreadId &&
@@ -419,9 +419,9 @@ export function assertWikiThreadAudit(
       ),
   );
   if (!classificationTurnAudited)
-    throw new Error('v2 Wiki 审计失败：Projection 分类 Thread 没有对应的成功变更 Turn。');
+    throw new Error('Wiki 审计失败：Projection 分类 Thread 没有对应的成功变更 Turn。');
   if (projection.wikiNarrative === undefined)
-    throw new Error('v2 Wiki 审计失败：Projection 缺少 Codex 撰写的服务器综合稿件。');
+    throw new Error('Wiki 审计失败：Projection 缺少 Codex 撰写的服务器综合稿件。');
   const compositionTurnAudited = sessionTurns.some(
     (turn) =>
       turn.threadId === projection.wikiNarrative?.threadId &&
@@ -431,7 +431,7 @@ export function assertWikiThreadAudit(
       ),
   );
   if (!compositionTurnAudited)
-    throw new Error('v2 Wiki 审计失败：服务器综合稿件 Thread 没有对应的 compose_wiki Turn。');
+    throw new Error('Wiki 审计失败：服务器综合稿件 Thread 没有对应的 compose_wiki Turn。');
 }
 
 function printStatus(logger: Logger, prepared: PreparedAgentWorkflow): void {
@@ -563,7 +563,7 @@ function printResponse(
 
 function validateOptions(options: AgentCommandOptions, signal: AbortSignal): AgentWorkflowOptions {
   if (options.provider !== 'codex')
-    throw new InvalidArgumentError('OpSense v2 Agent requires --provider codex.');
+    throw new InvalidArgumentError('OpSense Agent requires --provider codex.');
   const sources = [options.host, options.scan, options.resume].filter(
     (value) => value !== undefined,
   );

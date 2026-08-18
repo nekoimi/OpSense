@@ -220,8 +220,8 @@ export class AgentRuntime {
       if (this.options.requireClassificationComplete === true && !classification.completed) {
         const evidenceDriven = this.session.workflowVersion === 'm20_evidence_driven';
         message = evidenceDriven
-          ? `Codex 证据调查尚未完成：有效服务 ${classification.reviewedServiceCount}/${classification.candidateServiceCount}，请继续完成调查计划或明确待确认项，不能生成 v2 Wiki。`
-          : `Codex 语义审查尚未完成：服务 ${classification.reviewedServiceCount}/${classification.candidateServiceCount}，路径 ${classification.reviewedPathCount}/${classification.candidatePathCount}。继续审查未处理候选，不能生成 v2 Wiki。`;
+          ? `Codex 证据调查尚未完成：有效服务 ${classification.reviewedServiceCount}/${classification.candidateServiceCount}，请继续完成调查计划或明确待确认项，不能生成 Wiki。`
+          : `Codex 语义审查尚未完成：服务 ${classification.reviewedServiceCount}/${classification.candidateServiceCount}，路径 ${classification.reviewedPathCount}/${classification.candidatePathCount}。继续审查未处理候选，不能生成 Wiki。`;
         this.session.currentStage = 'validating';
         this.recentResults.push({
           toolName: 'completion_gate',

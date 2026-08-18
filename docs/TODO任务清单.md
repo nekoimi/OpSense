@@ -1,14 +1,14 @@
-# OpSense TODO 任务清单 v2.0
+# OpSense TODO 任务清单
 
 ## 1. 文档说明
 
-本文档依据以下文档拆分 v2 的可执行开发任务：
+本文档依据以下文档拆分可执行开发任务：
 
-* 《需求迭代v2.0.md》
-* 《Agent设计方案v2.0.md》
+* 《需求文档.md》
+* 《Agent设计方案.md》
 * 当前 M0-M10 已落地代码和测试
 
-v2 的最终目标是：
+最终目标是：
 
 ```text
 opsense agent
@@ -18,11 +18,11 @@ opsense agent
   -> Word / HTML / Markdown 产物
 ```
 
-`scan`、`analyze`、`report` 和 `inspect` 保留为脚本化、调试和兼容入口；`opsense agent` 是 v2 的主入口。
+`scan`、`analyze`、`report` 和 `inspect` 保留为脚本化、调试和兼容入口；`opsense agent` 是主入口。
 
-v2 Agent 必须依赖可用的 Codex。Codex CLI/SDK、登录状态、模型和 Thread 能力均通过预检后，才允许创建可运行的 AgentSession；预检或运行失败时只保存失败现场，不生成 v2 Agent Wiki。
+Agent 必须依赖可用的 Codex。Codex CLI/SDK、登录状态、模型和 Thread 能力均通过预检后，才允许创建可运行的 AgentSession；预检或运行失败时只保存失败现场，不生成 Agent Wiki。
 
-当前 M0-M10 的采集、SSH、发行版降级、服务发现、目录探测、归一化、脱敏和基础报告能力作为复用底座，不做无目标重写。v2 的结构调整重点是新增 Agent Runtime、资源投影和会话式 CLI，并切断报告对原始快照的直接依赖。
+当前 M0-M10 的采集、SSH、发行版降级、服务发现、目录探测、归一化、脱敏和基础报告能力作为复用底座，不做无目标重写。结构调整重点是新增 Agent Runtime、资源投影和会话式 CLI，并切断报告对原始快照的直接依赖。
 
 任务状态约定：
 
@@ -36,16 +36,16 @@ v2 Agent 必须依赖可用的 Codex。Codex CLI/SDK、登录状态、模型和 
 优先级约定：
 
 ```text
-Must    v2 最小可用闭环必须完成
+Must    最小可用闭环必须完成
 Should  首期建议完成，不阻塞 Agent 最小闭环
-Later   不进入 v2 首期
+Later   不进入首期
 ```
 
 ## 2. 里程碑总览
 
 | 里程碑 | 内容 | 主要交付物 | 依赖 |
 | --- | --- | --- | --- |
-| M12 | v2 架构契约与资源投影 | Agent/Projection Schema、新包边界、报告输入切换 | M0-M11 |
+| M12 | Agent 架构契约与资源投影 | Agent/Projection Schema、新包边界、报告输入切换 | M0-M11 |
 | M13 | 服务知识条目模型 | `ServiceWikiEntry`、完整度评分、服务视图 | M12 |
 | M14 | 服务发现与非标准路径增强 | 证据驱动候选、未知项和受控补探测种子 | M12、M13 |
 | M15 | Agent Runtime | Agent loop、结构化工具、预算、Codex Thread 适配器 | M12-M14 |
@@ -59,9 +59,9 @@ Later   不进入 v2 首期
 M12 -> M13 -> M14 -> M15 -> M16 -> M17 -> M18
 ```
 
-## 3. M12：v2 架构契约与资源投影
+## 3. M12：Agent 架构契约与资源投影
 
-### M12-01 固化 v2 模块边界
+### M12-01 固化 Agent 模块边界
 
 - [x] `Must` 新增 `packages/agent-runtime`，只负责 Agent 会话、循环、工具路由、预算和恢复。
 - [x] `Must` 新增 `packages/projection`，负责主机资源可见性、服务 Wiki 投影和报告质量门禁。
@@ -91,7 +91,7 @@ M12 -> M13 -> M14 -> M15 -> M16 -> M17 -> M18
 - [x] `Must` 在 Agent 启动前检查 Codex CLI/SDK 是否可调用。
 - [x] `Must` 检查 Codex 登录状态、凭据、模型和 Thread 创建能力。
 - [x] `Must` 预检失败时返回专用 CodexUnavailable 退出码。
-- [x] `Must` 预检失败时不连接服务器、不执行 Agent 工具、不生成 v2 Agent Wiki。
+- [x] `Must` 预检失败时不连接服务器、不执行 Agent 工具、不生成 Agent Wiki。
 - [x] `Must` 将预检错误和修复提示写入 AgentSession。
 - [ ] `Should` 提供独立的 `opsense agent doctor` 诊断命令。
 
@@ -165,7 +165,7 @@ M12 -> M13 -> M14 -> M15 -> M16 -> M17 -> M18
 - [x] `Must` 由本地代码控制轮数、时间、Token、补探测和输出预算。
 - [x] `Must` 由模型决定下一步最有价值的观察或判断，不把流程硬编码为固定 Prompt 串联。
 - [x] `Must` 连续两轮无有效变化时结束 Agent。
-- [x] `Must` Codex Thread 创建、恢复或调用失败时重试并持久化失败现场，不静默切换为 v2 基线 Wiki。
+- [x] `Must` Codex Thread 创建、恢复或调用失败时重试并持久化失败现场，不静默切换为基线 Wiki。
 
 ### M15-02 上下文构建
 
@@ -207,7 +207,7 @@ M12 -> M13 -> M14 -> M15 -> M16 -> M17 -> M18
 
 ### M16-01 `opsense agent` 命令
 
-- [x] `Must` 支持 `--host --port --user --provider codex` 新建会话，v2 不提供非 Codex Provider。
+- [x] `Must` 支持 `--host --port --user --provider codex` 新建会话，不提供非 Codex Provider。
 - [x] `Must` 支持 `--scan <scan-id>` 基于已有快照进入会话。
 - [x] `Must` 支持 `--resume <agent-session-id>` 恢复会话。
 - [x] `Must` 支持 `--prompt <text>` 和 `--once` 非交互模式。
@@ -304,16 +304,16 @@ M12 -> M13 -> M14 -> M15 -> M16 -> M17 -> M18
 - [ ] `wiki` 命令可以生成服务器 Wiki 的 Word、HTML、Markdown 产物。
 - [ ] 报告正文不再平铺 Docker 网络、容器 rootfs 和普通系统服务。
 - [ ] 主要服务条目包含部署、端口、配置、日志、数据、生命周期和证据边界。
-- [ ] Codex 预检通过后才能启动 Agent；Codex 不可用时只生成失败现场和修复提示，不生成 v2 Agent Wiki。
+- [ ] Codex 预检通过后才能启动 Agent；Codex 不可用时只生成失败现场和修复提示，不生成 Agent Wiki。
 
 ## 10. 兼容性迁移任务
 
 - [ ] `Must` 保留 `scan`、`analyze`、`report`、`inspect` 的现有脚本化行为。
 - [ ] `Must` 为旧的 `ai-plan.json`、`ai-output.json` 提供读取兼容层。
 - [ ] `Must` 允许同一 scan 快照重新生成新旧报告格式，且不重新连接服务器。
-- [ ] `Must` 将旧 `threadId` 映射为 AgentSession 的 Codex Thread 信息；旧的基线/Noop 结果仅作为兼容数据，不视为 v2 Agent 结果。
+- [ ] `Must` 将旧 `threadId` 映射为 AgentSession 的 Codex Thread 信息；旧的基线/Noop 结果仅作为兼容数据，不视为 Agent 结果。
 - [ ] `Should` 为旧运行目录生成迁移状态提示，不自动修改原始快照。
-- [ ] `Should` 在 README 中更新 v2 Agent 主入口和恢复方式。
+- [ ] `Should` 在 README 中更新 Agent 主入口和恢复方式。
 
 ## 11. 暂不实施
 
@@ -325,9 +325,9 @@ M12 -> M13 -> M14 -> M15 -> M16 -> M17 -> M18
 - [ ] `Later` Kubernetes、云平台和容器编排平台的专用探测。
 - [ ] `Later` 完整跨服务业务依赖图和调用链还原。
 
-## 12. v2 Definition of Done
+## 12. Definition of Done
 
-以下条件全部满足后，v2 才视为完成：
+以下条件全部满足后，当前迭代才视为完成：
 
 - [ ] Agent 是 CLI 主入口，而不是一次性 `analyze` 的别名。
 - [ ] AgentSession、AgentTurn、AgentResponse 和 transcript 可以持久化和恢复。
@@ -338,5 +338,5 @@ M12 -> M13 -> M14 -> M15 -> M16 -> M17 -> M18
 - [ ] 普通 systemd 服务不逐条占用主要服务章节。
 - [ ] 主要部署服务形成可追溯的服务知识条目。
 - [ ] Word、HTML、Markdown 统一由服务器 Wiki 投影生成，并包含 OpSense 版权标识。
-- [ ] Codex 不可用时不得生成 v2 Agent Wiki 文档；必须保存失败现场并支持修复后恢复。
-- [ ] 所有 v2 核心测试、样本评估和安全检查通过。
+- [ ] Codex 不可用时不得生成 Agent Wiki 文档；必须保存失败现场并支持修复后恢复。
+- [ ] 所有核心测试、样本评估和安全检查通过。

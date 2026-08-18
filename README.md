@@ -40,8 +40,8 @@ flowchart LR
 
 OpSense 目前处于 **Alpha** 阶段，适合在可控环境中试用和参与开发：
 
-- v1 已完成系统、存储、服务、目录、归一化、脱敏和基础报告链路。
-- v2 已切换为必须依赖 Codex 的证据驱动 Agent 工作流。
+- 已完成系统、存储、服务、目录、归一化、脱敏和基础报告链路。
+- 当前采用必须依赖 Codex 的证据驱动 Agent 工作流。
 - 当前仍在持续优化大规模服务清单下的 Token 消耗、调查收敛速度和真实服务器兼容性。
 - CLI、Schema 和本地工作区可能在后续版本发生不兼容调整。
 
@@ -81,7 +81,7 @@ pnpm run check
 pnpm dev -- --help
 ```
 
-OpSense v2 不会在 Codex 不可用时降级生成一份看似完整的 Wiki。请先确保本机 Codex 登录状态、模型和 Thread 能力正常。
+OpSense 不会在 Codex 不可用时降级生成一份看似完整的 Wiki。请先确保本机 Codex 登录状态、模型和 Thread 能力正常。
 
 ### 3. 完整扫描并生成 Wiki
 
@@ -161,7 +161,7 @@ pnpm --filter @opsense/cli dev -- agent `
 | `opsense agent`   | 启动或恢复 Codex 服务器 Wiki Agent   |
 | `opsense report`  | 从已完成的 Agent Projection 生成报告 |
 | `opsense analyze` | 兼容旧版 Codex/Baseline 分析流程     |
-| `opsense inspect` | 兼容 v1 的扫描、分析、报告端到端流程 |
+| `opsense inspect` | 兼容旧版的扫描、分析、报告端到端流程 |
 
 查看完整参数：
 
@@ -251,14 +251,6 @@ pnpm run check
 
 提交 Pull Request 前请确保 `pnpm run check` 通过。测试使用 Vitest，SSH 和采集器测试默认基于本地 Fixture，不会连接真实服务器。
 
-## 文档
-
-- [v2 需求迭代](docs/v2.0/需求迭代v2.0.md)
-- [v2 Agent 设计方案](docs/v2.0/Agent设计方案v2.0.md)
-- [v2 迭代任务清单](docs/v2.0/TODO任务清单v2.0.md)
-- [证据收敛与按需探测任务](docs/v2.0/Agent证据收敛与按需探测TODO-v2.0.md)
-- [v1 文档归档](docs/v1.0/)
-
 ## 参与贡献
 
 欢迎通过 [GitHub Issues](https://github.com/nekoimi/OpSense/issues) 提交发行版兼容问题、服务漏识别样本、报告建议和安全问题复现。Pull Request 应尽量保持改动范围清晰，并为行为变化补充测试。
@@ -267,4 +259,4 @@ pnpm run check
 
 ## 许可证
 
-仓库当前尚未添加开源许可证。在 `LICENSE` 文件明确发布前，代码仍保留所有权利；公开可见不等同于已获得复制、修改或分发授权。
+本项目基于 [MIT License](LICENSE) 开源。

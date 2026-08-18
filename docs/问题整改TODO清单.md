@@ -1,16 +1,16 @@
-# OpSense v2 问题整改 TODO 清单
+# OpSense 问题整改 TODO 清单
 
 ## 1. 文档说明
 
-本文档记录对当前 v2 实现进行代码检查后发现的架构偏差和整改任务，重点解决以下问题：
+本文档记录对当前实现进行代码检查后发现的架构偏差和整改任务，重点解决以下问题：
 
 1. Codex 已经接入 Agent 流程，但尚未真正控制服务语义分类和最终投影。
-2. v1 的固定名称、固定目录和正则规则仍在决定服务角色、报告位置和路径用途。
+2. 旧版的固定名称、固定目录和正则规则仍在决定服务角色、报告位置和路径用途。
 3. 部分被本地基线隐藏的服务不会进入 Codex 上下文，Codex 无法纠正错误分类。
 4. Agent 可能在未完成候选审查、未更新投影的情况下提前结束。
-5. v2 Wiki 仍存在绕过 Codex、直接使用本地基线生成的路径。
+5. Wiki 仍存在绕过 Codex、直接使用本地基线生成的路径。
 
-本清单不否定 M12-M17 已完成的结构、采集、安全、Schema、报告渲染和 CLI 工作，而是补齐“Codex 是 v2 Agent 的决策核心”这一尚未闭环的能力。
+本清单不否定 M12-M17 已完成的结构、采集、安全、Schema、报告渲染和 CLI 工作，而是补齐“Codex 是 Agent 的决策核心”这一尚未闭环的能力。
 
 任务状态约定：
 
@@ -24,8 +24,8 @@
 优先级约定：
 
 ```text
-Must    不完成则 v2 不能视为 Codex Agent
-Should  建议在 v2 正式验收前完成
+Must    不完成则不能视为 Codex Agent
+Should  建议在正式验收前完成
 Later   不进入本轮整改
 ```
 
@@ -39,7 +39,7 @@ Later   不进入本轮整改
 
 ```text
 Snapshot
-  -> v1 本地语义规则分类
+  -> 旧版的本地语义规则分类
   -> 本地 Projection/Wiki
   -> Codex 读取部分候选并返回决策外壳
   -> update_projection 未真正修改投影
@@ -63,12 +63,12 @@ Snapshot
 | 编号 | 优先级 | 问题 | 当前影响 | 代码位置 |
 | --- | --- | --- | --- | --- |
 | ISSUE-01 | P0 | `update_projection` 只返回对象 ID，没有修改投影 | Codex 即使作出判断，最终 Wiki 也不会采用 | `apps/cli/src/workflows/agent-workflow.ts:125` |
-| ISSUE-02 | P0 | 投影和报告允许在无 Codex 分析时回退到 baseline | 违反 v2 Codex 硬依赖，可能生成伪装成 Agent 结果的 Wiki | `packages/projection/src/index.ts:38`、`apps/cli/src/workflows/report-workflow.ts:44` |
+| ISSUE-02 | P0 | 投影和报告允许在无 Codex 分析时回退到 baseline | 违反 Codex 硬依赖，可能生成伪装成 Agent 结果的 Wiki | `packages/projection/src/index.ts:38`、`apps/cli/src/workflows/report-workflow.ts:44` |
 | ISSUE-03 | P0 | baseline 判为 `system_summary` 的服务不会发送给 Codex | 本地误判无法被模型纠正，非标准业务服务可能被静默隐藏 | `packages/ai-codex/src/index.ts:477` |
 | ISSUE-04 | P0 | 连续两轮只读或无投影变化即结束为 `partial` | Agent 可能在没有完成分类任务时提前收敛 | `packages/agent-runtime/src/runtime.ts:202` |
 | ISSUE-05 | P0 | `ProjectionChange` 没有携带实际分类字段 | 工具协议无法表达角色、用途、展示位置和路径语义 | `packages/schema/src/agent.ts:53` |
 | ISSUE-06 | P1 | Agent 上下文中的候选信息过少 | Codex 缺少当前分类、路径、端口、unit、进程和容器证据，难以可靠判断 | `packages/agent-runtime/src/context.ts:190` |
-| ISSUE-07 | P1 | v1 服务名、产品名和目录规则仍被当作最终语义 | Doris、Hadoop、MinIO、自研程序和非标准路径仍受硬编码覆盖范围限制 | `packages/ai-provider/src/baseline.ts`、`packages/core/src/normalization.ts`、`packages/wiki/src/index.ts` |
+| ISSUE-07 | P1 | 旧版服务名、产品名和目录规则仍被当作最终语义 | Doris、Hadoop、MinIO、自研程序和非标准路径仍受硬编码覆盖范围限制 | `packages/ai-provider/src/baseline.ts`、`packages/core/src/normalization.ts`、`packages/wiki/src/index.ts` |
 | ISSUE-08 | P1 | Codex 预检能力没有接入生产 Agent Runtime 创建流程 | 文档声明的 Codex 硬依赖在真实 Agent 入口没有完整执行 | `apps/cli/src/workflows/agent-workflow.ts:127` |
 | ISSUE-09 | P1 | 缺少 Codex 分类完成度元数据和 Wiki 生成门禁 | 无法区分“Codex 已完整审查”和“只运行过一次 Codex 调用” | Projection、AgentSession 和报告工作流 |
 
@@ -95,9 +95,9 @@ Snapshot
 - 是否需要对非标准服务或非标准路径继续调查。
 - 服务知识条目的组织、用途描述、未知项和人工复核项。
 
-### 3.3 v1 规则的允许用途
+### 3.3 旧版规则的允许用途
 
-v1 的固定名称、正则和目录判断不得继续写入最终事实，只允许转换为以下非权威提示：
+旧版的固定名称、正则和目录判断不得继续写入最终事实，只允许转换为以下非权威提示：
 
 ```text
 candidateHints:
@@ -143,7 +143,7 @@ candidateHints:
 
 ### M19-03 全量候选进入 Codex 审查（已被 M20 替代）
 
-> 该任务解决了“本地 baseline 静默隐藏业务服务”的问题，但其“每个 `snapshot.services` 对象逐项审查”的完成条件已不适用。后续以《Agent证据收敛与按需探测TODO-v2.0.md》M20 为准：Codex 必须能够访问所有原始 Evidence 并作出筛选决策，但原始 systemd unit 不再一对一等同于待报告服务。
+> 该任务解决了“本地 baseline 静默隐藏业务服务”的问题，但其“每个 `snapshot.services` 对象逐项审查”的完成条件已不适用。后续以《Agent证据收敛与按需探测TODO.md》M20 为准：Codex 必须能够访问所有原始 Evidence 并作出筛选决策，但原始 systemd unit 不再一对一等同于待报告服务。
 
 - [x] `Must` 移除 `classificationBatches()` 对 baseline `system_summary` 服务的跳过逻辑。
 - [x] `Must` 所有 `snapshot.services` 和未归并的高价值候选都必须进入 Codex 审查队列。
@@ -190,18 +190,18 @@ AND reportQualityGatePassed = true
 ### M19-06 Codex 硬依赖和报告门禁
 
 - [x] `Must` 在生产 `AgentRuntime` 创建时注入并执行 `CodexSdkPreflightProbe`。
-- [x] `Must` 预检失败时不连接服务器、不执行探测、不生成 v2 Wiki。
+- [x] `Must` 预检失败时不连接服务器、不执行探测、不生成 Wiki。
 - [x] `Must` 为最终投影增加 `classificationProvider=codex`、`classificationCompleted`、`reviewedServiceCount`、`candidateServiceCount` 和 `threadId`。
-- [x] `Must` v2 Wiki 生成前验证 Codex 分类元数据和对应 AgentSession/Thread 审计记录。
+- [x] `Must` Wiki 生成前验证 Codex 分类元数据和对应 AgentSession/Thread 审计记录。
 - [x] `Must` Codex 调用失败、上下文耗尽或结构化输出修复失败时，只保存失败现场，不回退到 baseline Wiki。
-- [x] `Must` 修改 `runReportWorkflow()`：兼容报告可以继续读取旧数据，但 v2 `wiki` profile 必须拒绝无完整 Codex 投影的输入。
-- [x] `Must` 修改 `buildInventoryProjection()`：生产 v2 路径不允许通过 `analysis === undefined` 自动采用 baseline 作为最终分类。
+- [x] `Must` 修改 `runReportWorkflow()`：兼容报告可以继续读取旧数据，但 `wiki` profile 必须拒绝无完整 Codex 投影的输入。
+- [x] `Must` 修改 `buildInventoryProjection()`：生产路径不允许通过 `analysis === undefined` 自动采用 baseline 作为最终分类。
 - [ ] `Should` 增加 `opsense agent doctor`，独立检查 Codex SDK、登录、模型和 Thread 创建能力。
 
-### M19-07 移除 v1 硬编码语义决策
+### M19-07 移除旧版硬编码语义决策
 
 - [x] `Must` 逐项审查 `packages/ai-provider/src/baseline.ts` 中的服务名称、middleware 和产品列表。
-- [x] `Must` 将服务角色、用途、重要性和 `reportPlacement` 的规则改成 `candidateHints`，不再生成最终 assessment。v1 兼容命令继续保留 baseline 输出，但 v2 Agent 初始化不执行该分类器。
+- [x] `Must` 将服务角色、用途、重要性和 `reportPlacement` 的规则改成 `candidateHints`，不再生成最终 assessment。旧版兼容命令继续保留 baseline 输出，但 Agent 初始化不执行该分类器。
 - [x] `Must` 将 Doris、Hadoop、MinIO 等固定搜索名单改为从现有进程、unit、镜像、Compose 标签和用户提示动态产生搜索词。
 - [x] `Must` 审查 `packages/core/src/normalization.ts` 中的路径用途推断，只保留路径标准化、对象关联和候选生成。
 - [x] `Must` 审查 `packages/wiki/src/index.ts` 中根据角色名称直接决定 Wiki 类型的逻辑，改为消费 Codex 最终 assessment。
@@ -218,11 +218,11 @@ AND reportQualityGatePassed = true
 
 迁移审计结果：
 
-| 位置 | 处理 | v2 作用 |
+| 位置 | 处理 | 当前作用 |
 | --- | --- | --- |
-| `packages/ai-provider/src/baseline.ts` 服务名和 middleware 正则 | 保留为 v1 兼容分类及旧 `analyze` 的 `candidateHints` | v2 Agent 初始化不调用，不写入最终 assessment |
+| `packages/ai-provider/src/baseline.ts` 服务名和 middleware 正则 | 保留为旧版兼容分类及旧 `analyze` 的 `candidateHints` | Agent 初始化不调用，不写入最终 assessment |
 | `packages/ai-provider/src/baseline.ts` 固定 Doris/Hadoop/MinIO 搜索名单 | 删除 | 搜索词改为来自采集到的服务、进程、unit、镜像和标签 |
-| `packages/core/src/normalization.ts`、collectors 中的目录类型判断 | 转为候选 | v2 报告只消费 Codex `PathAssessmentUpdate` |
+| `packages/core/src/normalization.ts`、collectors 中的目录类型判断 | 转为候选 | 报告只消费 Codex `PathAssessmentUpdate` |
 | `packages/wiki/src/index.ts` Nginx、Docker 等角色名称匹配 | 删除 | Wiki role 只消费 Codex assessment |
 | Projection/Report 中容器网络、overlay 和伪文件系统规则 | 保留为硬规则 | 仅负责运行时噪声过滤和安全可见性 |
 | SSH 命令、禁止路径、脱敏连接串和凭据模式 | 保留为硬规则 | 仅负责执行安全和敏感数据保护 |
@@ -230,10 +230,10 @@ AND reportQualityGatePassed = true
 ### M19-08 质量门禁与兼容性
 
 - [x] `Must` 报告质量门禁检查每个服务未知字段是否进入该服务对应的 `unknowns/reviewItems`，避免跨服务误判。
-- [x] `Must` v1 `scan/analyze/report` 保持兼容，但产物必须明确标识 `legacy` 或 `baseline`，不得标识为 v2 Agent Wiki。
+- [x] `Must` 旧版 `scan/analyze/report` 保持兼容，但产物必须明确标识 `legacy` 或 `baseline`，不得标识为 Agent Wiki。
 - [x] `Must` 旧 `ai-output.json` 只能作为迁移输入或候选提示，不能使 `classificationCompleted=true`。
-- [x] `Must` 同一扫描可以在 Codex 恢复后继续审查，不重新连接服务器也能生成 v2 Wiki。
-- [x] `Must` README 和 CLI 帮助明确区分兼容报告与 v2 Agent Wiki。
+- [x] `Must` 同一扫描可以在 Codex 恢复后继续审查，不重新连接服务器也能生成 Wiki。
+- [x] `Must` README 和 CLI 帮助明确区分兼容报告与 Agent Wiki。
 - [ ] `Should` 为已有 run 目录提供只读迁移检查命令，输出缺少的分类和审计字段。
 
 ## 5. 测试任务
@@ -243,11 +243,11 @@ AND reportQualityGatePassed = true
 - [x] `Must` `ProjectionChangeSchema` 接受合法语义更新并拒绝缺少 Evidence ID 的确定性更新。
 - [x] `Must` `applyProjectionUpdate` 真正修改投影，并验证幂等、冲突和回滚。
 - [x] `Must` baseline 为 `system_summary` 的服务仍进入 Codex classification batch。
-- [x] `Must` 缺少 Codex 分类完成元数据时，v2 Wiki 生成失败。
+- [x] `Must` 缺少 Codex 分类完成元数据时，Wiki 生成失败。
 - [x] `Must` Codex 预检失败时没有 SSH、probe 和报告副作用。
 - [x] `Must` 两个只读 turn 不会让未完成审查的 Agent 提前结束。
 - [x] `Must` 达到预算上限时保存未审查候选和恢复位置。
-- [x] `Must` v1 规则输出只出现在 `candidateHints`，不会直接决定最终 role 和 placement。
+- [x] `Must` 旧版规则输出只出现在 `candidateHints`，不会直接决定最终 role 和 placement。
 - [x] `Must` 服务未知字段在对应 Wiki 条目有 `unknowns/reviewItems` 时通过质量门禁。
 
 ### 5.2 集成测试
@@ -276,7 +276,7 @@ M19-01 决策 Schema
   -> M19-04 Agent 上下文
   -> M19-05 收敛条件
   -> M19-06 Codex/报告门禁
-  -> M19-07 v1 规则迁移
+  -> M19-07 旧版规则迁移
   -> M19-08 兼容性与质量门禁
   -> 单元、集成和真实服务器验收
 ```
@@ -295,7 +295,7 @@ M19-01 决策 Schema
 - [x] 所有服务候选都经过 Codex 结构化审查，或者被 Codex 明确标记为 `unknown/needs_review`。
 - [x] Codex 的判断能够真实改变最终 Projection 和 Wiki，不再是只读建议。
 - [x] 本地 baseline、产品名和路径规则不再作为最终服务语义事实。
-- [x] Codex 不可用、调用失败或分类未完成时不能生成 v2 Agent Wiki。
+- [x] Codex 不可用、调用失败或分类未完成时不能生成 Agent Wiki。
 - [x] Agent 不会因为两个只读 turn 在未完成候选审查时提前结束。
 - [x] 每个最终服务角色、用途、路径分类和展示位置都能追溯到 Codex 决策及 Evidence ID。
 - [x] Word、HTML、Markdown 报告只消费同一份通过质量门禁的最终 Projection。

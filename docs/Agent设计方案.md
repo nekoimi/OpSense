@@ -1,8 +1,8 @@
-# OpSense Agent 设计方案 v2.0
+# OpSense Agent 设计方案
 
 ## 1. 文档目的
 
-本文档定义 OpSense v2 的 Agent 运行时、能力边界、上下文、状态、工具协议、Codex 接入方式、失败处理和验收标准。
+本文档定义 OpSense 的 Agent 运行时、能力边界、上下文、状态、工具协议、Codex 接入方式、失败处理和验收标准。
 
 本文档解决的问题不是“如何调用一次 Codex”，而是：
 
@@ -10,11 +10,11 @@
 
 本文档依赖：
 
-* `docs/v2.0/需求迭代v2.0.md`
-* v1 的扫描、归一化、脱敏、ProbePlan 和报告能力
+* `docs/需求文档.md`
+* 现有的扫描、归一化、脱敏、ProbePlan 和报告能力
 * `@openai/codex-sdk` 的 Thread 能力
 
-第一版 Agent 仍然是本地 CLI Agent，不建设 Web Agent 服务，不引入远程 Agent 主机，不允许模型直接连接服务器。Codex 是 Agent 的硬依赖，Word、HTML 和 Markdown 是 Agent 会话的输出产物。
+首期 Agent 仍然是本地 CLI Agent，不建设 Web Agent 服务，不引入远程 Agent 主机，不允许模型直接连接服务器。Codex 是 Agent 的硬依赖，Word、HTML 和 Markdown 是 Agent 会话的输出产物。
 
 ## 2. 设计结论
 
@@ -52,7 +52,7 @@ Agent 不是一组固定 Prompt 的串联，也不是允许 AI 自由执行 Shel
 * 将推断内容写成确定事实。
 * 修改目标服务器状态。
 
-### 2.3 v2 首期复杂度
+### 2.3 首期复杂度
 
 首期采用单 Agent、单 Codex Thread、有限工具和可恢复会话：
 
@@ -695,10 +695,10 @@ Agent 启动前执行 Codex 可用性预检，至少验证：
 
 1. 写入 `agent-session.json` 和错误信息。
 2. 将 session 标记为 `failed`，返回专用 CodexUnavailable 退出码。
-3. 输出修复提示，不执行 Agent 工具、不连接服务器、不生成 v2 Agent Wiki。
+3. 输出修复提示，不执行 Agent 工具、不连接服务器、不生成 Agent Wiki。
 4. 保留已有 scan 快照，用户修复 Codex 环境后可以使用 `--resume` 继续。
 
-本地基线分类可以用于扫描后的候选排序和单元测试，但不能替代 v2 Agent 的最终分析。
+本地基线分类可以用于扫描后的候选排序和单元测试，但不能替代 Agent 的最终分析。
 
 ### 12.2 Codex 运行失败
 
@@ -706,7 +706,7 @@ Codex 模型超时、Thread 中断或结构化输出反复失败时：
 
 1. 按有限次数重试，并记录每次错误和重试次数。
 2. 重试失败后保存当前 AgentSession、AgentTurn、transcript 和投影。
-3. 将 session 标记为 `failed`，不生成“降级完成”的 v2 Agent Wiki。
+3. 将 session 标记为 `failed`，不生成“降级完成”的 Agent Wiki。
 4. 用户修复模型、登录或网络环境后，通过 `--resume` 继续。
 
 ### 12.3 补探测失败
@@ -815,7 +815,7 @@ sandboxMode: read-only
 * 定义 `AgentSession`、`AgentTurn`、`AgentDecision`、`AgentResponse`、`VisibilityDecision` 和 `WikiEntryDraft` Schema。
 * 增加用户消息、transcript 和会话恢复索引。
 * 增加状态、预算、恢复和中断机制。
-* 暂时使用测试替身验证循环和持久化；Noop 不作为 v2 运行时 Provider。
+* 暂时使用测试替身验证循环和持久化；Noop 不作为正式运行时 Provider。
 
 ### A2：上下文和 5 个基础能力
 
@@ -827,7 +827,7 @@ sandboxMode: read-only
 
 * 将现有 `CodexProvider.analyze()` 改造为 Agent Runtime 适配器。
 * 增加结构化 AgentDecision 解析和有限格式修复。
-* 支持同一 Codex Thread 的连续追问、Thread resume、超时、失败和审计；失败后不得静默降级为 v2 Wiki。
+* 支持同一 Codex Thread 的连续追问、Thread resume、超时、失败和审计；失败后不得静默降级为 Wiki。
 
 ### A4：资源过滤与报告质量门禁
 
@@ -884,7 +884,7 @@ sandboxMode: read-only
 预期：
 
 * 保存 Agent 错误和失败状态。
-* 不启动 Agent 工具、不连接服务器、不生成 v2 Agent Wiki。
+* 不启动 Agent 工具、不连接服务器、不生成 Agent Wiki。
 * 输出 Codex 登录、模型或 Thread 配置修复提示。
 * 修复后可以通过 session ID 恢复。
 

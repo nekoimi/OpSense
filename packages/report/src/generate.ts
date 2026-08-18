@@ -71,7 +71,7 @@ export async function generateReportArtifacts(
   if (options.requireCodexClassification === true) {
     assertCodexClassificationComplete(projection);
     if (projection.wikiNarrative?.provider !== 'codex')
-      throw new Error('v2 Wiki 缺少 Codex 撰写的服务器综合稿件，请先完成 compose_wiki。');
+      throw new Error('Wiki 缺少 Codex 撰写的服务器综合稿件，请先完成 compose_wiki。');
   }
   const reportProjection = redactForReport(projection, now);
   assertSchema(InventoryProjectionSchema, reportProjection.value);
