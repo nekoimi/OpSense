@@ -80,6 +80,10 @@ export function buildInventoryProjection(
   const mode = options.mode ?? 'legacy';
   const workflowVersion = options.workflowVersion ?? 'm19_full_candidate_review';
   const evidenceDriven = mode === 'agent' && workflowVersion === 'm20_evidence_driven';
+  const migratingFromM19 =
+    evidenceDriven &&
+    options.previousProjection !== undefined &&
+    options.previousProjection.discoveryWorkspace === undefined;
   const baselinePlan: AiPlan =
     mode === 'agent'
       ? {
@@ -131,27 +135,31 @@ export function buildInventoryProjection(
   );
   const reviewedServiceIds =
     mode === 'agent'
-      ? [
-          ...new Set(
-            (previous?.reviewedServiceIds ?? []).filter((serviceId) => serviceIds.has(serviceId)),
-          ),
-        ]
+      ? migratingFromM19
+        ? []
+        : [
+            ...new Set(
+              (previous?.reviewedServiceIds ?? []).filter((serviceId) => serviceIds.has(serviceId)),
+            ),
+          ]
       : [];
   const reviewedPathKeys =
     mode === 'agent'
-      ? [
-          ...new Set(
-            [
-              ...(previous?.reviewedPathKeys ?? []),
-              ...(previous?.pathAssessments ?? []).flatMap((assessment) =>
-                assessment.serviceIds.map((serviceId) => pathKey(serviceId, assessment.path)),
-              ),
-            ].filter((key) => candidatePathKeys.includes(key)),
-          ),
-        ]
+      ? migratingFromM19
+        ? []
+        : [
+            ...new Set(
+              [
+                ...(previous?.reviewedPathKeys ?? []),
+                ...(previous?.pathAssessments ?? []).flatMap((assessment) =>
+                  assessment.serviceIds.map((serviceId) => pathKey(serviceId, assessment.path)),
+                ),
+              ].filter((key) => candidatePathKeys.includes(key)),
+            ),
+          ]
       : [];
   const previousAssessments = new Map(
-    (mode === 'agent' ? (previous?.serviceAssessments ?? []) : [])
+    (mode === 'agent' && !migratingFromM19 ? (previous?.serviceAssessments ?? []) : [])
       .filter(
         (assessment) =>
           serviceIds.has(assessment.serviceId) &&
@@ -270,12 +278,12 @@ export function buildInventoryProjection(
               candidatePathKeys.length === reviewedPathKeys.length,
           classificationProvider: 'codex' as const,
           classificationUpdatedAt: generatedAt,
-          pathAssessments: [...(previous?.pathAssessments ?? [])],
+          pathAssessments: migratingFromM19 ? [] : [...(previous?.pathAssessments ?? [])],
           reviewedServiceCount: reviewedServiceIds.length,
           reviewedServiceIds,
           reviewedPathCount: reviewedPathKeys.length,
           reviewedPathKeys,
-          ...(previous?.classificationThreadId === undefined
+          ...(migratingFromM19 || previous?.classificationThreadId === undefined
             ? {}
             : { classificationThreadId: previous.classificationThreadId }),
           ...(workspace === undefined ? {} : { discoveryWorkspace: workspace }),

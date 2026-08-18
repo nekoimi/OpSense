@@ -314,6 +314,79 @@ describe('M15 agent runtime', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it('applies the duration budget to each resumed run instead of the session lifetime', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'opsense-m15-resume-budget-'));
+    try {
+      const snapshot = await fixtureSnapshot();
+      const projection = buildInventoryProjection(snapshot);
+      const session = createAgentSession({
+        scanId: snapshot.session.id,
+        now: () => new Date('2026-08-01T00:00:00.000Z'),
+      });
+      session.currentStage = 'partial';
+      session.state = 'partial';
+      session.stopReason = 'budget_exhausted';
+      const store = new FileAgentSessionStore(createRunWorkspaceLayout(snapshot.session.id, root));
+      await store.save(session);
+      let turns = 0;
+      const runtime = new AgentRuntime({
+        scanId: snapshot.session.id,
+        store,
+        thread: {
+          start: async () => ({ threadId: 'codex-resumed-thread' }),
+          resume: async (threadId: string) => ({ threadId }),
+          run: async () => {
+            turns += 1;
+            return turns === 1
+              ? {
+                  decision: {
+                    arguments: { section: 'services' },
+                    decisionId: 'decision:resume-read',
+                    kind: 'tool_call' as const,
+                    nextAction: 'continue',
+                    nextSuggestions: [],
+                    reason: '读取服务上下文。',
+                    toolName: 'read_context' as const,
+                    turnId: 'model-turn',
+                    unresolvedQuestions: [],
+                  },
+                }
+              : {
+                  decision: {
+                    decisionId: 'decision:resume-final',
+                    findingIds: [],
+                    inventoryProjectionId: projection.projectionId,
+                    kind: 'final' as const,
+                    nextAction: 'wiki',
+                    nextSuggestions: [],
+                    qualitySummary: '恢复运行已完成。',
+                    reason: '证据充分。',
+                    serviceWikiProjectionId: 'wiki:test',
+                    turnId: 'model-turn',
+                    unresolvedQuestions: [],
+                  },
+                };
+          },
+        },
+        context: new ContextBuilder({ projection }),
+        tools: new ToolRouter({
+          projection,
+          context: new ContextBuilder({ projection }),
+          governor: new ProbeGovernor({ snapshot, session }),
+        }),
+        maxDurationMs: 60_000,
+        maxTurns: 3,
+        now: () => new Date('2026-08-17T00:00:00.000Z'),
+      });
+
+      await expect(runtime.resume('继续')).resolves.toMatchObject({ message: '恢复运行已完成。' });
+      expect(turns).toBe(2);
+      expect(runtime.currentSession.state).toBe('completed');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 async function fixtureSnapshot(): Promise<ScanSnapshot> {

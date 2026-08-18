@@ -101,21 +101,32 @@ export async function prepareAgentWorkflow(
   const projection = await loadOrBuildProjection(layout, snapshot);
   const evidenceIndex = buildEvidenceIndex(projection);
   const existingSession = source.session;
+  const migratedFromM19 =
+    existingSession !== undefined &&
+    projection.discoveryWorkspace?.workflowVersion === 'm20_evidence_driven' &&
+    existingSession.workflowVersion !== 'm20_evidence_driven';
   const session =
-    existingSession ??
-    createAgentSession({
-      scanId: snapshot.session.id,
-      ...(options.model === undefined ? {} : { model: options.model }),
-      budgets: {
-        maxRequests: options.maxProbes,
-        maxRounds: options.maxProbes,
-      },
-      ...(projection.discoveryWorkspace === undefined
-        ? {}
-        : { workflowVersion: projection.discoveryWorkspace.workflowVersion }),
-    });
+    existingSession === undefined
+      ? createAgentSession({
+          scanId: snapshot.session.id,
+          ...(options.model === undefined ? {} : { model: options.model }),
+          budgets: {
+            maxRequests: options.maxProbes,
+            maxRounds: options.maxProbes,
+          },
+          ...(projection.discoveryWorkspace === undefined
+            ? {}
+            : { workflowVersion: projection.discoveryWorkspace.workflowVersion }),
+        })
+      : migratedFromM19
+        ? migrateSessionToM20(existingSession, options.maxProbes)
+        : existingSession;
   const store = new FileAgentSessionStore(layout);
-  if (existingSession === undefined) await store.save(session);
+  if (existingSession === undefined || migratedFromM19) {
+    if (migratedFromM19)
+      await writeJsonAtomic(`${layout.agentSessionFile}.m19.json`, existingSession);
+    await store.save(session);
+  }
   await writeJsonAtomic(layout.agentProjectionFile, projection);
   if (existingSession === undefined) await writeJsonAtomic(layout.agentHypothesesFile, []);
 
@@ -268,10 +279,12 @@ async function loadOrBuildProjection(
   try {
     const value = JSON.parse(await readFile(layout.agentProjectionFile, 'utf8')) as unknown;
     assertSchema(InventoryProjectionSchema, value);
+    if (value.discoveryWorkspace === undefined)
+      await writeJsonAtomic(`${layout.agentProjectionFile}.m19.json`, value);
     return buildInventoryProjection(snapshot, {
       mode: 'agent',
       previousProjection: value,
-      workflowVersion: value.discoveryWorkspace?.workflowVersion ?? 'm19_full_candidate_review',
+      workflowVersion: 'm20_evidence_driven',
     });
   } catch {
     return buildInventoryProjection(snapshot, {
@@ -279,6 +292,34 @@ async function loadOrBuildProjection(
       workflowVersion: 'm20_evidence_driven',
     });
   }
+}
+
+function migrateSessionToM20(session: AgentSession, maxProbes: number): AgentSession {
+  const migrated: AgentSession = {
+    ...session,
+    budgets: {
+      ...session.budgets,
+      maxRequests: maxProbes,
+      maxRounds: maxProbes,
+      usedBytes: 0,
+      usedDurationMs: 0,
+      usedRequests: 0,
+      usedRounds: 0,
+    },
+    completedProbeRequestIds: [],
+    coverage: { classification: 0 },
+    currentStage: 'partial',
+    outputFiles: [],
+    probeRound: 0,
+    repairSuggestions: [],
+    state: 'partial',
+    stopReason: 'budget_exhausted',
+    unresolvedQuestions: ['旧 M19 全量候选审查会话已迁移到 M20 证据驱动调查流程。'],
+    workflowVersion: 'm20_evidence_driven',
+  };
+  delete migrated.lastError;
+  delete migrated.threadId;
+  return migrated;
 }
 
 async function reconcileProbeResult(

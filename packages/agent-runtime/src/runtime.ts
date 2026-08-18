@@ -299,8 +299,9 @@ export class AgentRuntime {
 
   private async runUntilSettled(userMessage: string): Promise<AgentResponse> {
     const startingTurnCount = this.session.turnCount;
+    const runStartedAt = this.now().getTime();
     let response = await this.runTurn(userMessage);
-    while (this.session.state === 'running' && this.canContinue(startingTurnCount)) {
+    while (this.session.state === 'running' && this.canContinue(startingTurnCount, runStartedAt)) {
       if (!this.options.tools.classificationStatus().completed) await this.rotateThreadIfNeeded();
       response = await this.runTurn('根据上一轮结果继续调查最有价值的证据，并在信息充分时结束。');
     }
@@ -440,12 +441,12 @@ L0: ${JSON.stringify(context.l0)}
 L1 index: ${JSON.stringify(context.l1)}`;
   }
 
-  private canContinue(startingTurnCount: number): boolean {
+  private canContinue(startingTurnCount: number, runStartedAt: number): boolean {
     const maxTurns = this.options.maxTurns ?? 8;
     const maxDurationMs = this.options.maxDurationMs ?? 300_000;
     const maxTokens = this.options.maxTokens ?? 100_000;
     const maxOutputBytes = this.options.maxOutputBytes ?? 2_000_000;
-    const elapsed = Math.max(0, this.now().getTime() - new Date(this.session.startedAt).getTime());
+    const elapsed = Math.max(0, this.now().getTime() - runStartedAt);
     return (
       this.session.turnCount - startingTurnCount < maxTurns &&
       elapsed < maxDurationMs &&

@@ -22,6 +22,32 @@ import { describe, expect, it } from 'vitest';
 import { readFixture } from './support/read-fixture.js';
 
 describe('M20 evidence-driven discovery', () => {
+  it('discards the legacy full-review queue when migrating an M19 projection', async () => {
+    const snapshot = await snapshotWithServices();
+    const legacy = buildInventoryProjection(snapshot, {
+      mode: 'agent',
+      workflowVersion: 'm19_full_candidate_review',
+    });
+    applyProjectionDecision(legacy, serviceDecision('service:system-helper'));
+
+    expect(legacy.reviewedServiceIds).toContain('service:system-helper');
+    expect(legacy.serviceAssessments.length).toBeGreaterThan(0);
+
+    const migrated = buildInventoryProjection(snapshot, {
+      mode: 'agent',
+      previousProjection: legacy,
+      workflowVersion: 'm20_evidence_driven',
+    });
+
+    expect(migrated.discoveryWorkspace?.workflowVersion).toBe('m20_evidence_driven');
+    expect(migrated.candidateServiceCount).toBe(0);
+    expect(migrated.reviewedServiceCount).toBe(0);
+    expect(migrated.reviewedServiceIds).toEqual([]);
+    expect(migrated.serviceAssessments).toEqual([]);
+    expect(migrated.pathAssessments).toEqual([]);
+    expect(migrated.classificationThreadId).toBeUndefined();
+  });
+
   it('keeps raw services out of the review queue until Codex selects an investigation', async () => {
     const snapshot = await snapshotWithServices();
     const projection = buildInventoryProjection(snapshot, {

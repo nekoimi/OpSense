@@ -114,16 +114,30 @@ export function createAgentCommand(loggerFactory: LoggerFactory): Command {
         options.prompt ?? '整理当前服务器的主要服务、部署位置和证据缺口。',
         options.focusService,
       );
-      const response =
-        options.resume === undefined
-          ? await prepared.runtime.start(initialPrompt)
-          : await prepared.runtime.resume(initialPrompt);
-      printResponse(logger, response);
       if (options.complete === true) {
-        await runAgentToCompletion(prepared.runtime, response, logger, options.maxAgentRuns);
+        const initial = await startAgentToCompletion(
+          prepared.runtime,
+          initialPrompt,
+          options.resume !== undefined,
+          logger,
+          options.maxAgentRuns,
+        );
+        printResponse(logger, initial.response);
+        await runAgentToCompletion(
+          prepared.runtime,
+          initial.response,
+          logger,
+          options.maxAgentRuns,
+          initial.runsUsed,
+        );
         await generateWikiArtifacts(prepared, logger);
-      } else if (options.once !== true) {
-        await runRepl(prepared, logger, controller.signal);
+      } else {
+        const response =
+          options.resume === undefined
+            ? await prepared.runtime.start(initialPrompt)
+            : await prepared.runtime.resume(initialPrompt);
+        printResponse(logger, response);
+        if (options.once !== true) await runRepl(prepared, logger, controller.signal);
       }
       process.exitCode = ExitCode.Success;
     } catch (error) {
@@ -138,8 +152,36 @@ export function createAgentCommand(loggerFactory: LoggerFactory): Command {
 }
 
 interface CompletionRuntime {
-  currentSession: Pick<AgentSession, 'coverage' | 'state' | 'turnCount' | 'workflowVersion'>;
+  currentSession: Pick<
+    AgentSession,
+    'coverage' | 'state' | 'stopReason' | 'turnCount' | 'workflowVersion'
+  >;
   resume(userMessage?: string): Promise<AgentResponse>;
+}
+
+interface CompletionStartRuntime extends CompletionRuntime {
+  start(userMessage?: string): Promise<AgentResponse>;
+}
+
+interface CompletionAttempt {
+  response: AgentResponse;
+  runsUsed: number;
+}
+
+export async function startAgentToCompletion(
+  runtime: CompletionStartRuntime,
+  initialPrompt: string,
+  resumeExisting: boolean,
+  logger: Logger,
+  maxRuns: number,
+): Promise<CompletionAttempt> {
+  return executeWithTimeoutRecovery(
+    runtime,
+    () => (resumeExisting ? runtime.resume(initialPrompt) : runtime.start(initialPrompt)),
+    logger,
+    maxRuns,
+    1,
+  );
 }
 
 export async function runAgentToCompletion(
@@ -147,27 +189,71 @@ export async function runAgentToCompletion(
   initialResponse: AgentResponse,
   logger: Logger,
   maxRuns: number,
+  initialRunsUsed = 1,
 ): Promise<AgentResponse> {
   let response = initialResponse;
-  for (let run = 1; run <= maxRuns; run += 1) {
+  let runsUsed = initialRunsUsed;
+  for (;;) {
     const session = runtime.currentSession;
     if (session.state === 'completed') return response;
     if (session.state !== 'partial')
       throw new Error(`自动编排无法继续，Agent 当前状态为 ${session.state}。`);
-    if (run === maxRuns) break;
+    if (runsUsed >= maxRuns) break;
     logger.info(
-      `Auto-resume ${run + 1}/${maxRuns}: turns=${session.turnCount}, ${progressLabel(session)}=${formatCoverage(session.coverage.classification)}.`,
+      `Auto-resume ${runsUsed + 1}/${maxRuns}: turns=${session.turnCount}, ${progressLabel(session)}=${formatCoverage(session.coverage.classification)}.`,
     );
-    response = await runtime.resume(
-      session.workflowVersion === 'm20_evidence_driven'
-        ? '继续完成证据筛选、按需调查和服务归并，直到可以生成服务器 Wiki。'
-        : '继续审查未完成的服务候选和路径，直到完成分类。',
+    const attempt = await executeWithTimeoutRecovery(
+      runtime,
+      () => runtime.resume(completionPrompt(session)),
+      logger,
+      maxRuns,
+      runsUsed + 1,
     );
+    response = attempt.response;
+    runsUsed = attempt.runsUsed;
     printResponse(logger, response);
   }
   const session = runtime.currentSession;
   throw new Error(
     `自动编排达到 ${maxRuns} 次运行上限，${progressLabel(session)}仍未完成：turns=${session.turnCount}, ${progressLabel(session)}=${formatCoverage(session.coverage.classification)}。可使用 --resume 继续，或提高 --max-agent-runs。`,
+  );
+}
+
+async function executeWithTimeoutRecovery(
+  runtime: CompletionRuntime,
+  initialAction: () => Promise<AgentResponse>,
+  logger: Logger,
+  maxRuns: number,
+  firstRun: number,
+): Promise<CompletionAttempt> {
+  let action = initialAction;
+  for (let run = firstRun; run <= maxRuns; run += 1) {
+    try {
+      return { response: await action(), runsUsed: run };
+    } catch (error) {
+      if (!isRecoverableTurnTimeout(error, runtime.currentSession) || run === maxRuns) throw error;
+      logger.info(`Codex turn timed out; auto-resume ${run + 1}/${maxRuns} with a fresh thread.`);
+      action = () => runtime.resume(completionPrompt(runtime.currentSession));
+    }
+  }
+  throw new Error(`自动编排达到 ${maxRuns} 次运行上限。`);
+}
+
+function completionPrompt(session: Pick<AgentSession, 'workflowVersion'>): string {
+  return session.workflowVersion === 'm20_evidence_driven'
+    ? '继续完成证据筛选、按需调查和服务归并，直到可以生成服务器 Wiki。'
+    : '继续审查未完成的服务候选和路径，直到完成分类。';
+}
+
+function isRecoverableTurnTimeout(
+  error: unknown,
+  session: Pick<AgentSession, 'state' | 'stopReason'>,
+): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    session.state === 'failed' &&
+    session.stopReason === 'codex_failed' &&
+    /timeout|timed out|ETIMEDOUT/i.test(message)
   );
 }
 
