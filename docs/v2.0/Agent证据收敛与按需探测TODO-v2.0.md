@@ -153,9 +153,28 @@ Codex 必须决定：
 - [ ] `Must` 新增筛选决策、过滤组、调查计划、Probe 请求、服务归并和报告生成之间的可追溯链路。
 - [ ] `Must` 旧 M19 会话与新 M20 会话使用显式 `workflowVersion` 区分，避免恢复时套用错误 Prompt 或门禁。
 
-## 4. 测试与验收
+## 4. M21：AI 服务器 Wiki 综合撰写
 
-### 4.1 单元与集成测试
+当前状态：`[-]` 本地实现与自动化测试已完成；真实 Codex 验收因上游 503 暂未完成。
+
+- [x] `Must` 新增受 Schema 约束的 `compose_wiki` 工具，持久化 Codex 撰写的执行摘要、系统定位、部署架构、部署布局、运维说明、服务分组、重点发现和待确认项。
+- [x] `Must` 将完整已评估服务、容器名、镜像名、端口、路径和 Evidence ID 作为 `wiki_source` 提供给最终撰写阶段。
+- [x] `Must` 对能够从服务名、容器名或镜像名可靠识别的产品生成详细服务说明；无法识别的服务允许省略，不强制编造。
+- [x] `Must` 服务详细说明和重点发现引用已有 Evidence ID，本地拒绝未知服务、重复描述和虚构 Evidence ID。
+- [x] `Must` 调查完成但 `compose_wiki` 未完成时拒绝 `final` 和 v2 Wiki 报告生成。
+- [x] `Must` 综合稿件 Thread 必须存在成功的 `compose_wiki` ToolActivity，可与分类 Thread、最终 Thread 不同。
+- [x] `Must` HTML、Word、Markdown 以同一份 `WikiNarrative` 作为主叙事，同时保留结构化事实表格和证据附录。
+- [x] `Must` 服务或调查投影发生变更时使旧综合稿件失效，防止过期总结进入报告。
+
+验收条件：
+
+- MinIO、Nexus、数据库等可识别服务具有面向运维人员的产品用途和部署说明，而不是只展示名称与字段表格。
+- 报告包含由 Codex 撰写的服务器级概览、部署架构、服务分组和运维说明。
+- Codex 不可用或综合稿件不符合 Schema 时，不生成声称完成的 v2 Wiki。
+
+## 5. 测试与验收
+
+### 5.1 单元与集成测试
 
 - [ ] `Must` 验证 Snapshot 中的普通 systemd unit 不会自动创建等量的服务审查任务。
 - [ ] `Must` 验证 Codex 可以通过一个聚合筛选决策过滤多个普通系统 unit，并保留可追溯统计与 Evidence ID。
@@ -165,7 +184,7 @@ Codex 必须决定：
 - [ ] `Must` 验证 Codex 结构化输出错误、SSH 中断和预算耗尽后可恢复，不生成伪完成 Wiki。
 - [ ] `Must` 验证 HTML、Word、Markdown 仅使用收敛后的 Wiki Projection，普通系统 unit 不逐项出现在服务正文。
 
-### 4.2 真实服务器验收
+### 5.2 真实服务器验收
 
 - [ ] `Must` 对普通 Linux 主机验证：系统 unit 被聚合，服务索引仅保留有效部署服务、重要支撑组件和明确待确认对象。
 - [ ] `Must` 对 Docker/Compose 主机验证：容器、镜像、Compose、宿主机端口和挂载被正确归并；bridge、veth、overlay 不进入正文。
@@ -173,7 +192,7 @@ Codex 必须决定：
 - [ ] `Must` 对不确定服务验证：保留证据、未知项和人工复核建议，不虚构服务用途、路径或操作命令。
 - [ ] `Must` 记录总 Agent turn、Codex 请求、补探测次数、有效服务数、过滤组数量和总耗时，与旧全量审查流程比较。
 
-## 5. 实施顺序与提交建议
+## 6. 实施顺序与提交建议
 
 ```text
 M20-01 工作区与收敛状态
@@ -182,6 +201,7 @@ M20-01 工作区与收敛状态
   -> M20-04 服务归并与 Wiki 模块
   -> M20-05 循环、预算和终止规则
   -> M20-06 Prompt、工具契约与会话迁移
+  -> M21 AI 服务器 Wiki 综合撰写
   -> 测试与真实服务器验收
 ```
 
@@ -194,7 +214,7 @@ M20-01 工作区与收敛状态
 5. `fix: converge agent by investigation completeness instead of unit coverage`
 6. `test: cover evidence-driven discovery and system-unit grouping`
 
-## 6. Definition of Done
+## 7. Definition of Done
 
 - [ ] 原始 Snapshot 是可检索证据库，不再等同于服务器 Wiki 的服务目录。
 - [ ] Codex 在首轮即可筛选和分组普通系统对象，不逐项耗费服务审查回合。
@@ -204,3 +224,4 @@ M20-01 工作区与收敛状态
 - [ ] 普通 systemd unit、容器网络和运行时挂载不污染 Wiki 正文或未决问题列表。
 - [ ] Agent 以有效调查完成度而非原始 unit 数量收敛，并可在预算耗尽后恢复。
 - [ ] HTML、Word、Markdown 从同一份经质量门禁的服务器 Wiki Projection 生成。
+- [x] HTML、Word、Markdown 使用同一份 Codex `WikiNarrative` 作为知识手册主叙事，并包含可识别服务的 AI 详细说明。

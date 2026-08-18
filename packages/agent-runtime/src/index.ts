@@ -240,6 +240,7 @@ function sanitizeTranscriptText(value: string): string {
 }
 
 export * from './context.js';
+export * from './decision-contract.js';
 export * from './governor.js';
 export * from './runtime.js';
 export * from './tools.js';

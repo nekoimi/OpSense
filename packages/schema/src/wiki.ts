@@ -16,6 +16,75 @@ export const WikiServiceRoleSchema = Type.Union([
 
 export type WikiServiceRole = Static<typeof WikiServiceRoleSchema>;
 
+export const WikiServiceDescriptionSchema = Type.Object(
+  {
+    serviceId: IdSchema,
+    description: NonEmptyStringSchema,
+    basis: NonEmptyStringSchema,
+    evidenceIds: Type.Array(IdSchema, { minItems: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type WikiServiceDescription = Static<typeof WikiServiceDescriptionSchema>;
+
+export const WikiNarrativeServiceGroupSchema = Type.Object(
+  {
+    title: NonEmptyStringSchema,
+    summary: NonEmptyStringSchema,
+    serviceIds: Type.Array(IdSchema, { minItems: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export const WikiNarrativeFindingSchema = Type.Object(
+  {
+    title: NonEmptyStringSchema,
+    summary: NonEmptyStringSchema,
+    severity: Type.Union([
+      Type.Literal('info'),
+      Type.Literal('low'),
+      Type.Literal('medium'),
+      Type.Literal('high'),
+      Type.Literal('critical'),
+    ]),
+    evidenceIds: Type.Array(IdSchema, { minItems: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+const WikiNarrativeFields = {
+  executiveSummary: NonEmptyStringSchema,
+  systemOverview: NonEmptyStringSchema,
+  architectureOverview: NonEmptyStringSchema,
+  deploymentOverview: NonEmptyStringSchema,
+  operationsOverview: NonEmptyStringSchema,
+  serviceGroups: Type.Array(WikiNarrativeServiceGroupSchema),
+  serviceDescriptions: Type.Array(WikiServiceDescriptionSchema),
+  keyFindings: Type.Array(WikiNarrativeFindingSchema),
+  unresolvedQuestions: Type.Array(NonEmptyStringSchema),
+};
+
+export const WikiNarrativeDraftSchema = Type.Object(WikiNarrativeFields, {
+  $id: 'WikiNarrativeDraft',
+  additionalProperties: false,
+});
+
+export type WikiNarrativeDraft = Static<typeof WikiNarrativeDraftSchema>;
+
+export const WikiNarrativeSchema = Type.Object(
+  {
+    ...WikiNarrativeFields,
+    provider: Type.Literal('codex'),
+    model: Type.Optional(NonEmptyStringSchema),
+    threadId: NonEmptyStringSchema,
+    generatedAt: DateTimeSchema,
+  },
+  { $id: 'WikiNarrative', additionalProperties: false },
+);
+
+export type WikiNarrative = Static<typeof WikiNarrativeSchema>;
+
 export const WikiClaimSchema = Type.Object(
   {
     field: NonEmptyStringSchema,
@@ -195,6 +264,7 @@ const WikiEntryFields = {
   serviceId: IdSchema,
   identity: WikiIdentitySchema,
   oneLineSummary: NonEmptyStringSchema,
+  description: Type.Optional(NonEmptyStringSchema),
   purpose: WikiPurposeSchema,
   lifecycle: WikiLifecycleSchema,
   deployment: WikiDeploymentSchema,

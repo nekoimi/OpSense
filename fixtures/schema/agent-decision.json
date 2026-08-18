@@ -5,7 +5,7 @@
   "reason": "读取服务候选后再决定是否补探测。",
   "nextAction": "执行受控上下文读取。",
   "toolName": "list_candidates",
-  "arguments": { "limit": 20 },
+  "arguments": { "limit": 12 },
   "unresolvedQuestions": [],
   "nextSuggestions": []
 }

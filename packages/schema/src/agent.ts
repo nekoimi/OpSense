@@ -13,6 +13,7 @@ import {
   DiscoveryFilterGroupSchema,
   DiscoveryInvestigationSchema,
 } from './projection.js';
+import { WikiNarrativeDraftSchema } from './wiki.js';
 
 export const AgentContextSectionSchema = Type.Union([
   Type.Literal('host'),
@@ -21,18 +22,20 @@ export const AgentContextSectionSchema = Type.Union([
   Type.Literal('services'),
   Type.Literal('processes'),
   Type.Literal('containers'),
+  Type.Literal('systemd_units'),
   Type.Literal('systemd_summary'),
   Type.Literal('path_candidates'),
   Type.Literal('findings'),
   Type.Literal('visibility_summary'),
   Type.Literal('discovery'),
+  Type.Literal('wiki_source'),
 ]);
 
 export const ReadContextArgumentsSchema = Type.Object(
   {
     section: AgentContextSectionSchema,
     offset: Type.Optional(Type.Integer({ minimum: 0 })),
-    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 5 })),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 12 })),
   },
   { additionalProperties: false },
 );
@@ -51,6 +54,9 @@ export const ListCandidatesArgumentsSchema = Type.Object(
     section: Type.Optional(
       Type.Union([
         Type.Literal('services'),
+        Type.Literal('processes'),
+        Type.Literal('containers'),
+        Type.Literal('systemd_units'),
         Type.Literal('paths'),
         Type.Literal('network'),
         Type.Literal('storage'),
@@ -58,15 +64,18 @@ export const ListCandidatesArgumentsSchema = Type.Object(
       ]),
     ),
     offset: Type.Optional(Type.Integer({ minimum: 0 })),
-    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 5 })),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 12 })),
   },
   { additionalProperties: false },
 );
 
-export const ExecuteGovernedProbeArgumentsSchema = Type.Object(
-  { request: ProbeRequestSchema },
-  { additionalProperties: false },
-);
+export const ExecuteGovernedProbeArgumentsSchema = Type.Union([
+  Type.Object({ request: ProbeRequestSchema }, { additionalProperties: false }),
+  Type.Object(
+    { requests: Type.Array(ProbeRequestSchema, { minItems: 1, maxItems: 4 }) },
+    { additionalProperties: false },
+  ),
+]);
 
 export const PlanDiscoveryArgumentsSchema = Type.Object(
   {
@@ -152,6 +161,9 @@ export const UpdateProjectionArgumentsSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const ComposeWikiArgumentsSchema = WikiNarrativeDraftSchema;
+export type ComposeWikiArguments = Static<typeof ComposeWikiArgumentsSchema>;
+
 export const AgentToolNameSchema = Type.Union([
   Type.Literal('read_context'),
   Type.Literal('read_evidence'),
@@ -159,6 +171,7 @@ export const AgentToolNameSchema = Type.Union([
   Type.Literal('execute_governed_probe'),
   Type.Literal('plan_discovery'),
   Type.Literal('update_projection'),
+  Type.Literal('compose_wiki'),
 ]);
 
 export type AgentToolName = Static<typeof AgentToolNameSchema>;
@@ -279,8 +292,62 @@ export const AgentDecisionSchema = Type.Union([
     {
       ...AgentDecisionShared,
       kind: Type.Literal('tool_call'),
-      toolName: AgentToolNameSchema,
-      arguments: Type.Record(Type.String(), Type.Unknown()),
+      toolName: Type.Literal('read_context'),
+      arguments: ReadContextArgumentsSchema,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...AgentDecisionShared,
+      kind: Type.Literal('tool_call'),
+      toolName: Type.Literal('read_evidence'),
+      arguments: ReadEvidenceArgumentsSchema,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...AgentDecisionShared,
+      kind: Type.Literal('tool_call'),
+      toolName: Type.Literal('list_candidates'),
+      arguments: ListCandidatesArgumentsSchema,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...AgentDecisionShared,
+      kind: Type.Literal('tool_call'),
+      toolName: Type.Literal('execute_governed_probe'),
+      arguments: ExecuteGovernedProbeArgumentsSchema,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...AgentDecisionShared,
+      kind: Type.Literal('tool_call'),
+      toolName: Type.Literal('plan_discovery'),
+      arguments: PlanDiscoveryArgumentsSchema,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...AgentDecisionShared,
+      kind: Type.Literal('tool_call'),
+      toolName: Type.Literal('update_projection'),
+      arguments: UpdateProjectionArgumentsSchema,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...AgentDecisionShared,
+      kind: Type.Literal('tool_call'),
+      toolName: Type.Literal('compose_wiki'),
+      arguments: ComposeWikiArgumentsSchema,
     },
     { additionalProperties: false },
   ),

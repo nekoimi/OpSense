@@ -25,7 +25,6 @@ export function renderMarkdownBundle(model: ReportModel): MarkdownReportBundle {
   files.set('services.md', renderServices(model));
   files.set('findings.md', renderFindings(model));
   files.set('unknowns.md', renderUnknowns(model));
-  files.set('evidence.md', renderEvidence(model));
   for (const service of model.services) {
     files.set(`services/${serviceFileName(service.id)}`, renderService(service));
   }
@@ -51,7 +50,7 @@ ${heading(2, '执行摘要')}
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | ${model.summary.serviceCount} | ${model.summary.primaryServiceCount} | ${model.summary.supportingServiceCount} | ${model.summary.systemServiceCount} | ${model.summary.needsReviewServiceCount} | ${model.summary.findingCount} | ${model.summary.unknownCount} |
 
-${model.aiAnalysis === undefined ? '' : `${heading(2, 'AI 分析（推断层）')}\n\n${markdownText(model.aiAnalysis.hostSummary)}\n`}
+${model.wikiNarrative === undefined ? (model.aiAnalysis === undefined ? '' : `${heading(2, 'AI 分析（兼容模式）')}\n\n${markdownText(model.aiAnalysis.hostSummary)}\n`) : renderWikiNarrative(model)}
 
 ${heading(2, '报告文件')}
 
@@ -61,7 +60,55 @@ ${heading(2, '报告文件')}
 - [服务清单](services.md)
 - [风险与发现](findings.md)
 - [未知项](unknowns.md)
-- [证据附录](evidence.md)
+`;
+}
+
+function renderWikiNarrative(model: ReportModel): string {
+  const narrative = model.wikiNarrative;
+  if (narrative === undefined) return '';
+  const groups = narrative.serviceGroups
+    .map((group) => {
+      const serviceById = new Map(model.serviceIndex.map((service) => [service.id, service]));
+      const names = group.serviceIds.map((id) => {
+        const service = serviceById.get(id);
+        return service === undefined ? id : (service.displayName ?? service.name);
+      });
+      return `${heading(2, group.title)}\n\n${markdownText(group.summary)}\n\n- 包含服务：${names.map((name) => cell(name)).join('、')}`;
+    })
+    .join('\n\n');
+  const findings = narrative.keyFindings
+    .map(
+      (finding) =>
+        `${heading(2, `[${statusLabel(finding.severity)}] ${finding.title}`)}\n\n${markdownText(finding.summary)}`,
+    )
+    .join('\n\n');
+  return `${heading(2, 'Codex 撰写的服务器摘要')}
+
+${markdownText(narrative.executiveSummary)}
+
+${heading(2, '系统定位')}
+
+${markdownText(narrative.systemOverview)}
+
+${heading(2, '部署架构')}
+
+${markdownText(narrative.architectureOverview)}
+
+${heading(2, '部署与数据布局')}
+
+${markdownText(narrative.deploymentOverview)}
+
+${heading(2, '运维说明')}
+
+${markdownText(narrative.operationsOverview)}
+
+${heading(2, '服务分组')}
+
+${groups || '未形成服务分组。'}
+
+${heading(2, 'AI 重点发现')}
+
+${findings || '无额外 AI 重点发现。'}
 `;
 }
 
@@ -151,14 +198,14 @@ function renderServices(model: ReportModel): string {
   const rows = model.services
     .map((service) => {
       const fileName = serviceFileName(service.id);
-      return `| [${cell(service.displayName ?? service.name)}](services/${fileName}) | ${statusLabel(service.status)} | ${cell(service.role)} | ${cell(service.reportPlacement)} | ${cell(displayList(service.ports))} | ${statusLabel(service.assessmentConfidence)} |`;
+      return `| [${cell(service.displayName ?? service.name)}](services/${fileName}) | ${statusLabel(service.status)} | ${cell(service.deploymentType)} | ${cell(service.role)} | ${cell(displayList(service.ports))} |`;
     })
     .join('\n');
-  return `${heading(1, '部署服务分类')}
+  return `${heading(1, '服务目录')}
 
-| 服务 | 状态 | 角色 | 报告位置 | 端口 | 分类确定程度 |
-| --- | --- | --- | --- | --- | --- |
-${rows || '| - | - | - | - | - | - |'}
+| 服务 | 状态 | 部署方式 | 角色 | 监听端口 |
+| --- | --- | --- | --- | --- |
+${rows || '| - | - | - | - | - |'}
 
 ${heading(2, '系统服务概况')}
 
@@ -167,16 +214,13 @@ ${heading(2, '系统服务概况')}
 - 失败：${model.systemServices.failedCount}
 - 需关注 unit：${cell(displayList(model.systemServices.attentionServices.map((item) => item.name)))}
 
-${heading(2, '完整候选索引')}
-
-| 服务 | 状态 | 角色 | 报告位置 | 部署方式 |
-| --- | --- | --- | --- | --- |
-${model.serviceIndex.map((service) => `| ${cell(service.displayName ?? service.name)} | ${statusLabel(service.status)} | ${cell(service.role)} | ${cell(service.reportPlacement)} | ${cell(service.deploymentType)} |`).join('\n') || '| - | - | - | - | - |'}
 `;
 }
 
 function renderService(service: ReportService): string {
   return `${heading(1, service.displayName ?? service.name)}
+
+${service.description === undefined ? '' : `${markdownText(service.description)}\n`}
 
 | 项目 | 内容 |
 | --- | --- |
@@ -184,10 +228,6 @@ function renderService(service: ReportService): string {
 | 状态 | ${statusLabel(service.status)} |
 | 部署方式 | ${cell(service.deploymentType)} |
 | 服务角色 | ${cell(service.role)} |
-| 报告位置 | ${cell(service.reportPlacement)} |
-| 分类理由 | ${cell(service.assessmentReason)} |
-| 分类确定程度 | ${statusLabel(service.assessmentConfidence)} |
-| 确定程度 | ${statusLabel(service.confidence)} |
 | 开机启动 | ${displayBoolean(service.enabledAtBoot)} |
 | 进程 PID | ${cell(service.processIds.join(', '))} |
 | 端口 | ${cell(displayList(service.ports))} |
@@ -197,9 +237,7 @@ function renderService(service: ReportService): string {
 | 日志位置 | ${codeList(service.logLocations)} |
 | 数据目录 | ${codeList(service.dataDirectories)} |
 | 启动命令 | ${code(service.startCommand)} |
-| 未知字段 | ${cell(displayList(service.unknownFields))} |
-| 冲突字段 | ${cell(displayList(service.conflictFields))} |
-| Evidence | ${cell(displayList(service.evidenceIds))} |
+| 待确认项 | ${cell(displayList([...service.unknownFields, ...service.conflictFields]))} |
 
 ${service.purpose === undefined ? '' : `${heading(2, '用途说明')}\n\n${markdownText(service.purpose)}\n`}
 `;
@@ -209,46 +247,38 @@ function renderFindings(model: ReportModel): string {
   const factual = model.findings
     .map(
       (finding) =>
-        `${heading(2, `[${statusLabel(finding.severity)}] ${finding.title}`)}\n\n${markdownText(finding.description)}\n\n- 确定程度：${statusLabel(finding.confidence)}\n- Evidence：${markdownText(displayList(finding.evidenceIds))}`,
+        `${heading(2, `[${statusLabel(finding.severity)}] ${finding.title}`)}\n\n${markdownText(finding.description)}\n\n- 确定程度：${statusLabel(finding.confidence)}`,
     )
     .join('\n\n');
   const ai = (model.aiAnalysis?.findings ?? [])
     .map(
       (finding) =>
-        `${heading(2, `[AI/${statusLabel(finding.severity)}] ${finding.title}`)}\n\n${markdownText(finding.description)}\n\n- 确定程度：${statusLabel(finding.confidence)}\n- Evidence：${markdownText(displayList(finding.evidenceIds))}`,
+        `${heading(2, `[AI/${statusLabel(finding.severity)}] ${finding.title}`)}\n\n${markdownText(finding.description)}\n\n- 确定程度：${statusLabel(finding.confidence)}`,
+    )
+    .join('\n\n');
+  const narrative = (model.wikiNarrative?.keyFindings ?? [])
+    .map(
+      (finding) =>
+        `${heading(2, `[AI/${statusLabel(finding.severity)}] ${finding.title}`)}\n\n${markdownText(finding.summary)}`,
     )
     .join('\n\n');
   return `${heading(1, '风险与发现')}
 
 ${factual || '无事实层风险记录。'}
 
-${ai === '' ? '' : `${heading(1, 'AI 风险提示（推断层）')}\n\n${ai}`}
+${narrative === '' && ai === '' ? '' : `${heading(1, 'AI 风险提示（推断层）')}\n\n${narrative || ai}`}
 `;
 }
 
 function renderUnknowns(model: ReportModel): string {
   const values = [
     ...model.unknowns,
+    ...(model.wikiNarrative?.unresolvedQuestions ?? []).map((item) => `[AI] ${item}`),
     ...(model.aiAnalysis?.unknowns ?? []).map((item) => `[AI] ${item}`),
   ];
   return `${heading(1, '未知项')}
 
 ${values.length === 0 ? '无。' : values.map((item) => `- ${markdownText(item)}`).join('\n')}
-`;
-}
-
-function renderEvidence(model: ReportModel): string {
-  const rows = model.evidence
-    .map(
-      (evidence) =>
-        `| ${code(evidence.id)} | ${cell(evidence.kind)} | ${cell(evidence.source)} | ${cell(evidence.status)} | ${cell(evidence.sensitivity)} | ${formatDateTime(evidence.collectedAt)} |`,
-    )
-    .join('\n');
-  return `${heading(1, '证据附录')}
-
-| Evidence ID | 类型 | 来源 | 状态 | 敏感级别 | 采集时间 |
-| --- | --- | --- | --- | --- | --- |
-${rows || '| - | - | - | - | - | - |'}
 `;
 }
 

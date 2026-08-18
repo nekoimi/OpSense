@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@opsense/ai-provider": "workspace:*",
+    "@opsense/discovery": "workspace:*",
     "@opsense/schema": "workspace:*",
     "@opsense/workspace": "workspace:*"
   }

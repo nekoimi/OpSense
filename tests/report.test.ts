@@ -93,8 +93,10 @@ describe('M8 report generation', () => {
         'services.md',
         'findings.md',
         'unknowns.md',
-        'evidence.md',
       ]),
+    );
+    expect(artifacts.markdownFiles.map((file) => path.relative(root, file))).not.toContain(
+      'evidence.md',
     );
     expect(path.basename(artifacts.wikiProjectionFile)).toBe('wiki-projection.json');
     expect(path.basename(artifacts.qualityFile)).toBe('report-quality.json');
@@ -112,6 +114,10 @@ describe('M8 report generation', () => {
     );
     expect(html).toContain('<!doctype html>');
     expect(html).toContain('部署服务');
+    expect(html).toContain('运行架构与服务关系');
+    expect(html).toContain('服务手册');
+    expect(html).not.toContain('证据附录');
+    expect(html).not.toContain('Evidence ID');
     expect(html).toContain('class="watermark-layer"');
     expect(html).toContain('OpSense 版权所有');
     expect(html).toContain('© 2026 OpSense. 保留所有权利。');
@@ -132,8 +138,10 @@ describe('M8 report generation', () => {
     expect(validation.hasWatermark).toBe(true);
     expect(validation.hasCopyrightNotice).toBe(true);
     expect(validation.text).toContain('服务器巡检报告');
-    expect(validation.text).toContain('系统环境');
-    expect(validation.text).toContain('证据附录');
+    expect(validation.text).toContain('主机运行基线');
+    expect(validation.text).toContain('服务运行手册');
+    expect(validation.text).not.toContain('证据附录');
+    expect(validation.text).not.toContain('Evidence ID');
   });
 });
 

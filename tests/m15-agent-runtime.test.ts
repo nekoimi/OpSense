@@ -10,7 +10,7 @@ import {
   ToolRouter,
   createAgentSession,
 } from '@opsense/agent-runtime';
-import { buildInventoryProjection } from '@opsense/projection';
+import { applyDiscoveryPlan, buildInventoryProjection } from '@opsense/projection';
 import type { ScanSnapshot } from '@opsense/schema';
 import { createRunWorkspaceLayout } from '@opsense/workspace';
 import { describe, expect, it } from 'vitest';
@@ -308,6 +308,7 @@ describe('M15 agent runtime', () => {
       expect(response.message).toBe('Wiki 投影已完成。');
       expect(prompts).toHaveLength(2);
       expect(prompts[1]).toContain('read_context');
+      expect(prompts[1]).toContain('"arguments":{"section":"services"}');
       expect((await store.load()).threadId).toBe('codex-real-thread');
       expect((await store.load()).state).toBe('completed');
     } finally {
@@ -383,6 +384,265 @@ describe('M15 agent runtime', () => {
       await expect(runtime.resume('继续')).resolves.toMatchObject({ message: '恢复运行已完成。' });
       expect(turns).toBe(2);
       expect(runtime.currentSession.state).toBe('completed');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('applies the token budget to each resumed run instead of cumulative runtime usage', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'opsense-m15-resume-token-budget-'));
+    try {
+      const snapshot = await fixtureSnapshot();
+      const projection = buildInventoryProjection(snapshot);
+      const session = createAgentSession({ scanId: snapshot.session.id });
+      const store = new FileAgentSessionStore(createRunWorkspaceLayout(snapshot.session.id, root));
+      await store.save(session);
+      let turns = 0;
+      const runtime = new AgentRuntime({
+        scanId: snapshot.session.id,
+        store,
+        thread: {
+          start: async () => ({ threadId: `codex-token-thread-${turns}` }),
+          resume: async (threadId: string) => ({ threadId }),
+          run: async () => {
+            turns += 1;
+            if (turns < 3)
+              return {
+                decision: {
+                  arguments: { section: 'services' },
+                  decisionId: `decision:token-read-${turns}`,
+                  kind: 'tool_call' as const,
+                  nextAction: 'continue',
+                  nextSuggestions: [],
+                  reason: '读取服务上下文。',
+                  toolName: 'read_context' as const,
+                  turnId: 'model-turn',
+                  unresolvedQuestions: [],
+                },
+                tokenUsage: turns === 1 ? 100 : 40,
+              };
+            return {
+              decision: {
+                decisionId: 'decision:token-final',
+                findingIds: [],
+                inventoryProjectionId: projection.projectionId,
+                kind: 'final' as const,
+                nextAction: 'wiki',
+                nextSuggestions: [],
+                qualitySummary: '恢复后的本轮 token 预算允许继续完成。',
+                reason: '证据充分。',
+                serviceWikiProjectionId: 'wiki:test',
+                turnId: 'model-turn',
+                unresolvedQuestions: [],
+              },
+            };
+          },
+        },
+        context: new ContextBuilder({ projection }),
+        tools: new ToolRouter({
+          projection,
+          context: new ContextBuilder({ projection }),
+          governor: new ProbeGovernor({ snapshot, session }),
+        }),
+        maxTokens: 100,
+        maxTurns: 3,
+      });
+
+      await runtime.start('开始');
+      expect(runtime.currentSession).toMatchObject({ state: 'partial', turnCount: 1 });
+
+      await runtime.resume('继续');
+      expect(runtime.currentSession).toMatchObject({ state: 'completed', turnCount: 3 });
+      expect(turns).toBe(3);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a model failed decision while required discovery is incomplete', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'opsense-m20-nonterminal-failed-'));
+    try {
+      const snapshot = await fixtureSnapshot();
+      snapshot.evidence = [
+        {
+          collectedAt: '2026-08-18T07:00:00.000Z',
+          id: 'evidence:m20-runtime',
+          kind: 'derived',
+          opsenseVersion: '0.1.0',
+          sensitivity: 'internal',
+          source: 'service.normalization',
+          status: 'success',
+        },
+      ];
+      snapshot.services = [
+        {
+          composeProjectIds: [],
+          confidence: 'inferred',
+          configFiles: [],
+          containerIds: [],
+          dataDirectories: [],
+          deployDirectories: ['/opt/order-api'],
+          deploymentType: 'systemd',
+          environmentFiles: [],
+          evidenceIds: ['evidence:m20-runtime'],
+          id: 'service:order-api',
+          logLocations: [],
+          name: 'order-api',
+          processIds: [],
+          socketIds: [],
+          status: 'running',
+          systemdUnitIds: [],
+          unknownFields: [],
+        },
+      ];
+      const projection = buildInventoryProjection(snapshot, {
+        mode: 'agent',
+        workflowVersion: 'm20_evidence_driven',
+      });
+      applyDiscoveryPlan(projection, {
+        discoveryCompleted: false,
+        discoveredServices: [],
+        filteredGroups: [],
+        investigations: [
+          {
+            evidenceIds: ['evidence:m20-runtime'],
+            investigationId: 'investigation:order-api',
+            label: 'Order API',
+            priority: 'high',
+            reason: 'Custom deployment requires a service assessment.',
+            serviceIds: ['service:order-api'],
+            sourceObjectIds: ['service:order-api'],
+            status: 'selected',
+          },
+        ],
+        planningCompleted: true,
+        reason: 'Select the custom deployment for investigation.',
+        unresolvedQuestions: [],
+      });
+      const session = createAgentSession({
+        scanId: snapshot.session.id,
+        workflowVersion: 'm20_evidence_driven',
+      });
+      const store = new FileAgentSessionStore(createRunWorkspaceLayout(snapshot.session.id, root));
+      await store.save(session);
+      const prompts: string[] = [];
+      let turns = 0;
+      const context = new ContextBuilder({ projection });
+      const runtime = new AgentRuntime({
+        scanId: snapshot.session.id,
+        session,
+        store,
+        thread: {
+          start: async () => ({ threadId: 'codex-nonterminal-failed' }),
+          resume: async (threadId: string) => ({ threadId }),
+          run: async (_threadId: string, prompt: string) => {
+            prompts.push(prompt);
+            turns += 1;
+            return turns === 1
+              ? {
+                  decision: {
+                    decisionId: 'decision:premature-failed',
+                    error: 'Only static context is available.',
+                    kind: 'failed' as const,
+                    nextAction: 'stop',
+                    nextSuggestions: [],
+                    reason: 'Cannot continue.',
+                    turnId: 'model-turn',
+                    unresolvedQuestions: [],
+                  },
+                }
+              : {
+                  decision: {
+                    arguments: { section: 'services' },
+                    decisionId: 'decision:recover-read',
+                    kind: 'tool_call' as const,
+                    nextAction: 'continue',
+                    nextSuggestions: [],
+                    reason: 'Continue with the available OpSense tool.',
+                    toolName: 'read_context' as const,
+                    turnId: 'model-turn',
+                    unresolvedQuestions: [],
+                  },
+                };
+          },
+        },
+        context,
+        tools: new ToolRouter({
+          projection,
+          context,
+          governor: new ProbeGovernor({ snapshot, session }),
+        }),
+        maxTurns: 2,
+        requireClassificationComplete: true,
+      });
+
+      await runtime.start('开始');
+
+      expect(runtime.currentSession.state).toBe('partial');
+      expect(runtime.currentSession.lastError).toBeUndefined();
+      expect(turns).toBe(2);
+      expect(prompts[1]).toContain('model_failed_decision');
+      expect(prompts[1]).toContain('Only static context is available.');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('reuses an M20 Codex thread for several Agent turns', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'opsense-m20-thread-reuse-'));
+    try {
+      const snapshot = await fixtureSnapshot();
+      const projection = buildInventoryProjection(snapshot, {
+        mode: 'agent',
+        workflowVersion: 'm20_evidence_driven',
+      });
+      const session = createAgentSession({
+        scanId: snapshot.session.id,
+        workflowVersion: 'm20_evidence_driven',
+      });
+      const store = new FileAgentSessionStore(createRunWorkspaceLayout(snapshot.session.id, root));
+      await store.save(session);
+      let starts = 0;
+      let resumes = 0;
+      const runtime = new AgentRuntime({
+        scanId: snapshot.session.id,
+        session,
+        store,
+        thread: {
+          start: async () => ({ threadId: `codex-m20-thread-${++starts}` }),
+          resume: async (threadId: string) => {
+            resumes += 1;
+            return { threadId };
+          },
+          run: async () => ({
+            decision: {
+              arguments: { section: 'discovery' },
+              decisionId: `decision:m20-read-${runtime.currentSession.turnCount + 1}`,
+              kind: 'tool_call' as const,
+              nextAction: 'continue',
+              nextSuggestions: [],
+              reason: '继续读取 M20 调查上下文。',
+              toolName: 'read_context' as const,
+              turnId: 'model-turn',
+              unresolvedQuestions: [],
+            },
+          }),
+        },
+        context: new ContextBuilder({ projection }),
+        tools: new ToolRouter({
+          projection,
+          context: new ContextBuilder({ projection }),
+          governor: new ProbeGovernor({ snapshot, session }),
+        }),
+        maxTurns: 5,
+      });
+
+      await runtime.start('开始');
+
+      expect(runtime.currentSession).toMatchObject({ state: 'partial', turnCount: 5 });
+      expect(starts).toBe(2);
+      expect(resumes).toBe(0);
+      expect(runtime.currentSession.threadId).toBe('codex-m20-thread-2');
     } finally {
       await rm(root, { recursive: true, force: true });
     }

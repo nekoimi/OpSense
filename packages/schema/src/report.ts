@@ -13,6 +13,7 @@ import {
 import { FindingRecordSchema } from './evidence.js';
 import { RedactionReportSchema } from './redaction.js';
 import { DeploymentTypeSchema, ServiceStatusSchema } from './service.js';
+import { WikiNarrativeSchema } from './wiki.js';
 
 export const ReportMetadataSchema = Type.Object(
   {
@@ -179,6 +180,7 @@ export const ReportServiceSchema = Type.Object(
     ports: Type.Array(Type.String()),
     processIds: Type.Array(Type.Integer({ minimum: 1 })),
     purpose: Type.Optional(Type.String()),
+    description: Type.Optional(Type.String()),
     reportPlacement: ReportPlacementSchema,
     role: AiServiceRoleSchema,
     startCommand: Type.Optional(Type.String()),
@@ -215,6 +217,7 @@ export const ReportEvidenceSchema = Type.Object(
 export const ReportModelSchema = Type.Object(
   {
     aiAnalysis: Type.Optional(AiAnalysisSchema),
+    wikiNarrative: Type.Optional(WikiNarrativeSchema),
     disks: Type.Array(ReportDiskSchema),
     evidence: Type.Array(ReportEvidenceSchema),
     findings: Type.Array(FindingRecordSchema),

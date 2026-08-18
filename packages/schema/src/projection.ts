@@ -12,7 +12,7 @@ import { ContainerRecordSchema, ComposeProjectRecordSchema } from './container.j
 import { ArtifactRecordSchema, PathSeedRecordSchema } from './evidence.js';
 import { ScanSessionSchema } from './scan.js';
 import { RedactionReportSchema } from './redaction.js';
-import { ServiceWikiEntrySchema } from './wiki.js';
+import { ServiceWikiEntrySchema, WikiNarrativeSchema } from './wiki.js';
 
 export const VisibilityPlacementSchema = Type.Union([
   Type.Literal('primary'),
@@ -169,6 +169,7 @@ export const ServiceWikiProjectionSchema = Type.Object(
     riskFindings: Type.Array(RiskFindingSchema),
     entries: Type.Array(ServiceWikiEntrySchema),
     unresolvedQuestions: Type.Array(Type.String()),
+    narrative: Type.Optional(WikiNarrativeSchema),
   },
   { $id: 'ServiceWikiProjection', additionalProperties: false },
 );
@@ -208,6 +209,7 @@ export const InventoryProjectionSchema = Type.Object(
     classificationThreadId: Type.Optional(NonEmptyStringSchema),
     classificationUpdatedAt: Type.Optional(DateTimeSchema),
     discoveryWorkspace: Type.Optional(DiscoveryWorkspaceSchema),
+    wikiNarrative: Type.Optional(WikiNarrativeSchema),
     evidence: Type.Array(EvidenceRecordSchema),
     findings: Type.Array(FindingRecordSchema),
     unknowns: Type.Array(Type.String()),

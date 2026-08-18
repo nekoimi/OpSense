@@ -5,15 +5,44 @@ import path from 'node:path';
 import { createAgentSession } from '@opsense/agent-runtime';
 import { buildInventoryProjection } from '@opsense/projection';
 import { AgentSessionSchema, InventoryProjectionSchema, assertSchema } from '@opsense/schema';
-import type { AgentResponse, AgentSession, ScanSnapshot } from '@opsense/schema';
+import type { AgentResponse, AgentSession, AgentTurn, ScanSnapshot } from '@opsense/schema';
 import { ensureRunWorkspace, writeJsonAtomic } from '@opsense/workspace';
 import { describe, expect, it } from 'vitest';
 
-import { runAgentToCompletion } from '../apps/cli/src/commands/agent.js';
+import {
+  buildAgentProgressSnapshot,
+  formatAgentHeartbeat,
+  formatAgentProgress,
+} from '../apps/cli/src/agent-progress.js';
+import { assertWikiThreadAudit, runAgentToCompletion } from '../apps/cli/src/commands/agent.js';
 import { prepareAgentWorkflow } from '../apps/cli/src/workflows/agent-workflow.js';
 import { readFixture } from './support/read-fixture.js';
 
 describe('M16 agent CLI workspace', () => {
+  it('formats a friendly M20 progress summary without a misleading global percentage', async () => {
+    const snapshot = JSON.parse(await readFixture('schema/minimal-snapshot.json')) as ScanSnapshot;
+    const projection = buildInventoryProjection(snapshot, {
+      mode: 'agent',
+      workflowVersion: 'm20_evidence_driven',
+    });
+    const session = createAgentSession({
+      model: 'gpt-5.6-luna',
+      scanId: snapshot.session.id,
+      workflowVersion: 'm20_evidence_driven',
+    });
+
+    const progress = buildAgentProgressSnapshot(session, projection);
+    const output = formatAgentProgress(progress).join('\n');
+
+    expect(output).toContain('证据筛选与调查规划');
+    expect(output).toContain('模型 gpt-5.6-luna');
+    expect(output).toContain('调查：完成 0/0');
+    expect(output).not.toContain('%');
+    expect(formatAgentHeartbeat(progress, 72_000)).toContain(
+      'Codex 处理中 | 证据筛选与调查规划 | 已运行 1m 12s',
+    );
+  });
+
   it('automatically resumes partial Agent runs until classification completes', async () => {
     let session: Pick<AgentSession, 'coverage' | 'state' | 'turnCount'> = {
       coverage: { classification: 0.5 },
@@ -100,6 +129,108 @@ describe('M16 agent CLI workspace', () => {
     expect(logs.join('\n')).toContain('Codex turn timed out; auto-resume 3/3');
   });
 
+  it('accepts an audited classification and final decision from different Codex threads', () => {
+    const sessionId = 'agent:multi-thread-audit';
+    const classificationThreadId = 'thread:classification';
+    const compositionThreadId = 'thread:composition';
+    const finalThreadId = 'thread:final';
+    const turns: AgentTurn[] = [
+      agentTurn({
+        decisionKind: 'tool_call',
+        projectionChanges: ['service:order-api'],
+        sequence: 8,
+        sessionId,
+        threadId: classificationThreadId,
+        toolCalls: [
+          {
+            activityId: 'activity:plan-discovery',
+            argumentSummary: '{}',
+            evidenceIds: ['evidence:order-api'],
+            finishedAt: '2026-08-18T07:42:14.000Z',
+            resultSummary: 'Discovery completed.',
+            startedAt: '2026-08-18T07:42:13.000Z',
+            status: 'completed',
+            toolName: 'plan_discovery',
+          },
+        ],
+      }),
+      agentTurn({
+        decisionKind: 'tool_call',
+        projectionChanges: ['wiki-narrative:scan:test'],
+        sequence: 9,
+        sessionId,
+        threadId: compositionThreadId,
+        toolCalls: [
+          {
+            activityId: 'activity:compose-wiki',
+            argumentSummary: '{}',
+            evidenceIds: ['evidence:order-api'],
+            finishedAt: '2026-08-18T07:42:16.000Z',
+            resultSummary: 'Wiki composed.',
+            startedAt: '2026-08-18T07:42:15.000Z',
+            status: 'completed',
+            toolName: 'compose_wiki',
+          },
+        ],
+      }),
+      agentTurn({
+        decisionKind: 'final',
+        projectionChanges: [],
+        sequence: 10,
+        sessionId,
+        threadId: finalThreadId,
+        toolCalls: [],
+      }),
+    ];
+
+    expect(() =>
+      assertWikiThreadAudit(
+        { sessionId, threadId: finalThreadId, turnCount: 10 },
+        {
+          classificationThreadId,
+          wikiNarrative: {
+            architectureOverview: '应用采用独立服务部署。',
+            deploymentOverview: '部署路径来自已审查证据。',
+            executiveSummary: '服务器运行订单应用。',
+            generatedAt: '2026-08-18T07:42:16.000Z',
+            keyFindings: [],
+            operationsOverview: '运维时关注服务状态。',
+            provider: 'codex',
+            serviceDescriptions: [],
+            serviceGroups: [],
+            systemOverview: 'Linux 应用服务器。',
+            threadId: compositionThreadId,
+            unresolvedQuestions: [],
+          },
+        },
+        turns,
+      ),
+    ).not.toThrow();
+  });
+
+  it('rejects a classification thread without an audited projection change', () => {
+    const sessionId = 'agent:missing-classification-audit';
+    const finalThreadId = 'thread:final';
+    const turns = [
+      agentTurn({
+        decisionKind: 'final',
+        projectionChanges: [],
+        sequence: 10,
+        sessionId,
+        threadId: finalThreadId,
+        toolCalls: [],
+      }),
+    ];
+
+    expect(() =>
+      assertWikiThreadAudit(
+        { sessionId, threadId: finalThreadId, turnCount: 10 },
+        { classificationThreadId: 'thread:not-audited' },
+        turns,
+      ),
+    ).toThrow('Projection 分类 Thread 没有对应的成功变更 Turn');
+  });
+
   it('starts from an existing scan and restores the same session by agent id', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'opsense-m16-'));
     try {
@@ -139,6 +270,22 @@ describe('M16 agent CLI workspace', () => {
       expect(resumed.runtime.currentSession.sessionId).toBe(sessionId);
       expect(resumed.runtime.currentSession.scanId).toBe(snapshot.session.id);
       resumed.close();
+
+      const luna = await prepareAgentWorkflow({
+        maxAgentRounds: 3,
+        maxProbes: 2,
+        model: 'gpt-5.6-luna',
+        port: 22,
+        provider: 'codex',
+        preflight: availablePreflight(),
+        resume: sessionId,
+        workspace: root,
+      });
+      expect(luna.runtime.currentSession.model).toBe('gpt-5.6-luna');
+      expect(JSON.parse(await readFile(layout.agentSessionFile, 'utf8'))).toMatchObject({
+        model: 'gpt-5.6-luna',
+      });
+      luna.close();
     } finally {
       await rm(root, { force: true, recursive: true });
     }
@@ -230,6 +377,28 @@ function response(responseId: string): AgentResponse {
     unresolvedQuestions: [],
     updatedEntities: [],
     wikiArtifacts: [],
+  };
+}
+
+function agentTurn(
+  values: Pick<
+    AgentTurn,
+    'decisionKind' | 'projectionChanges' | 'sequence' | 'sessionId' | 'threadId' | 'toolCalls'
+  >,
+): AgentTurn {
+  return {
+    decisionKind: values.decisionKind,
+    evidenceAdded: [],
+    finishedAt: '2026-08-18T07:43:44.000Z',
+    inputContextHash: 'audit-context-hash',
+    projectionChanges: values.projectionChanges,
+    sequence: values.sequence,
+    sessionId: values.sessionId,
+    startedAt: '2026-08-18T07:43:43.000Z',
+    threadId: values.threadId,
+    toolCalls: values.toolCalls,
+    turnId: `turn:${values.sequence}`,
+    userMessage: 'Continue.',
   };
 }
 

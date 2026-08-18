@@ -19,7 +19,11 @@ import {
   assertSchema,
 } from '@opsense/schema';
 import type { AgentThreadAdapter } from '@opsense/agent-runtime';
-import { parseAgentDecision } from '@opsense/agent-runtime';
+import {
+  buildAgentDecisionRepairPrompt,
+  describeAgentDecisionValidationError,
+  parseAgentDecision,
+} from '@opsense/agent-runtime';
 import type {
   AiAnalysis,
   AiAnalysisProposal,
@@ -42,7 +46,7 @@ const CODEX_AGENT_DECISION_ENVELOPE_SCHEMA = {
     turnId: { type: 'string' },
     kind: {
       type: 'string',
-      enum: ['tool_call', 'projection_update', 'final', 'failed'],
+      enum: ['tool_call', 'final', 'failed'],
     },
     reason: { type: 'string' },
     nextAction: { type: 'string' },
@@ -110,9 +114,13 @@ export class CodexAgentThreadAdapter implements AgentThreadAdapter {
     const runOptions = { ...options, outputSchema: CODEX_AGENT_DECISION_ENVELOPE_SCHEMA };
     let response = await thread.run(envelopePrompt(prompt), runOptions);
     let lastError: unknown;
+    let lastCandidate: unknown;
     for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
+      let candidate: unknown;
       try {
-        const decision = parseAgentDecision(parseDecisionEnvelope(response));
+        candidate = parseDecisionEnvelope(response);
+        lastCandidate = candidate;
+        const decision = parseAgentDecision(candidate);
         const usage = response.usage;
         if (thread.id !== null) this.threads.set(thread.id, thread);
         return {
@@ -127,26 +135,27 @@ export class CodexAgentThreadAdapter implements AgentThreadAdapter {
         };
       } catch (error) {
         lastError = error;
+        lastCandidate = candidate;
         if (attempt === this.maxRetries) break;
         response = await thread.run(
-          envelopePrompt(
-            `上一轮输出不符合 AgentDecision Schema：${error instanceof Error ? error.message : String(error)}\n请重新生成一个完整 AgentDecision。`,
-          ),
+          envelopePrompt(buildAgentDecisionRepairPrompt(error, candidate)),
           runOptions,
         );
       }
     }
-    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+    throw new Error(
+      `Codex returned an invalid AgentDecision after ${this.maxRetries + 1} attempts: ${describeAgentDecisionValidationError(lastError, lastCandidate)}`,
+      { cause: lastError },
+    );
   }
 }
 
 function envelopePrompt(prompt: string): string {
   return `${prompt}\n\nTransport requirement: return one JSON object with exactly these fields: decisionId, turnId, kind, reason, nextAction, unresolvedQuestions, nextSuggestions, payloadJson. nextAction and reason must be strings. payloadJson must be a JSON-encoded object containing only the kind-specific fields:
 - tool_call: {"toolName":"one allowed tool name","arguments":{...}}
-- projection_update: {"changes":[...],"evidenceIds":[...]}
 - final: {"inventoryProjectionId":"...","serviceWikiProjectionId":"...","findingIds":[],"qualitySummary":"..."}
 - failed: {"error":"..."}
-Do not put toolName or arguments inside nextAction. Do not add Markdown or other fields.`;
+Projection changes must use kind=tool_call with toolName=update_projection and place changes/evidenceIds/reason inside arguments. kind=projection_update is not a valid Codex transport value. Do not put toolName or arguments inside nextAction. Do not add Markdown or other fields.`;
 }
 
 function parseDecisionEnvelope(result: RunResult): unknown {
@@ -170,7 +179,7 @@ function parseDecisionEnvelope(result: RunResult): unknown {
   }
   if (payload === null || typeof payload !== 'object' || Array.isArray(payload))
     throw new Error('Codex payloadJson must contain a JSON object.');
-  return {
+  const decision = {
     ...(payload as Record<string, unknown>),
     decisionId: value.decisionId,
     turnId: value.turnId,
@@ -180,6 +189,34 @@ function parseDecisionEnvelope(result: RunResult): unknown {
     unresolvedQuestions: value.unresolvedQuestions,
     nextSuggestions: value.nextSuggestions,
   };
+  return normalizeProjectionUpdateDecision(decision);
+}
+
+function normalizeProjectionUpdateDecision(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  if (
+    value.kind !== 'projection_update' ||
+    value.toolName !== 'update_projection' ||
+    value.arguments === null ||
+    typeof value.arguments !== 'object' ||
+    Array.isArray(value.arguments)
+  )
+    return value;
+  const payloadKeys = Object.keys(value).filter(
+    (key) =>
+      ![
+        'decisionId',
+        'turnId',
+        'kind',
+        'reason',
+        'nextAction',
+        'unresolvedQuestions',
+        'nextSuggestions',
+      ].includes(key),
+  );
+  if (payloadKeys.length !== 2 || !payloadKeys.includes('toolName')) return value;
+  return { ...value, kind: 'tool_call' };
 }
 
 function fixedThreadOptions(): ThreadOptions {

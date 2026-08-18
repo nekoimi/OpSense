@@ -1,11 +1,18 @@
 import { createInterface } from 'node:readline/promises';
+import { readFile } from 'node:fs/promises';
 
 import { Command, InvalidArgumentError } from 'commander';
 import { generateReportArtifacts } from '@opsense/report';
-import type { AgentResponse, AgentSession } from '@opsense/schema';
+import { AgentTurnSchema, assertSchema } from '@opsense/schema';
+import type { AgentResponse, AgentSession, AgentTurn, InventoryProjection } from '@opsense/schema';
 import { createReportDirectory } from '@opsense/workspace';
 
 import { ExitCode, exitCodeForError } from '../exit-code.js';
+import {
+  buildAgentProgressSnapshot,
+  formatAgentHeartbeat,
+  formatAgentProgress,
+} from '../agent-progress.js';
 import type { Logger, LoggerFactory } from '../logger.js';
 import {
   prepareAgentWorkflow,
@@ -42,6 +49,8 @@ interface GlobalOptions {
   quiet?: boolean;
   verbose?: boolean;
 }
+
+const AGENT_HEARTBEAT_INTERVAL_MS = 10_000;
 
 export function createAgentCommand(loggerFactory: LoggerFactory): Command {
   const command = new Command('agent')
@@ -110,32 +119,41 @@ export function createAgentCommand(loggerFactory: LoggerFactory): Command {
       prepared = await prepareAgentWorkflow(workflowOptions);
       logger.info(`Agent session: ${prepared.runtime.currentSession.sessionId}`);
       logger.info(`Local run directory: ${prepared.layout.runDirectory}`);
+      printStatus(logger, prepared);
+      const progressRuntime = createProgressRuntime(prepared, logger);
       const initialPrompt = withFocus(
         options.prompt ?? '整理当前服务器的主要服务、部署位置和证据缺口。',
         options.focusService,
       );
       if (options.complete === true) {
-        const initial = await startAgentToCompletion(
-          prepared.runtime,
-          initialPrompt,
-          options.resume !== undefined,
-          logger,
-          options.maxAgentRuns,
-        );
-        printResponse(logger, initial.response);
-        await runAgentToCompletion(
-          prepared.runtime,
-          initial.response,
-          logger,
-          options.maxAgentRuns,
-          initial.runsUsed,
-        );
+        if (
+          prepared.runtime.currentSession.state === 'completed' &&
+          prepared.projection.wikiNarrative !== undefined
+        ) {
+          logger.info('[Agent] 服务调查与 AI Wiki 综合稿件均已完成，直接生成服务器 Wiki。');
+        } else {
+          const initial = await startAgentToCompletion(
+            progressRuntime,
+            initialPrompt,
+            options.resume !== undefined,
+            logger,
+            options.maxAgentRuns,
+          );
+          printResponse(logger, initial.response);
+          await runAgentToCompletion(
+            progressRuntime,
+            initial.response,
+            logger,
+            options.maxAgentRuns,
+            initial.runsUsed,
+          );
+        }
         await generateWikiArtifacts(prepared, logger);
       } else {
         const response =
           options.resume === undefined
-            ? await prepared.runtime.start(initialPrompt)
-            : await prepared.runtime.resume(initialPrompt);
+            ? await progressRuntime.start(initialPrompt)
+            : await progressRuntime.resume(initialPrompt);
         printResponse(logger, response);
         if (options.once !== true) await runRepl(prepared, logger, controller.signal);
       }
@@ -241,8 +259,8 @@ async function executeWithTimeoutRecovery(
 
 function completionPrompt(session: Pick<AgentSession, 'workflowVersion'>): string {
   return session.workflowVersion === 'm20_evidence_driven'
-    ? '继续完成证据筛选、按需调查和服务归并，直到可以生成服务器 Wiki。'
-    : '继续审查未完成的服务候选和路径，直到完成分类。';
+    ? '继续完成证据筛选、按需调查、服务归并和 AI Wiki 综合撰写，直到可以生成服务器 Wiki。'
+    : '继续审查未完成的服务候选和路径，并完成 AI Wiki 综合撰写。';
 }
 
 function isRecoverableTurnTimeout(
@@ -263,6 +281,7 @@ async function runRepl(
   signal: AbortSignal,
 ): Promise<void> {
   const terminal = createInterface({ input: process.stdin, output: process.stdout });
+  const progressRuntime = createProgressRuntime(prepared, logger);
   logger.info('Commands: status, services, show <service-id>, review, wiki, resume, exit');
   try {
     for (;;) {
@@ -290,7 +309,7 @@ async function runRepl(
         continue;
       }
       const prompt = input === 'resume' ? '继续处理当前会话中尚未解决的问题。' : input;
-      printResponse(logger, await prepared.runtime.resume(prompt));
+      printResponse(logger, await progressRuntime.resume(prompt));
     }
   } finally {
     terminal.close();
@@ -304,11 +323,11 @@ async function generateWikiArtifacts(
   const session = prepared.runtime.currentSession;
   if (session.state !== 'completed')
     throw new Error(`v2 Wiki 只能从 completed AgentSession 生成，当前状态为 ${session.state}。`);
-  if (
-    session.threadId === undefined ||
-    prepared.projection.classificationThreadId !== session.threadId
-  )
-    throw new Error('v2 Wiki 的 Projection 与 AgentSession Codex Thread 审计信息不一致。');
+  assertWikiThreadAudit(
+    session,
+    prepared.projection,
+    await readAgentTurns(prepared.layout.agentTurnsFile),
+  );
   const scannedAt = new Date(
     prepared.snapshot.session.finishedAt ?? prepared.snapshot.session.startedAt,
   );
@@ -317,6 +336,7 @@ async function generateWikiArtifacts(
     scannedAt,
     prepared.layout.rootDirectory,
   );
+  logger.info('[Agent] 正在生成 HTML、Word 和 Markdown 服务器 Wiki。');
   let artifacts: Awaited<ReturnType<typeof generateReportArtifacts>>;
   try {
     artifacts = await generateReportArtifacts(prepared.projection, {
@@ -358,19 +378,111 @@ async function generateWikiArtifacts(
   });
 }
 
+async function readAgentTurns(file: string): Promise<AgentTurn[]> {
+  const source = await readFile(file, 'utf8');
+  return source
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0)
+    .map((line) => {
+      const value = JSON.parse(line) as unknown;
+      assertSchema(AgentTurnSchema, value);
+      return value;
+    });
+}
+
+export function assertWikiThreadAudit(
+  session: Pick<AgentSession, 'sessionId' | 'threadId' | 'turnCount'>,
+  projection: Pick<InventoryProjection, 'classificationThreadId' | 'wikiNarrative'>,
+  turns: readonly AgentTurn[],
+): void {
+  if (session.threadId === undefined)
+    throw new Error('v2 Wiki 审计失败：completed AgentSession 缺少最终 Codex Thread ID。');
+  if (projection.classificationThreadId === undefined)
+    throw new Error('v2 Wiki 审计失败：Projection 缺少 Codex 分类 Thread ID。');
+  const sessionTurns = turns.filter((turn) => turn.sessionId === session.sessionId);
+  const finalTurnAudited = sessionTurns.some(
+    (turn) =>
+      turn.sequence === session.turnCount &&
+      turn.threadId === session.threadId &&
+      turn.decisionKind === 'final',
+  );
+  if (!finalTurnAudited)
+    throw new Error('v2 Wiki 审计失败：最终 Session Thread 没有对应的 final Turn。');
+  const classificationTurnAudited = sessionTurns.some(
+    (turn) =>
+      turn.threadId === projection.classificationThreadId &&
+      turn.projectionChanges.length > 0 &&
+      turn.toolCalls.some(
+        (tool) =>
+          tool.status === 'completed' &&
+          (tool.toolName === 'plan_discovery' || tool.toolName === 'update_projection'),
+      ),
+  );
+  if (!classificationTurnAudited)
+    throw new Error('v2 Wiki 审计失败：Projection 分类 Thread 没有对应的成功变更 Turn。');
+  if (projection.wikiNarrative === undefined)
+    throw new Error('v2 Wiki 审计失败：Projection 缺少 Codex 撰写的服务器综合稿件。');
+  const compositionTurnAudited = sessionTurns.some(
+    (turn) =>
+      turn.threadId === projection.wikiNarrative?.threadId &&
+      turn.projectionChanges.some((id) => id.startsWith('wiki-narrative:')) &&
+      turn.toolCalls.some(
+        (tool) => tool.status === 'completed' && tool.toolName === 'compose_wiki',
+      ),
+  );
+  if (!compositionTurnAudited)
+    throw new Error('v2 Wiki 审计失败：服务器综合稿件 Thread 没有对应的 compose_wiki Turn。');
+}
+
 function printStatus(logger: Logger, prepared: PreparedAgentWorkflow): void {
   const session = prepared.runtime.currentSession;
+  for (const line of formatAgentProgress(buildAgentProgressSnapshot(session, prepared.projection)))
+    logger.info(line);
   logger.info(
-    `State=${session.state} Stage=${session.currentStage} Turns=${session.turnCount} Thread=${session.threadId ?? 'unavailable'}`,
+    `  预算：${formatBytes(session.budgets.usedBytes)}/${formatBytes(session.budgets.maxBytes)}，${formatDuration(session.budgets.usedDurationMs)}/${formatDuration(session.budgets.maxDurationMs)}`,
   );
-  logger.info(
-    `Probes=${session.budgets.usedRequests}/${session.budgets.maxRequests} Bytes=${session.budgets.usedBytes}/${session.budgets.maxBytes} Duration=${session.budgets.usedDurationMs}/${session.budgets.maxDurationMs}ms`,
-  );
-  const discovery = prepared.projection.discoveryWorkspace;
-  if (discovery !== undefined)
+  logger.info(`  会话：${session.sessionId} | Thread ${session.threadId ?? '尚未创建'}`);
+}
+
+function createProgressRuntime(
+  prepared: PreparedAgentWorkflow,
+  logger: Logger,
+): CompletionStartRuntime {
+  return {
+    get currentSession() {
+      return prepared.runtime.currentSession;
+    },
+    resume: (message) =>
+      runWithAgentHeartbeat(prepared, logger, () => prepared.runtime.resume(message)),
+    start: (message) =>
+      runWithAgentHeartbeat(prepared, logger, () => prepared.runtime.start(message)),
+  };
+}
+
+async function runWithAgentHeartbeat<T>(
+  prepared: PreparedAgentWorkflow,
+  logger: Logger,
+  action: () => Promise<T>,
+): Promise<T> {
+  const startedAt = Date.now();
+  const report = (): void => {
     logger.info(
-      `Discovery=${discovery.discoveryCompleted ? 'completed' : 'in_progress'} Investigations=${discovery.investigations.length} FilteredGroups=${discovery.filteredGroups.length} RawServices=${prepared.projection.services.length}`,
+      formatAgentHeartbeat(
+        buildAgentProgressSnapshot(prepared.runtime.currentSession, prepared.projection),
+        Date.now() - startedAt,
+      ),
     );
+  };
+  report();
+  const heartbeat = setInterval(report, AGENT_HEARTBEAT_INTERVAL_MS);
+  heartbeat.unref();
+  try {
+    const result = await action();
+    report();
+    return result;
+  } finally {
+    clearInterval(heartbeat);
+  }
 }
 
 function printServices(logger: Logger, prepared: PreparedAgentWorkflow): void {
@@ -489,6 +601,18 @@ function withFocus(prompt: string, focusService: string | undefined): string {
 
 function formatCoverage(value: number | undefined): string {
   return value === undefined ? 'unknown' : `${(value * 100).toFixed(1)}%`;
+}
+
+function formatBytes(value: number): string {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDuration(value: number): string {
+  if (value < 1000) return `${value} ms`;
+  const seconds = Math.round(value / 1000);
+  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
 function progressLabel(session: Pick<AgentSession, 'workflowVersion'>): string {

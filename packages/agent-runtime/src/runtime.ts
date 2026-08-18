@@ -4,6 +4,7 @@ import { AgentDecisionSchema, AgentTurnSchema, assertSchema } from '@opsense/sch
 import type { AgentDecision, AgentResponse, AgentSession, AgentTurn } from '@opsense/schema';
 
 import type { ContextBuilder } from './context.js';
+import { AGENT_DECISION_PROMPT_CONTRACT } from './decision-contract.js';
 import { createAgentSession, createTranscriptEntry, failSessionForCodex } from './index.js';
 import type { AgentSessionStore, CodexPreflightProbe } from './index.js';
 import type { ToolRouter } from './tools.js';
@@ -188,8 +189,18 @@ export class AgentRuntime {
         status: result.status,
         summary: result.summary,
         evidenceIds: result.evidenceIds,
-        value: compactRecentValue(result.value),
+        ...(decision.toolName === 'plan_discovery' || decision.toolName === 'update_projection'
+          ? {}
+          : {
+              arguments: decision.arguments,
+              value: compactRecentValue(
+                result.value,
+                this.session.workflowVersion === 'm20_evidence_driven' ? 12 : 2,
+              ),
+            }),
       });
+      if (decision.toolName === 'compose_wiki' && result.status === 'completed')
+        this.session.currentStage = 'reviewing';
     } else if (decision.kind === 'projection_update') {
       const result = await this.options.tools.execute('update_projection', decision, turnId);
       toolCalls.push(result.activity);
@@ -205,6 +216,7 @@ export class AgentRuntime {
       });
     } else if (decision.kind === 'final') {
       const classification = this.options.tools.classificationStatus();
+      const composition = this.options.tools.wikiCompositionStatus();
       if (this.options.requireClassificationComplete === true && !classification.completed) {
         const evidenceDriven = this.session.workflowVersion === 'm20_evidence_driven';
         message = evidenceDriven
@@ -217,13 +229,35 @@ export class AgentRuntime {
           summary: message,
           unreviewedServiceIds: classification.unreviewedServiceIds.slice(0, 40),
         });
+      } else if (this.options.requireClassificationComplete === true && !composition.completed) {
+        message =
+          'Codex 服务调查已完成，但尚未通过 compose_wiki 撰写服务器 Wiki 综合稿件，不能生成最终报告。';
+        this.session.currentStage = 'composing';
+        this.recentResults.push({
+          toolName: 'composition_gate',
+          status: 'rejected',
+          summary: message,
+        });
       } else {
         this.session = this.finish('completed', 'classification_complete');
         this.options.tools.setSession(this.session);
         message = decision.qualitySummary;
       }
     } else {
-      await this.fail(decision.error);
+      const classification = this.options.tools.classificationStatus();
+      if (this.options.requireClassificationComplete === true && !classification.completed) {
+        message = `Codex 请求终止，但证据调查尚未完成；本轮已作为可恢复的完成门禁拒绝处理。模型说明：${decision.error}`;
+        this.session.currentStage = 'investigating';
+        this.recentResults.push({
+          toolName: 'model_failed_decision',
+          status: 'rejected',
+          summary: message,
+          unreviewedServiceIds: classification.unreviewedServiceIds.slice(0, 40),
+          unreviewedPathKeys: classification.unreviewedPathKeys.slice(0, 40),
+        });
+      } else {
+        await this.fail(decision.error);
+      }
     }
     this.session.turnCount = sequence;
     const classification = this.options.tools.classificationStatus();
@@ -236,6 +270,9 @@ export class AgentRuntime {
           : 0
         : (classification.reviewedServiceCount + classification.reviewedPathCount) /
           totalClassificationItems;
+    this.session.coverage.wikiComposition = this.options.tools.wikiCompositionStatus().completed
+      ? 1
+      : 0;
     this.session.unresolvedQuestions = [
       ...decision.unresolvedQuestions,
       ...(classification.completed || this.options.requireClassificationComplete !== true
@@ -300,10 +337,23 @@ export class AgentRuntime {
   private async runUntilSettled(userMessage: string): Promise<AgentResponse> {
     const startingTurnCount = this.session.turnCount;
     const runStartedAt = this.now().getTime();
+    const startingUsedTokens = this.usedTokens;
+    const startingUsedOutputBytes = this.usedOutputBytes;
     let response = await this.runTurn(userMessage);
-    while (this.session.state === 'running' && this.canContinue(startingTurnCount, runStartedAt)) {
+    while (
+      this.session.state === 'running' &&
+      this.canContinue(startingTurnCount, runStartedAt, startingUsedTokens, startingUsedOutputBytes)
+    ) {
       if (!this.options.tools.classificationStatus().completed) await this.rotateThreadIfNeeded();
-      response = await this.runTurn('根据上一轮结果继续调查最有价值的证据，并在信息充分时结束。');
+      const classificationCompleted = this.options.tools.classificationStatus().completed;
+      const compositionCompleted = this.options.tools.wikiCompositionStatus().completed;
+      response = await this.runTurn(
+        !classificationCompleted
+          ? '根据上一轮结果继续调查最有价值的证据，并在信息充分时结束。'
+          : !compositionCompleted
+            ? '服务调查已完成。请根据 wiki_source 使用 compose_wiki 撰写完整服务器知识手册。'
+            : 'AI Wiki 综合稿件已成功写入。请检查完成门禁并使用 kind=final 结束。',
+      );
     }
     if (this.session.state === 'running') {
       const classification = this.options.tools.classificationStatus();
@@ -409,23 +459,20 @@ export class AgentRuntime {
 
 You are not a coding agent in this thread. Do not inspect files, run shell commands, access the network, or use built-in Codex tools. The sandbox directory is intentionally empty. All server facts must come from L0/L1 below or later OpSense tool results.
 
-Allowed toolName values and arguments:
-- read_context: {"section":"host|storage|network|services|processes|containers|systemd_summary|path_candidates|findings|visibility_summary|discovery","offset"?:number,"limit"?:1..5}
-- read_evidence: {"ids"?:["existing-evidence-id"],"serviceId"?:"existing-service-id","field"?:"optional-field-or-source-fragment"}
-- list_candidates: {"section"?:"services|paths|network|storage|findings","offset"?:number,"limit"?:1..5}
-- execute_governed_probe: {"request": ProbeRequest}; use only for a concrete evidence gap. Allowed request kinds: directory_metadata, directory_listing, config_summary, path_search, systemd_unit, process_runtime, process_cgroup, socket_ownership, container_inspect, compose_metadata, log_metadata. Never provide Shell text.
-- plan_discovery: {"planningCompleted":boolean,"discoveryCompleted":boolean,"investigations":[DiscoveryInvestigation],"discoveredServices":[{"serviceId":"service:agent:...","name":"...","deploymentType":"systemd|process|docker|compose|unknown","status":"running|stopped|failed|unknown","sourceObjectIds":["existing-raw-object-id"],"evidenceIds":["existing-evidence-id"],"unknownFields":["..."],"reason":"..."}],"filteredGroups":[DiscoveryFilterGroup],"unresolvedQuestions":["..."],"reason":"..."}
-- update_projection: {"changes":[ServiceAssessmentChange|PathAssessmentChange],"evidenceIds":[...],"reason"?:string}
+AgentDecision contract:
+${AGENT_DECISION_PROMPT_CONTRACT}
 
-ServiceAssessmentChange shape:
-{"changeType":"service_assessment","objectId":"existing-service-id","operation":"add|update","summary":"...","assessment":{"serviceId":"same-service-id","role":"application|middleware|infrastructure|edge|container_platform|system|unknown","reportPlacement":"primary|supporting|system_summary|needs_review","importance":"critical|high|medium|low|unknown","purpose"?:"...","statusInterpretation"?:"...","reason":"...","confidence":"inferred|unknown|conflict","evidenceIds":["existing-evidence-id"],"unknowns":[],"reviewItems":[]}}
+When L1.discovery.workflowVersion is m20_evidence_driven, Snapshot services, systemd units, processes, ports, paths, and mounts are raw evidence, not a service checklist. Correlate every meaningful deployment candidate across systemd unit identity and ExecStart, the complete ps-style process command/arguments/parent/cgroup/user/working-directory evidence, socket ownership and listening port, custom paths, and every Docker/Compose container. Container evidence is not more authoritative than systemd or process evidence. Use read_context or list_candidates with section=processes, containers, or systemd_units and successive offsets whenever the compact service candidate leaves an identity or merge gap; these sections paginate the complete collected inventories rather than only the first page. If planningCompleted=false, inspect all high-value service pages (L0.counts.candidatesShown/candidatesOmitted and L1.discovery.highValueLeadCounts show coverage), then use plan_discovery to group routine Linux system units and processes, filter them with evidence-backed group decisions, and select meaningful investigations. Use list_candidates section=services with successive offsets when candidatesOmitted is nonzero. Do not create one ServiceAssessmentChange per ordinary systemd unit. A filter group may only contain low-value routine operating-system evidence; every Docker/Compose deployment, any listening service, direct deployed process, failed service, custom systemd unit, custom executable, or custom/data path must remain an investigation or explicit needs_review item. The local completion gate rejects a plan that omits any such service.
 
-PathAssessmentChange shape:
-{"changeType":"path_assessment","objectId":"existing-service-id","operation":"add|update","summary":"...","assessment":{"serviceId":"same-service-id","path":"existing-collected-path","semantic":"deploy|config|data|log|backup|runtime|system|unknown","reason":"...","confidence":"inferred|unknown|conflict","evidenceIds":["existing-evidence-id"]}}
+For active M20 investigations, L1.services is the current highest-priority unreviewed batch and already contains the compact units, processes, sockets, containers, paths, visibility constraints, and evidence IDs needed for assessment. Assess the visible L1.services directly. After update_projection succeeds, the next turn automatically receives a refreshed unreviewed batch. Do not call read_context for the same services already visible in L1. Use read_context with a nonzero offset only for deliberate pagination when the required candidate is not present in L1.
 
-When L1.discovery.workflowVersion is m20_evidence_driven, Snapshot services, systemd units, processes, ports, paths, and mounts are raw evidence, not a service checklist. If planningCompleted=false, first use plan_discovery to group routine system evidence, filter it with evidence-backed group decisions, and select only meaningful investigations. Do not create one ServiceAssessmentChange per ordinary systemd unit. A filter group may only contain low-value routine evidence; externally exposed sockets, failed services, container/Compose evidence, custom executables, and custom/data paths must remain an investigation or explicit needs_review item.
+L0.recent is authoritative cross-thread history of completed or rejected OpSense tool calls. A newly rotated Codex thread has no conversational tool history, so read L0.recent before claiming that no tool result is available or repeating a tool call. A completed read_context result in L0.recent is a real tool result.
 
-For an active M20 investigation, read evidence or request execute_governed_probe only where it closes a concrete gap. Probe requests must be narrow and evidence-linked. Use update_projection only for serviceIds already selected by plan_discovery. Once active investigations are resolved or explicitly need review and selected services have evidence-backed assessments, call plan_discovery with discoveryCompleted=true before final. final is accepted only after the local completion gate passes.
+Treat the displayed services and their related evidence as one batch. Prefer one update_projection decision covering 5-12 services and all evidence-backed paths visible for them. Do not spend one turn on each service or path. Read more context or request execute_governed_probe only where it closes a concrete shared gap. Probe requests must be narrow and evidence-linked. Use update_projection only for serviceIds already selected by plan_discovery. Evidence gaps are not fatal: use confidence=unknown, role=unknown, reportPlacement=needs_review, unknowns, and reviewItems as appropriate. Never use kind=failed merely because evidence is incomplete, context is static, a probe is unavailable, or the completion gate is not met. kind=failed is reserved for an irrecoverable local capability or contract failure that prevents every allowed next action.
+
+Once every selected service has an evidence-backed assessment, call plan_discovery again with all existing investigations and filter groups preserved, set each investigation to resolved or needs_review, and set discoveryCompleted=true. Do not use final yet. When L0 reports classificationCompleted=true, L1.wiki_source contains the complete assessed server knowledge source. Use compose_wiki exactly once to write the final server Wiki narrative, service groups, key findings, and detailed service descriptions. Then use kind=final. final is accepted only after both the classification and Wiki composition gates pass.
+
+The report must be genuinely AI-authored rather than a count-only template. In compose_wiki, write a professional Chinese server handbook for operations engineers: use short paragraphs, keep each overview module focused, avoid repeating the same facts, and explain what the server does, how important services are deployed and grouped, where configuration/data/log paths live, what is exposed, and what remains uncertain. Put every assessed non-system-summary service in exactly one meaningful serviceGroup; this grouping renders the deployment relationship view, so describe only evidence-backed grouping and never invent dependencies. For each recognizable product, use the collected service name, container name, and image identity to explain its function. For example, an image or service clearly identified as MinIO should be described as an S3-compatible object-storage service. This product-level explanation is an AI inference and must cite the collected service/container Evidence IDs. Omit serviceDescriptions for identities that cannot be responsibly recognized. Never invent topology, dependencies, credentials, commands, paths, ports, recovery guarantees, or Evidence IDs.
 
 When L1.discovery.workflowVersion is m19_full_candidate_review, retain legacy behavior: L1.services is the current prioritized batch and contains at most two candidates. Complete displayed service and path reviews before requesting more candidates.
 
@@ -441,7 +488,12 @@ L0: ${JSON.stringify(context.l0)}
 L1 index: ${JSON.stringify(context.l1)}`;
   }
 
-  private canContinue(startingTurnCount: number, runStartedAt: number): boolean {
+  private canContinue(
+    startingTurnCount: number,
+    runStartedAt: number,
+    startingUsedTokens: number,
+    startingUsedOutputBytes: number,
+  ): boolean {
     const maxTurns = this.options.maxTurns ?? 8;
     const maxDurationMs = this.options.maxDurationMs ?? 300_000;
     const maxTokens = this.options.maxTokens ?? 100_000;
@@ -450,13 +502,15 @@ L1 index: ${JSON.stringify(context.l1)}`;
     return (
       this.session.turnCount - startingTurnCount < maxTurns &&
       elapsed < maxDurationMs &&
-      this.usedTokens < maxTokens &&
-      this.usedOutputBytes < maxOutputBytes
+      this.usedTokens - startingUsedTokens < maxTokens &&
+      this.usedOutputBytes - startingUsedOutputBytes < maxOutputBytes
     );
   }
 
   private async rotateThreadIfNeeded(): Promise<void> {
-    const maxTurnsPerThread = this.options.maxTurnsPerThread ?? 1;
+    const maxTurnsPerThread =
+      this.options.maxTurnsPerThread ??
+      (this.session.workflowVersion === 'm20_evidence_driven' ? 4 : 1);
     if (this.threadTurnCount < maxTurnsPerThread) return;
     const thread = await this.options.thread.start({
       ...(this.options.model === undefined ? {} : { model: this.options.model }),
@@ -521,8 +575,8 @@ L1 index: ${JSON.stringify(context.l1)}`;
   }
 }
 
-function compactRecentValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.slice(0, 2);
+function compactRecentValue(value: unknown, maxItems: number): unknown {
+  if (Array.isArray(value)) return value.slice(0, maxItems);
   return value;
 }
 

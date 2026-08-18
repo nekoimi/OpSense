@@ -156,21 +156,33 @@ function buildDocumentChildren(model: ReportModel): Array<Paragraph | Table | Ta
     new Paragraph({ children: [new PageBreak()] }),
     heading('执行摘要', 1),
     summaryTable(model),
-    ...(model.aiAnalysis === undefined
+    ...(model.wikiNarrative === undefined ? [] : wikiNarrativeParagraphs(model)),
+    ...(model.wikiNarrative !== undefined || model.aiAnalysis === undefined
       ? []
       : [
-          heading('AI 分析（推断层）', 2),
+          heading('AI 分析（兼容模式）', 2),
           paragraph(model.aiAnalysis.hostSummary),
           paragraph(model.aiAnalysis.storageSummary),
         ]),
-    heading('系统环境', 1, true),
+    heading('服务目录', 1, true),
+    serviceSummaryTable(model),
+    heading('系统服务概况', 2),
+    keyValueTable([
+      ['总数', model.systemServices.totalCount],
+      ['运行中', model.systemServices.runningCount],
+      ['失败', model.systemServices.failedCount],
+      ['需关注 unit', displayList(model.systemServices.attentionServices.map((item) => item.name))],
+    ]),
+    heading('服务运行手册', 1, true),
+    ...model.services.flatMap((service) => serviceDetail(service)),
+    heading('主机运行基线', 1, true),
     systemTable(model),
     heading('存储与挂载', 1, true),
     heading('磁盘', 2),
     diskTable(model),
     heading('挂载', 2),
     mountTable(model),
-    heading('网络', 1, true),
+    heading('网络与访问面', 1, true),
     networkTable(model),
     keyValueTable([
       ['默认路由', displayList(model.network.defaultRoutes)],
@@ -181,25 +193,10 @@ function buildDocumentChildren(model: ReportModel): Array<Paragraph | Table | Ta
         `${model.network.firewallBackend ?? '-'} / ${displayBoolean(model.network.firewallActive)}`,
       ],
     ]),
-    heading('部署服务分类', 1, true),
-    serviceSummaryTable(model),
-    heading('系统服务概况', 2),
-    keyValueTable([
-      ['总数', model.systemServices.totalCount],
-      ['运行中', model.systemServices.runningCount],
-      ['失败', model.systemServices.failedCount],
-      ['需关注 unit', displayList(model.systemServices.attentionServices.map((item) => item.name))],
-    ]),
-    heading('服务详情', 1, true),
-    ...model.services.flatMap((service) => serviceDetail(service)),
-    heading('完整服务候选索引', 1, true),
-    serviceIndexTable(model),
     heading('风险与待确认项', 1, true),
     ...findingParagraphs(model),
     heading('未知项', 2),
     ...unknownParagraphs(model),
-    heading('证据附录', 1, true),
-    evidenceTable(model),
   ];
 }
 
@@ -266,6 +263,33 @@ function summaryTable(model: ReportModel): Table {
       ],
     ],
   );
+}
+
+function wikiNarrativeParagraphs(model: ReportModel): Array<Paragraph | Table> {
+  const narrative = model.wikiNarrative;
+  if (narrative === undefined) return [];
+  return [
+    heading('服务器运行定位', 2),
+    paragraph(narrative.executiveSummary),
+    heading('运行架构与服务关系', 1, true),
+    heading('系统定位', 2),
+    paragraph(narrative.systemOverview),
+    heading('部署架构', 2),
+    paragraph(narrative.architectureOverview),
+    heading('部署与数据布局', 2),
+    paragraph(narrative.deploymentOverview),
+    heading('运维说明', 2),
+    paragraph(narrative.operationsOverview),
+    heading('服务分组关系', 2),
+    serviceArchitectureTable(model),
+    heading('重点发现', 2),
+    ...(narrative.keyFindings.length === 0
+      ? [paragraph('无额外 AI 重点发现。')]
+      : narrative.keyFindings.flatMap((finding) => [
+          heading(`[${statusLabel(finding.severity)}] ${finding.title}`, 3),
+          paragraph(finding.summary),
+        ])),
+  ];
 }
 
 function systemTable(model: ReportModel): Table {
@@ -337,28 +361,32 @@ function networkTable(model: ReportModel): Table {
 
 function serviceSummaryTable(model: ReportModel): Table {
   return createTable(
-    ['服务', '状态', '角色', '报告位置', '端口', '分类确定程度'],
+    ['服务', '状态', '部署方式', '角色', '监听端口'],
     model.services.map((service) => [
       service.displayName ?? service.name,
       statusLabel(service.status),
+      service.deploymentType,
       service.role,
-      service.reportPlacement,
       displayList(service.ports),
-      statusLabel(service.assessmentConfidence),
     ]),
     new Set([4]),
   );
 }
 
-function serviceIndexTable(model: ReportModel): Table {
+function serviceArchitectureTable(model: ReportModel): Table {
+  const serviceById = new Map(model.serviceIndex.map((service) => [service.id, service]));
+  const groups = model.wikiNarrative?.serviceGroups ?? [];
   return createTable(
-    ['服务', '状态', '角色', '报告位置', '部署方式'],
-    model.serviceIndex.map((service) => [
-      service.displayName ?? service.name,
-      statusLabel(service.status),
-      service.role,
-      service.reportPlacement,
-      service.deploymentType,
+    ['服务分组', '分组说明', '包含的部署服务'],
+    groups.map((group) => [
+      group.title,
+      group.summary,
+      displayList(
+        group.serviceIds.map((id) => {
+          const service = serviceById.get(id);
+          return service === undefined ? id : (service.displayName ?? service.name);
+        }),
+      ),
     ]),
   );
 }
@@ -366,32 +394,36 @@ function serviceIndexTable(model: ReportModel): Table {
 function serviceDetail(service: ReportService): Array<Paragraph | Table> {
   return [
     heading(service.displayName ?? service.name, 2),
+    ...(service.description === undefined ? [] : [paragraph(service.description)]),
+    ...(service.description !== undefined || service.purpose === undefined
+      ? []
+      : [paragraph(service.purpose)]),
+    heading('运行与网络', 3),
     keyValueTable(
       [
         ['服务 ID', service.id],
         ['状态', statusLabel(service.status)],
         ['部署方式', service.deploymentType],
         ['服务角色', service.role],
-        ['报告位置', service.reportPlacement],
-        ['分类理由', service.assessmentReason],
-        ['分类确定程度', statusLabel(service.assessmentConfidence)],
-        ['确定程度', statusLabel(service.confidence)],
         ['开机启动', displayBoolean(service.enabledAtBoot)],
         ['进程 PID', service.processIds.join(', ') || '-'],
         ['端口', displayList(service.ports)],
+        ['启动命令', service.startCommand],
+      ],
+      new Set([0, 4, 5, 6, 7]),
+    ),
+    heading('目录与配置', 3),
+    keyValueTable(
+      [
         ['部署目录', displayList(service.deployDirectories)],
         ['配置文件', displayList(service.configFiles)],
         ['环境文件', displayList(service.environmentFiles)],
         ['日志位置', displayList(service.logLocations)],
         ['数据目录', displayList(service.dataDirectories)],
-        ['启动命令', service.startCommand],
-        ['未知字段', displayList(service.unknownFields)],
-        ['冲突字段', displayList(service.conflictFields)],
-        ['Evidence', displayList(service.evidenceIds)],
+        ['待确认项', displayList([...service.unknownFields, ...service.conflictFields])],
       ],
-      new Set([0, 6, 7, 8, 9, 10, 11, 12, 15]),
+      new Set([0, 1, 2, 3, 4]),
     ),
-    ...(service.purpose === undefined ? [] : [heading('用途说明', 3), paragraph(service.purpose)]),
   ];
 }
 
@@ -407,16 +439,14 @@ function findingBlock(finding: FindingRecord, ai: boolean): Paragraph[] {
   return [
     heading(`${ai ? '[AI 推断] ' : ''}[${statusLabel(finding.severity)}] ${finding.title}`, 2),
     paragraph(finding.description),
-    paragraph(
-      `确定程度：${statusLabel(finding.confidence)}；Evidence：${displayList(finding.evidenceIds)}`,
-      true,
-    ),
+    paragraph(`确定程度：${statusLabel(finding.confidence)}`, true),
   ];
 }
 
 function unknownParagraphs(model: ReportModel): Paragraph[] {
   const values = [
     ...model.unknowns,
+    ...(model.wikiNarrative?.unresolvedQuestions ?? []).map((item) => `[AI] ${item}`),
     ...(model.aiAnalysis?.unknowns ?? []).map((item) => `[AI] ${item}`),
   ];
   return values.length === 0
@@ -425,21 +455,6 @@ function unknownParagraphs(model: ReportModel): Paragraph[] {
         (value) =>
           new Paragraph({ bullet: { level: 0 }, children: [text(value)], spacing: { after: 60 } }),
       );
-}
-
-function evidenceTable(model: ReportModel): Table {
-  return createTable(
-    ['Evidence ID', '类型', '来源', '状态', '敏感级别', '采集时间'],
-    model.evidence.map((evidence) => [
-      evidence.id,
-      evidence.kind,
-      evidence.source,
-      evidence.status,
-      evidence.sensitivity,
-      formatDateTime(evidence.collectedAt),
-    ]),
-    new Set([0, 2]),
-  );
 }
 
 function keyValueTable(

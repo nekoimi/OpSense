@@ -15,9 +15,44 @@ const FORBIDDEN_PATH_PATTERN =
 const BROAD_ROOTS = new Set(['/', '/etc', '/usr', '/var', '/home', '/opt', '/srv', '/data']);
 const CONFIG_PATH_PATTERN =
   /(?:\.(?:conf|config|ini|json|toml|ya?ml)|Caddyfile|Dockerfile|\.env)$/i;
+const CUSTOM_SERVICE_PATH_PATTERN = /^\/(?:apps?|data|home|opt|srv|usr\/local)(?:\/|$)/;
+const CUSTOM_SYSTEMD_UNIT_PATTERN = /^\/(?:etc|usr\/local\/lib)\/systemd\/system(?:\/|$)/;
 
 export interface DiscoveryBuildOptions {
   now?: () => Date;
+}
+
+export function requiredServiceInvestigationReasons(
+  projection: InventoryProjection,
+  service: ServiceRecord,
+): string[] {
+  const linkedSockets = projection.sockets.filter((socket) =>
+    service.socketIds.includes(socket.id),
+  );
+  const linkedUnits = projection.systemdUnits.filter((unit) =>
+    service.systemdUnitIds.includes(unit.id),
+  );
+  return [
+    ...(service.status === 'failed' ? ['failed_status'] : []),
+    ...(service.deploymentType === 'docker' || service.containerIds.length > 0
+      ? ['container_deployment']
+      : []),
+    ...(service.deploymentType === 'compose' || service.composeProjectIds.length > 0
+      ? ['compose_deployment']
+      : []),
+    ...(service.deploymentType === 'process' ? ['direct_process_deployment'] : []),
+    ...(linkedSockets.some((socket) => socket.listening) ? ['listening_socket'] : []),
+    ...(linkedSockets.some((socket) => socket.exposed) ? ['externally_exposed_socket'] : []),
+    ...(servicePaths(service).some((value) => CUSTOM_SERVICE_PATH_PATTERN.test(value))
+      ? ['custom_or_data_path']
+      : []),
+    ...(linkedUnits.some(
+      (unit) =>
+        unit.fragmentPath !== undefined && CUSTOM_SYSTEMD_UNIT_PATTERN.test(unit.fragmentPath),
+    )
+      ? ['custom_systemd_unit']
+      : []),
+  ];
 }
 
 export function buildEvidenceIndex(

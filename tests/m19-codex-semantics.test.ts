@@ -15,6 +15,7 @@ import { BaselineRelevanceClassifier } from '@opsense/ai-provider';
 import { buildEvidenceIndex } from '@opsense/discovery';
 import {
   applyProjectionDecision,
+  applyWikiNarrative,
   assertCodexClassificationComplete,
   buildInventoryProjection,
   promoteOrphanProcessCandidates,
@@ -295,6 +296,9 @@ describe('M19 Codex semantic classification loop', () => {
       applyProjectionDecision(projection, serviceOnlyDecision('service:cron'), {
         threadId: 'codex-thread-promote',
       });
+      applyWikiNarrative(projection, wikiNarrative('service:cron'), {
+        threadId: 'codex-thread-promote-wiki',
+      });
 
       const artifacts = await generateReportArtifacts(projection, {
         formats: ['docx', 'html', 'markdown'],
@@ -302,15 +306,16 @@ describe('M19 Codex semantic classification loop', () => {
         requireCodexClassification: true,
       });
 
-      expect(await readFile(artifacts.htmlFile!, 'utf8')).toContain('cron');
-      expect(
-        (await Promise.all(artifacts.markdownFiles.map((file) => readFile(file, 'utf8')))).join(
-          '\n',
-        ),
-      ).toContain('cron');
-      expect((await validateDocxBuffer(await readFile(artifacts.docxFile!))).text).toContain(
-        'cron',
-      );
+      const html = await readFile(artifacts.htmlFile!, 'utf8');
+      const markdown = (
+        await Promise.all(artifacts.markdownFiles.map((file) => readFile(file, 'utf8')))
+      ).join('\n');
+      const docx = (await validateDocxBuffer(await readFile(artifacts.docxFile!))).text;
+      for (const output of [html, markdown, docx]) {
+        expect(output).toContain('cron');
+        expect(output).toContain('该服务承载对应产品或应用的主要运行能力。');
+        expect(output).toContain('该服务器运行一个已由 Codex 完成语义审查的主要服务。');
+      }
     } finally {
       await rm(root, { force: true, recursive: true });
     }
@@ -384,6 +389,9 @@ describe('M19 Codex semantic classification loop', () => {
       const projection = buildInventoryProjection(snapshot, { mode: 'agent' });
       applyProjectionDecision(projection, projectionDecision('service:order-api'), {
         threadId: 'codex-thread-m19-report',
+      });
+      applyWikiNarrative(projection, wikiNarrative('service:order-api'), {
+        threadId: 'codex-thread-m19-report-wiki',
       });
       await Promise.all([
         writeJsonAtomic(layout.snapshotFile, snapshot),
@@ -567,6 +575,10 @@ describe('M19 Codex semantic classification loop', () => {
           applyProjectionDecision(projection, decision, {
             ...(currentSession.threadId === undefined ? {} : { threadId: currentSession.threadId }),
           }),
+        applyWikiComposition: (draft, currentSession) =>
+          applyWikiNarrative(projection, draft, {
+            ...(currentSession.threadId === undefined ? {} : { threadId: currentSession.threadId }),
+          }),
       });
       let turn = 0;
       const runtime = new AgentRuntime({
@@ -610,6 +622,20 @@ describe('M19 Codex semantic classification loop', () => {
                 },
               };
             if (turn === 3) return { decision: projectionDecision('service:order-api') };
+            if (turn === 4)
+              return {
+                decision: {
+                  arguments: wikiNarrative('service:order-api'),
+                  decisionId: 'decision:m19-compose-wiki',
+                  kind: 'tool_call' as const,
+                  nextAction: 'continue',
+                  nextSuggestions: [],
+                  reason: '根据完成的服务语义投影撰写服务器 Wiki。',
+                  toolName: 'compose_wiki' as const,
+                  turnId: 'model-turn',
+                  unresolvedQuestions: [],
+                },
+              };
             return {
               decision: {
                 decisionId: 'decision:m19-final',
@@ -679,6 +705,33 @@ function service(name: string): ServiceRecord {
     status: 'running',
     systemdUnitIds: [],
     unknownFields: [],
+  };
+}
+
+function wikiNarrative(serviceId: string) {
+  return {
+    architectureOverview: '该服务以独立部署单元运行，现有证据未确认额外依赖。',
+    deploymentOverview: '部署、配置、数据和日志路径均来自 Codex 审查后的投影。',
+    executiveSummary: '该服务器运行一个已由 Codex 完成语义审查的主要服务。',
+    keyFindings: [],
+    operationsOverview: '运维时应核对服务状态、配置路径、日志和备份策略。',
+    serviceDescriptions: [
+      {
+        basis: '服务名称和服务归一化证据。',
+        description: '该服务承载对应产品或应用的主要运行能力。',
+        evidenceIds: ['evidence:service'],
+        serviceId,
+      },
+    ],
+    serviceGroups: [
+      {
+        serviceIds: [serviceId],
+        summary: '已确认的主要部署服务。',
+        title: '主要服务',
+      },
+    ],
+    systemOverview: '服务器提供该服务所需的 Linux 运行环境。',
+    unresolvedQuestions: [],
   };
 }
 

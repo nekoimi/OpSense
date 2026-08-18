@@ -4,6 +4,7 @@ import {
   AgentDecisionSchema,
   AgentToolNameSchema,
   AgentToolActivitySchema,
+  ComposeWikiArgumentsSchema,
   ExecuteGovernedProbeArgumentsSchema,
   ListCandidatesArgumentsSchema,
   PlanDiscoveryArgumentsSchema,
@@ -19,10 +20,11 @@ import type {
   AgentToolName,
   InventoryProjection,
   PlanDiscoveryArguments,
+  WikiNarrativeDraft,
 } from '@opsense/schema';
 
 import type { ContextBuilder, ContextSection } from './context.js';
-import type { ProbeGovernor } from './governor.js';
+import type { GovernedProbeResult, ProbeGovernor } from './governor.js';
 
 export const AGENT_TOOL_NAMES = [
   'read_context',
@@ -31,6 +33,7 @@ export const AGENT_TOOL_NAMES = [
   'execute_governed_probe',
   'plan_discovery',
   'update_projection',
+  'compose_wiki',
 ] as const;
 
 export interface ToolExecutionResult {
@@ -54,6 +57,10 @@ export interface ToolRouterOptions {
     plan: PlanDiscoveryArguments,
     session: AgentSession,
   ) => Promise<readonly string[]> | readonly string[];
+  applyWikiComposition?: (
+    draft: WikiNarrativeDraft,
+    session: AgentSession,
+  ) => Promise<readonly string[]> | readonly string[];
   now?: () => Date;
 }
 
@@ -63,6 +70,7 @@ export class ToolRouter {
   private readonly governor: ProbeGovernor;
   private readonly applyProjectionUpdate: ToolRouterOptions['applyProjectionUpdate'];
   private readonly applyDiscoveryPlan: ToolRouterOptions['applyDiscoveryPlan'];
+  private readonly applyWikiComposition: ToolRouterOptions['applyWikiComposition'];
   private readonly now: () => Date;
   private session: AgentSession | undefined;
 
@@ -72,6 +80,7 @@ export class ToolRouter {
     this.governor = options.governor;
     this.applyProjectionUpdate = options.applyProjectionUpdate;
     this.applyDiscoveryPlan = options.applyDiscoveryPlan;
+    this.applyWikiComposition = options.applyWikiComposition;
     this.now = options.now ?? (() => new Date());
   }
 
@@ -118,6 +127,15 @@ export class ToolRouter {
       reviewedServiceCount: candidateServiceIds.length - unreviewedServiceIds.length,
       unreviewedPathKeys,
       unreviewedServiceIds,
+    };
+  }
+
+  public wikiCompositionStatus(): { completed: boolean; threadId?: string } {
+    return {
+      completed: this.projection.wikiNarrative?.provider === 'codex',
+      ...(this.projection.wikiNarrative?.threadId === undefined
+        ? {}
+        : { threadId: this.projection.wikiNarrative.threadId }),
     };
   }
 
@@ -169,7 +187,7 @@ export class ToolRouter {
         evidenceIds: [],
         status: 'completed',
         summary: `已读取上下文章节 ${section}。`,
-        value: this.context.readSection(section, args.offset ?? 0, args.limit ?? 3),
+        value: this.context.readSection(section, args.offset ?? 0, args.limit),
       };
     }
     if (name === 'read_evidence') {
@@ -202,14 +220,10 @@ export class ToolRouter {
       const section = value.section ?? 'services';
       const valueForSection =
         section === 'services'
-          ? this.context.readSection('services', value.offset ?? 0, value.limit ?? 3)
+          ? this.context.readSection('services', value.offset ?? 0, value.limit)
           : section === 'paths'
-            ? this.context.readSection('path_candidates', value.offset ?? 0, value.limit ?? 3)
-            : this.context.readSection(
-                section as ContextSection,
-                value.offset ?? 0,
-                value.limit ?? 3,
-              );
+            ? this.context.readSection('path_candidates', value.offset ?? 0, value.limit)
+            : this.context.readSection(section as ContextSection, value.offset ?? 0, value.limit);
       return {
         changedIds: [],
         evidenceIds: [],
@@ -220,23 +234,36 @@ export class ToolRouter {
     }
     if (name === 'execute_governed_probe') {
       assertSchema(ExecuteGovernedProbeArgumentsSchema, value);
+      const requests = 'requests' in value ? value.requests : [value.request];
       const workspace = this.projection.discoveryWorkspace;
       if (workspace?.workflowVersion === 'm20_evidence_driven') {
         const investigationServiceIds = new Set(
           workspace.investigations.flatMap((item) => item.serviceIds),
         );
-        if (!investigationServiceIds.has(value.request.targetServiceId))
-          throw new Error(
-            `补探测目标尚未进入 Codex 调查工作区：${value.request.targetServiceId}。`,
-          );
+        const unselected = requests.find(
+          (request) => !investigationServiceIds.has(request.targetServiceId),
+        );
+        if (unselected !== undefined)
+          throw new Error(`补探测目标尚未进入 Codex 调查工作区：${unselected.targetServiceId}。`);
       }
-      const probe = await this.governor.execute(value.request);
+      if (!('requests' in value)) {
+        const probe = await this.governor.execute(value.request);
+        return {
+          changedIds: [],
+          evidenceIds: probe.evidenceIds,
+          status: probe.status,
+          summary: probe.reason,
+          value: probe.value,
+        };
+      }
+      const probes: GovernedProbeResult[] = await this.governor.executeBatch(requests);
+      const completed = probes.filter((probe) => probe.status === 'completed').length;
       return {
         changedIds: [],
-        evidenceIds: probe.evidenceIds,
-        status: probe.status,
-        summary: probe.reason,
-        value: probe.value,
+        evidenceIds: [...new Set(probes.flatMap((probe) => probe.evidenceIds))],
+        status: completed === probes.length ? 'completed' : 'failed',
+        summary: `批量受控探测完成 ${completed}/${probes.length} 项。`,
+        value: probes,
       };
     }
     if (name === 'plan_discovery') {
@@ -259,6 +286,32 @@ export class ToolRouter {
         status: 'completed',
         summary: `已应用 Codex 调查计划。${before} -> ${after}`,
         value,
+      };
+    }
+    if (name === 'compose_wiki') {
+      assertSchema(ComposeWikiArgumentsSchema, value);
+      if (!this.classificationStatus().completed)
+        throw new Error('必须先完成 Codex 服务调查，才能撰写服务器 Wiki。');
+      if (this.applyWikiComposition === undefined)
+        throw new Error('当前 Agent 未配置 AI Wiki 综合稿件写入器。');
+      if (this.session === undefined) throw new Error('Agent session 尚未绑定到工具路由。');
+      const changedIds = [...(await this.applyWikiComposition(value, this.session))];
+      return {
+        changedIds,
+        evidenceIds: [
+          ...new Set([
+            ...value.serviceDescriptions.flatMap((item) => item.evidenceIds),
+            ...value.keyFindings.flatMap((item) => item.evidenceIds),
+          ]),
+        ],
+        status: 'completed',
+        summary: `Codex 已完成服务器 Wiki 综合撰写：${value.serviceGroups.length} 个服务分组、${value.serviceDescriptions.length} 个服务详细描述。`,
+        value: {
+          executiveSummary: value.executiveSummary,
+          serviceGroupCount: value.serviceGroups.length,
+          serviceDescriptionCount: value.serviceDescriptions.length,
+          keyFindingCount: value.keyFindings.length,
+        },
       };
     }
     const raw = objectValue(value);

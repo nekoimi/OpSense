@@ -17,10 +17,20 @@ export function buildReportModel(
     projection.containers.map((container) => [container.id, container]),
   );
   const analysis = projection.analysis;
+  const descriptionByServiceId = new Map(
+    (projection.wikiNarrative?.serviceDescriptions ?? []).map((item) => [
+      item.serviceId,
+      item.description,
+    ]),
+  );
   const assessmentByService = new Map(
     projection.serviceAssessments.map((assessment) => [assessment.serviceId, assessment]),
   );
-  const serviceIndex = projection.services
+  const evidenceDriven = projection.discoveryWorkspace?.workflowVersion === 'm20_evidence_driven';
+  const reportServices = evidenceDriven
+    ? projection.services.filter((service) => assessmentByService.has(service.id))
+    : projection.services;
+  const serviceIndex = reportServices
     .map((service): ReportService => {
       const assessment = assessmentByService.get(service.id);
       if (assessment === undefined) {
@@ -44,6 +54,7 @@ export function buildReportModel(
         }
       }
       const classifiedPaths = servicePathsForReport(projection, service);
+      const description = descriptionByServiceId.get(service.id);
       const semanticEvidenceIds = (projection.pathAssessments ?? [])
         .filter((item) => item.serviceIds.includes(service.id))
         .flatMap((item) => item.evidenceIds);
@@ -54,6 +65,7 @@ export function buildReportModel(
         configFiles: classifiedPaths.config,
         conflictFields: [...(service.conflictFields ?? [])],
         dataDirectories: classifiedPaths.data,
+        ...(description === undefined ? {} : { description }),
         deployDirectories: classifiedPaths.deploy,
         deploymentType: service.deploymentType,
         ...(service.displayName === undefined ? {} : { displayName: service.displayName }),
@@ -85,6 +97,7 @@ export function buildReportModel(
 
   const model: ReportModel = {
     ...(analysis === undefined ? {} : { aiAnalysis: analysis }),
+    ...(projection.wikiNarrative === undefined ? {} : { wikiNarrative: projection.wikiNarrative }),
     disks: (projection.storage?.disks ?? []).map((disk) => ({
       evidenceIds: [...disk.evidenceIds],
       fileSystemTypes: [
@@ -227,7 +240,9 @@ export function buildReportModel(
       containerCount: projection.containers.length,
       diskCount: projection.storage?.disks.length ?? 0,
       evidenceCount: projection.evidence.length,
-      findingCount: projection.findings.length + (analysis?.findings.length ?? 0),
+      findingCount:
+        projection.findings.length +
+        (projection.wikiNarrative?.keyFindings.length ?? analysis?.findings.length ?? 0),
       interfaceCount: projection.network?.interfaces.length ?? 0,
       mountCount: projection.storage?.mounts.length ?? 0,
       needsReviewServiceCount: serviceIndex.filter(
@@ -242,7 +257,9 @@ export function buildReportModel(
         (service) => service.reportPlacement === 'supporting',
       ).length,
       systemServiceCount: systemServiceRecords.length,
-      unknownCount: projection.unknowns.length + (analysis?.unknowns.length ?? 0),
+      unknownCount:
+        projection.unknowns.length +
+        (projection.wikiNarrative?.unresolvedQuestions.length ?? analysis?.unknowns.length ?? 0),
     },
     serviceIndex,
     systemServices: {

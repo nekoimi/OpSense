@@ -1,6 +1,7 @@
 import path from 'node:path';
 
 import { BaselineRelevanceClassifier, governAiPlan } from '@opsense/ai-provider';
+import { requiredServiceInvestigationReasons } from '@opsense/discovery';
 import { InventoryProjectionSchema, assertSchema } from '@opsense/schema';
 import type {
   AgentDecision,
@@ -18,6 +19,7 @@ import type {
   ServiceRecord,
   PlanDiscoveryArguments,
   VisibilityDecision,
+  WikiNarrativeDraft,
 } from '@opsense/schema';
 
 export interface BuildInventoryProjectionOptions {
@@ -34,6 +36,12 @@ export interface ApplyProjectionDecisionOptions {
 }
 
 export interface ApplyDiscoveryPlanOptions {
+  now?: () => Date;
+  threadId?: string;
+}
+
+export interface ApplyWikiNarrativeOptions {
+  model?: string;
   now?: () => Date;
   threadId?: string;
 }
@@ -287,6 +295,9 @@ export function buildInventoryProjection(
             ? {}
             : { classificationThreadId: previous.classificationThreadId }),
           ...(workspace === undefined ? {} : { discoveryWorkspace: workspace }),
+          ...(migratingFromM19 || previous?.wikiNarrative === undefined
+            ? {}
+            : { wikiNarrative: previous.wikiNarrative }),
         }
       : {
           candidateServiceCount: projectedServices.length,
@@ -317,6 +328,15 @@ export function buildInventoryProjection(
     visibilityDecisions,
     sourceSnapshotId: snapshot.session.id,
   };
+  if (evidenceDriven && projection.discoveryWorkspace !== undefined) {
+    const missingRequired = missingRequiredInvestigationServices(projection);
+    if (missingRequired.length > 0) {
+      projection.discoveryWorkspace.planningCompleted = false;
+      projection.discoveryWorkspace.discoveryCompleted = false;
+      projection.classificationCompleted = false;
+      delete projection.wikiNarrative;
+    }
+  }
   assertSchema(InventoryProjectionSchema, projection);
   return projection;
 }
@@ -337,15 +357,16 @@ export function promoteOrphanProcessCandidates(
     const sockets = projection.sockets.filter((socket) =>
       socket.processIds.some((pid) => processIds.includes(pid)),
     );
-    const customExecutablePaths = processes.flatMap((process) => {
-      const executablePath = process.executablePath;
-      return executablePath !== undefined &&
-        /^\/(?:apps?|data|home|opt|srv|usr\/local)(?:\/|$)/.test(executablePath)
-        ? [path.posix.dirname(executablePath)]
-        : [];
-    });
+    const customExecutablePaths = processes.flatMap((process) =>
+      [process.executablePath, process.workingDirectory, ...process.arguments]
+        .filter(
+          (value): value is string =>
+            value !== undefined && /^\/(?:apps?|data|home|opt|srv|usr\/local)(?:\/|$)/.test(value),
+        )
+        .map((value) => (path.posix.extname(value).length > 0 ? path.posix.dirname(value) : value)),
+    );
     const highValue =
-      sockets.some((socket) => socket.exposed) ||
+      sockets.some((socket) => socket.listening) ||
       customExecutablePaths.length > 0 ||
       ['java', 'go', 'rust', 'container'].includes(candidate.runtimeKind);
     if (!highValue) continue;
@@ -378,28 +399,39 @@ export function promoteOrphanProcessCandidates(
       unknownFields: ['purpose', 'enabledAtBoot', 'configFiles', 'logLocations', 'dataDirectories'],
     };
     projection.services.push(service);
-    projection.serviceAssessments.push({
-      classificationSource: 'local_candidate',
-      confidence: 'unknown',
-      evidenceIds: [...service.evidenceIds],
-      importance: 'unknown',
-      reason: '高价值孤立进程候选，等待 Codex 判断是否属于部署服务。',
-      reportPlacement: 'needs_review',
-      reviewItems: ['孤立进程尚未归并到已有服务，需要 Codex 审查。'],
-      role: 'unknown',
-      serviceId,
-      unknowns: ['服务用途、部署方式和路径角色尚未确认。'],
-    });
+    if (projection.discoveryWorkspace?.workflowVersion !== 'm20_evidence_driven')
+      projection.serviceAssessments.push({
+        classificationSource: 'local_candidate',
+        confidence: 'unknown',
+        evidenceIds: [...service.evidenceIds],
+        importance: 'unknown',
+        reason: '高价值孤立进程候选，等待 Codex 判断是否属于部署服务。',
+        reportPlacement: 'needs_review',
+        reviewItems: ['孤立进程尚未归并到已有服务，需要 Codex 审查。'],
+        role: 'unknown',
+        serviceId,
+        unknowns: ['服务用途、部署方式和路径角色尚未确认。'],
+      });
     processIds.forEach((pid) => existingProcessIds.add(pid));
     added.push(serviceId);
   }
   if (added.length === 0) return [];
-  const candidatePathKeys = servicePathKeys(projection.services);
-  projection.candidateServiceCount = projection.services.length;
+  const selectedServiceIds = new Set(
+    projection.discoveryWorkspace?.investigations.flatMap((item) => item.serviceIds) ??
+      projection.services.map((service) => service.id),
+  );
+  const candidatePathKeys = servicePathKeys(
+    projection.services.filter((service) => selectedServiceIds.has(service.id)),
+  );
+  projection.candidateServiceCount = selectedServiceIds.size;
   projection.candidatePathKeys = candidatePathKeys;
   projection.candidatePathCount = candidatePathKeys.length;
   projection.classificationCompleted = false;
   projection.classificationUpdatedAt = new Date().toISOString();
+  if (projection.discoveryWorkspace?.workflowVersion === 'm20_evidence_driven') {
+    projection.discoveryWorkspace.discoveryCompleted = false;
+    projection.discoveryWorkspace.updatedAt = projection.classificationUpdatedAt;
+  }
   assertSchema(InventoryProjectionSchema, projection);
   return added;
 }
@@ -412,6 +444,7 @@ export function applyDiscoveryPlan(
   if (projection.discoveryWorkspace?.workflowVersion !== 'm20_evidence_driven')
     throw new Error('当前 Projection 不是 M20 证据驱动工作区。');
   const next = structuredClone(projection);
+  delete next.wikiNarrative;
   const evidenceIds = new Set(next.evidence.map((item) => item.id));
   const sourceIds = new Set([
     ...next.services.map((item) => item.id),
@@ -470,6 +503,19 @@ export function applyDiscoveryPlan(
     workflowVersion: 'm20_evidence_driven',
   };
   const selected = new Set(workspace.investigations.flatMap((item) => item.serviceIds));
+  if (workspace.planningCompleted) {
+    next.discoveryWorkspace = workspace;
+    const missingRequired = missingRequiredInvestigationServices(next);
+    if (missingRequired.length > 0) {
+      const examples = missingRequired
+        .slice(0, 12)
+        .map((service) => service.id)
+        .join(', ');
+      throw new Error(
+        `Codex 调查计划遗漏 ${missingRequired.length} 个高价值服务，必须进入 investigation：${examples}${missingRequired.length > 12 ? ' 等' : ''}。请分页读取 services 候选后重新提交完整计划。`,
+      );
+    }
+  }
   const candidatePathKeys = servicePathKeys(
     next.services.filter((service) => selected.has(service.id)),
   );
@@ -557,6 +603,7 @@ export function applyProjectionDecision(
 ): string[] {
   const now = options.now ?? (() => new Date());
   const next = structuredClone(projection);
+  delete next.wikiNarrative;
   const evidenceIds = new Set(next.evidence.map((item) => item.id));
   const services = new Map(next.services.map((service) => [service.id, service]));
   const evidenceDriven = next.discoveryWorkspace?.workflowVersion === 'm20_evidence_driven';
@@ -719,6 +766,70 @@ export function assertCodexClassificationComplete(projection: InventoryProjectio
     throw new Error('v2 Wiki 缺少 Codex Thread 审计标识。');
 }
 
+export function applyWikiNarrative(
+  projection: InventoryProjection,
+  draft: WikiNarrativeDraft,
+  options: ApplyWikiNarrativeOptions = {},
+): string[] {
+  assertCodexClassificationComplete(projection);
+  if (options.threadId === undefined) throw new Error('AI Wiki 综合稿件缺少 Codex Thread ID。');
+  const assessedServiceIds = new Set(
+    projection.serviceAssessments.map((assessment) => assessment.serviceId),
+  );
+  const evidenceIds = new Set(projection.evidence.map((evidence) => evidence.id));
+  const referencedServiceIds = [
+    ...draft.serviceGroups.flatMap((group) => group.serviceIds),
+    ...draft.serviceDescriptions.map((description) => description.serviceId),
+  ];
+  const unknownServiceIds = referencedServiceIds.filter(
+    (serviceId) => !assessedServiceIds.has(serviceId),
+  );
+  if (unknownServiceIds.length > 0)
+    throw new Error(
+      `AI Wiki 综合稿件引用了未完成 Codex 评估的服务：${[...new Set(unknownServiceIds)].join(', ')}。`,
+    );
+  const descriptionServiceIds = draft.serviceDescriptions.map((item) => item.serviceId);
+  if (new Set(descriptionServiceIds).size !== descriptionServiceIds.length)
+    throw new Error('AI Wiki 综合稿件包含重复的服务详细描述。');
+  const handbookServiceIds = projection.serviceAssessments
+    .filter((assessment) => assessment.reportPlacement !== 'system_summary')
+    .map((assessment) => assessment.serviceId);
+  const groupedServiceIds = draft.serviceGroups.flatMap((group) => group.serviceIds);
+  const missingGroupServiceIds = handbookServiceIds.filter(
+    (serviceId) => !groupedServiceIds.includes(serviceId),
+  );
+  const duplicateGroupServiceIds = groupedServiceIds.filter(
+    (serviceId, index) => groupedServiceIds.indexOf(serviceId) !== index,
+  );
+  if (missingGroupServiceIds.length > 0 || duplicateGroupServiceIds.length > 0)
+    throw new Error(
+      `AI Wiki 服务分组必须完整且不重复。遗漏：${[...new Set(missingGroupServiceIds)].join(', ') || '无'}；重复：${[...new Set(duplicateGroupServiceIds)].join(', ') || '无'}。`,
+    );
+  const referencedEvidenceIds = [
+    ...draft.serviceDescriptions.flatMap((description) => description.evidenceIds),
+    ...draft.keyFindings.flatMap((finding) => finding.evidenceIds),
+  ];
+  const unknownEvidenceIds = referencedEvidenceIds.filter((id) => !evidenceIds.has(id));
+  if (unknownEvidenceIds.length > 0)
+    throw new Error(
+      `AI Wiki 综合稿件引用了不存在的 Evidence ID：${[...new Set(unknownEvidenceIds)].join(', ')}。`,
+    );
+  const next = structuredClone(projection);
+  next.wikiNarrative = {
+    ...draft,
+    generatedAt: (options.now ?? (() => new Date()))().toISOString(),
+    provider: 'codex',
+    threadId: options.threadId,
+    ...(options.model === undefined ? {} : { model: options.model }),
+  };
+  assertSchema(InventoryProjectionSchema, next);
+  Object.assign(projection, next);
+  return [
+    `wiki-narrative:${projection.sourceSnapshotId}`,
+    ...draft.serviceDescriptions.map((item) => item.serviceId),
+  ];
+}
+
 function isContainerInterface(item: NetworkInterface): boolean {
   return CONTAINER_INTERFACE_PATTERN.test(item.name);
 }
@@ -773,22 +884,23 @@ function mergeServices(
 }
 
 function mustRemainVisible(projection: InventoryProjection, service: ServiceRecord): boolean {
-  if (
-    service.status === 'failed' ||
-    service.deploymentType === 'docker' ||
-    service.deploymentType === 'compose' ||
-    service.containerIds.length > 0 ||
-    service.composeProjectIds.length > 0
-  )
-    return true;
-  if (
-    service.socketIds.some((id) =>
-      projection.sockets.some((socket) => socket.id === id && socket.exposed),
-    )
-  )
-    return true;
-  return servicePathsFor(service).some((value) =>
-    /^\/(?:apps?|data|home|opt|srv|usr\/local)(?:\/|$)/.test(value),
+  return requiredServiceInvestigationReasons(projection, service).length > 0;
+}
+
+function missingRequiredInvestigationServices(projection: InventoryProjection): ServiceRecord[] {
+  const workspace = projection.discoveryWorkspace;
+  if (workspace === undefined) return [];
+  const selected = new Set(workspace.investigations.flatMap((item) => item.serviceIds));
+  const consolidatedSourceIds = new Set(
+    workspace.discoveredServices
+      .filter((service) => selected.has(service.serviceId))
+      .flatMap((service) => service.sourceObjectIds),
+  );
+  return projection.services.filter(
+    (service) =>
+      requiredServiceInvestigationReasons(projection, service).length > 0 &&
+      !selected.has(service.id) &&
+      !consolidatedSourceIds.has(service.id),
   );
 }
 

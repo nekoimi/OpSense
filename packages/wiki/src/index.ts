@@ -82,6 +82,7 @@ export function buildServiceWikiProjection(
     serviceIds: entries.map((entry) => entry.serviceId),
     summaryServiceIds,
     unresolvedQuestions: entries.flatMap((entry) => entry.unknowns),
+    ...(projection.wikiNarrative === undefined ? {} : { narrative: projection.wikiNarrative }),
   };
   assertSchema(ServiceWikiProjectionSchema, result);
   return result;
@@ -117,6 +118,9 @@ export function buildWikiEntryDraft(
   options: BuildServiceWikiOptions = {},
 ): WikiEntryDraft {
   const assessment = assessmentFor(projection, service.id);
+  const description = projection.wikiNarrative?.serviceDescriptions.find(
+    (item) => item.serviceId === service.id,
+  );
   const classifiedPaths = pathsFor(service, projection);
   const pathEvidence = (
     semantic: NonNullable<InventoryProjection['pathAssessments']>[number]['semantic'],
@@ -323,6 +327,7 @@ export function buildWikiEntryDraft(
     lifecycle,
     logging: { logLocations: classifiedPaths.log },
     oneLineSummary: purpose ?? `${identityName} 服务，当前用途尚未确认。`,
+    ...(description === undefined ? {} : { description: description.description }),
     purpose: {
       ...(purpose === undefined ? {} : { summary: purpose }),
       confidence: purposeConfidence,

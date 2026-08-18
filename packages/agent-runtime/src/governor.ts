@@ -68,20 +68,56 @@ export class ProbeGovernor {
   }
 
   public async execute(request: unknown, signal?: AbortSignal): Promise<GovernedProbeResult> {
-    const checked = this.validate(request);
-    if (this.executor === undefined)
-      return {
+    return (await this.executeBatch([request], signal))[0]!;
+  }
+
+  public async executeBatch(
+    requests: readonly unknown[],
+    signal?: AbortSignal,
+  ): Promise<GovernedProbeResult[]> {
+    const requestIds = new Set<string>();
+    const checked = requests.map((request) => {
+      const validated = this.validate(request);
+      if (requestIds.has(validated.id))
+        throw new ProbeGovernorError(`批量探测请求 ID 重复：${validated.id}。`);
+      requestIds.add(validated.id);
+      return validated;
+    });
+    const executor = this.executor;
+    if (executor === undefined)
+      return checked.map(() => ({
         evidenceIds: [],
         reason: '未配置远程探测执行器，已保留为待执行请求。',
-        status: 'failed',
-      };
+        status: 'failed' as const,
+      }));
     this.beginRound();
+    const results: GovernedProbeResult[] = [];
+    for (const request of checked) {
+      try {
+        this.checkSessionBudget(request);
+        results.push(await this.executeChecked(request, executor, signal));
+      } catch (error) {
+        results.push({
+          evidenceIds: [],
+          reason: error instanceof Error ? error.message : String(error),
+          status: 'failed',
+        });
+      }
+    }
+    return results;
+  }
+
+  private async executeChecked(
+    checked: ProbeRequest,
+    executor: ProbeExecutor,
+    signal?: AbortSignal,
+  ): Promise<GovernedProbeResult> {
     const started = this.now().getTime();
     this.session.budgets.usedRequests += 1;
     this.session.budgets.usedBytes += checked.maxBytes;
     this.session.budgets.usedDurationMs += checked.timeoutMs;
     try {
-      const result = await this.executor.execute(checked, signal);
+      const result = await executor.execute(checked, signal);
       const elapsed = Math.max(0, this.now().getTime() - started);
       this.session.budgets.usedDurationMs = Math.max(
         0,

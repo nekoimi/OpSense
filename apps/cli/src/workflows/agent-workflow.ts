@@ -15,7 +15,9 @@ import { buildEvidenceIndex } from '@opsense/discovery';
 import {
   applyProjectionDecision,
   applyDiscoveryPlan,
+  applyWikiNarrative,
   buildInventoryProjection,
+  promoteOrphanProcessCandidates,
 } from '@opsense/projection';
 import { redactSnapshot } from '@opsense/redaction';
 import {
@@ -99,7 +101,9 @@ export async function prepareAgentWorkflow(
   const { layout } = source;
   const snapshot = source.snapshot;
   const projection = await loadOrBuildProjection(layout, snapshot);
-  const evidenceIndex = buildEvidenceIndex(projection);
+  let evidenceIndex = buildEvidenceIndex(projection);
+  if (promoteOrphanProcessCandidates(projection, evidenceIndex.candidates).length > 0)
+    evidenceIndex = buildEvidenceIndex(projection);
   const existingSession = source.session;
   const migratedFromM19 =
     existingSession !== undefined &&
@@ -121,8 +125,10 @@ export async function prepareAgentWorkflow(
       : migratedFromM19
         ? migrateSessionToM20(existingSession, options.maxProbes)
         : existingSession;
+  const sessionModelChanged = options.model !== undefined && session.model !== options.model;
+  if (options.model !== undefined) session.model = options.model;
   const store = new FileAgentSessionStore(layout);
-  if (existingSession === undefined || migratedFromM19) {
+  if (existingSession === undefined || migratedFromM19 || sessionModelChanged) {
     if (migratedFromM19)
       await writeJsonAtomic(`${layout.agentSessionFile}.m19.json`, existingSession);
     await store.save(session);
@@ -174,6 +180,14 @@ export async function prepareAgentWorkflow(
     },
     applyDiscoveryPlan: async (plan, currentSession) => {
       const changedIds = applyDiscoveryPlan(projection, plan, {
+        ...(currentSession.threadId === undefined ? {} : { threadId: currentSession.threadId }),
+      });
+      await writeJsonAtomic(layout.agentProjectionFile, projection);
+      return changedIds;
+    },
+    applyWikiComposition: async (draft, currentSession) => {
+      const changedIds = applyWikiNarrative(projection, draft, {
+        ...(currentSession.model === undefined ? {} : { model: currentSession.model }),
         ...(currentSession.threadId === undefined ? {} : { threadId: currentSession.threadId }),
       });
       await writeJsonAtomic(layout.agentProjectionFile, projection);

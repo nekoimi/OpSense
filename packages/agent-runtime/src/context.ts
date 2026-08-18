@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 
+import { requiredServiceInvestigationReasons } from '@opsense/discovery';
 import type { DiscoveryCandidate, EvidenceIndex, InventoryProjection } from '@opsense/schema';
 
 export type ContextSection =
@@ -9,11 +10,13 @@ export type ContextSection =
   | 'services'
   | 'processes'
   | 'containers'
+  | 'systemd_units'
   | 'systemd_summary'
   | 'path_candidates'
   | 'findings'
   | 'visibility_summary'
-  | 'discovery';
+  | 'discovery'
+  | 'wiki_source';
 
 export interface AgentContext {
   l0: Record<string, unknown>;
@@ -28,8 +31,9 @@ export interface ContextBuilderOptions {
   redact?: (value: unknown) => unknown;
 }
 
-const SERVICE_BATCH_SIZE = 2;
-const MAX_CONTEXT_PAGE_SIZE = 5;
+const LEGACY_SERVICE_BATCH_SIZE = 2;
+const M20_SERVICE_BATCH_SIZE = 12;
+const MAX_CONTEXT_PAGE_SIZE = 12;
 
 export class ContextBuilder {
   private readonly projection: InventoryProjection;
@@ -50,7 +54,7 @@ export class ContextBuilder {
   }): AgentContext {
     const p = this.projection;
     const rankedCandidates = this.rankedCandidates();
-    const contextCandidates = rankedCandidates.slice(0, SERVICE_BATCH_SIZE);
+    const contextCandidates = rankedCandidates.slice(0, this.serviceBatchSize());
     const reviewedServiceIds = new Set(p.reviewedServiceIds ?? []);
     const l0 = this.redact({
       scanId: p.sourceSnapshotId,
@@ -91,27 +95,9 @@ export class ContextBuilder {
       storage: compactStorage(p),
       network: compactNetwork(p),
       services: contextCandidates.map((item) => compactCandidate(item, p)),
-      processes: p.processes.slice(0, 20).map((item) => ({
-        id: item.id,
-        pid: item.pid,
-        parentPid: item.parentPid,
-        command: item.command.slice(0, 240),
-        executablePath: item.executablePath?.slice(0, 240),
-        evidenceIds: item.evidenceIds.slice(0, 4),
-      })),
-      containers: p.containers.slice(0, 8).map((item) => ({
-        id: item.id,
-        name: item.name,
-        image: item.image,
-        state: item.state,
-        ports: item.ports.slice(0, 4).map((port) => ({
-          containerPort: port.containerPort,
-          hostAddress: port.hostAddress,
-          hostPort: port.hostPort,
-          protocol: port.protocol,
-        })),
-        evidenceIds: item.evidenceIds.slice(0, 4),
-      })),
+      processes: p.processes.slice(0, 12).map(compactProcess),
+      containers: p.containers.slice(0, 12).map(compactContainer),
+      systemd_units: p.systemdUnits.slice(0, 12).map(compactSystemdUnit),
       evidence: p.evidence.slice(0, 20).map((item) => ({
         id: item.id,
         kind: item.kind,
@@ -138,6 +124,7 @@ export class ContextBuilder {
       })),
       visibility_summary: compactVisibility(p),
       discovery: compactDiscovery(p, this.evidenceIndex),
+      wiki_source: compactWikiSource(p),
     }) as Record<string, unknown>;
     const context = { l0, l1, hash: hashValue({ l0, l1 }) };
     return context;
@@ -172,17 +159,39 @@ export class ContextBuilder {
     return score(b) - score(a) || a.displayName.localeCompare(b.displayName);
   }
 
-  public readSection(section: ContextSection, offset = 0, limit = SERVICE_BATCH_SIZE): unknown {
+  public readSection(
+    section: ContextSection,
+    offset = 0,
+    limit = this.serviceBatchSize(),
+  ): unknown {
     const pageSize = Math.min(Math.max(1, limit), MAX_CONTEXT_PAGE_SIZE);
     if (section === 'services')
       return this.rankedCandidates()
         .slice(Math.max(0, offset), Math.max(0, offset) + pageSize)
         .map((item) => compactCandidate(item, this.projection));
+    if (section === 'processes')
+      return this.projection.processes
+        .slice(Math.max(0, offset), Math.max(0, offset) + pageSize)
+        .map(compactProcess);
+    if (section === 'containers')
+      return this.projection.containers
+        .slice(Math.max(0, offset), Math.max(0, offset) + pageSize)
+        .map(compactContainer);
+    if (section === 'systemd_units')
+      return this.projection.systemdUnits
+        .slice(Math.max(0, offset), Math.max(0, offset) + pageSize)
+        .map(compactSystemdUnit);
     const context = this.build({ stage: 'read', round: 0, budget: {} });
     const value = context.l1[section];
     if (Array.isArray(value))
       return value.slice(Math.max(0, offset), Math.max(0, offset) + pageSize);
     return value ?? null;
+  }
+
+  private serviceBatchSize(): number {
+    return this.projection.discoveryWorkspace?.workflowVersion === 'm20_evidence_driven'
+      ? M20_SERVICE_BATCH_SIZE
+      : LEGACY_SERVICE_BATCH_SIZE;
   }
 
   private rankedCandidates(): DiscoveryCandidate[] {
@@ -191,13 +200,21 @@ export class ContextBuilder {
         .filter((candidate) => candidate.serviceId !== undefined)
         .map((candidate) => [candidate.serviceId as string, candidate]),
     );
+    const workspace = this.projection.discoveryWorkspace;
     const activeServiceIds =
-      this.projection.discoveryWorkspace?.workflowVersion === 'm20_evidence_driven'
-        ? new Set(
-            this.projection.discoveryWorkspace.investigations
+      workspace?.workflowVersion === 'm20_evidence_driven'
+        ? new Set([
+            ...workspace.investigations
               .filter((item) => item.status === 'selected' || item.status === 'investigating')
               .flatMap((item) => item.serviceIds),
-          )
+            ...this.projection.services
+              .filter(
+                (service) =>
+                  requiredServiceInvestigationReasons(this.projection, service).length > 0 &&
+                  !workspace.investigations.some((item) => item.serviceIds.includes(service.id)),
+              )
+              .map((service) => service.id),
+          ])
         : undefined;
     const candidates = this.projection.services
       .filter((service) => activeServiceIds === undefined || activeServiceIds.has(service.id))
@@ -217,7 +234,10 @@ export class ContextBuilder {
             serviceId: service.id,
           },
       );
-    return [...candidates].sort((a, b) => this.candidateRank(a, b));
+    const ranked = [...candidates].sort((a, b) => this.candidateRank(a, b));
+    return workspace?.workflowVersion === 'm20_evidence_driven' && !workspace.planningCompleted
+      ? fairServiceCandidateOrder(ranked, this.projection)
+      : ranked;
   }
 
   public readEvidence(ids: readonly string[]): unknown[] {
@@ -273,6 +293,62 @@ export class ContextBuilder {
         }),
       );
   }
+}
+
+function compactProcess(item: InventoryProjection['processes'][number]): unknown {
+  return {
+    id: item.id,
+    pid: item.pid,
+    parentPid: item.parentPid,
+    userId: item.userId,
+    userName: item.userName,
+    command: item.command.slice(0, 320),
+    arguments: item.arguments.slice(0, 12).map((argument) => argument.slice(0, 240)),
+    executablePath: item.executablePath?.slice(0, 240),
+    workingDirectory: item.workingDirectory?.slice(0, 240),
+    cgroup: item.cgroup?.slice(0, 320),
+    containerId: item.containerId,
+    evidenceIds: item.evidenceIds.slice(0, 4),
+  };
+}
+
+function compactContainer(item: InventoryProjection['containers'][number]): unknown {
+  return {
+    id: item.id,
+    name: item.name,
+    image: item.image,
+    imageId: item.imageId,
+    state: item.state,
+    processId: item.processId,
+    restartPolicy: item.restartPolicy,
+    ports: item.ports.slice(0, 8).map((port) => ({
+      containerPort: port.containerPort,
+      hostAddress: port.hostAddress,
+      hostPort: port.hostPort,
+      protocol: port.protocol,
+    })),
+    mounts: item.mounts.slice(0, 8),
+    networks: item.networks.slice(0, 8),
+    labels: Object.fromEntries(Object.entries(item.labels).slice(0, 12)),
+    evidenceIds: item.evidenceIds.slice(0, 4),
+  };
+}
+
+function compactSystemdUnit(item: InventoryProjection['systemdUnits'][number]): unknown {
+  return {
+    id: item.id,
+    name: item.name,
+    description: item.description,
+    loadState: item.loadState,
+    activeState: item.activeState,
+    subState: item.subState,
+    enabledState: item.enabledState,
+    mainPid: item.mainPid,
+    fragmentPath: item.fragmentPath,
+    workingDirectory: item.workingDirectory,
+    execStart: item.execStart.slice(0, 4),
+    evidenceIds: item.evidenceIds.slice(0, 4),
+  };
 }
 
 function compactCandidate(item: DiscoveryCandidate, projection: InventoryProjection): unknown {
@@ -456,6 +532,73 @@ function compactVisibility(projection: InventoryProjection): unknown {
     .map(([key, count]) => ({ key, count }));
 }
 
+function compactWikiSource(projection: InventoryProjection): unknown {
+  if (projection.classificationCompleted !== true)
+    return { readyForComposition: false, reason: 'Codex 服务调查尚未完成。' };
+  const assessedServiceIds = new Set(
+    projection.serviceAssessments.map((assessment) => assessment.serviceId),
+  );
+  return {
+    readyForComposition: true,
+    alreadyComposed: projection.wikiNarrative !== undefined,
+    host: projection.host === undefined ? null : compactHost(projection.host),
+    storage: compactStorage(projection),
+    network: compactNetwork(projection),
+    services: projection.services
+      .filter((service) => assessedServiceIds.has(service.id))
+      .map((service) => ({
+        id: service.id,
+        name: service.name,
+        displayName: service.displayName,
+        status: service.status,
+        deploymentType: service.deploymentType,
+        assessment: projection.serviceAssessments.find(
+          (assessment) => assessment.serviceId === service.id,
+        ),
+        containers: service.containerIds.flatMap((containerId) => {
+          const container = projection.containers.find((item) => item.id === containerId);
+          return container === undefined
+            ? []
+            : [
+                {
+                  id: container.id,
+                  name: container.name,
+                  image: container.image,
+                  state: container.state,
+                  ports: container.ports,
+                  evidenceIds: container.evidenceIds,
+                },
+              ];
+        }),
+        ports: service.socketIds.flatMap((socketId) => {
+          const socket = projection.sockets.find((item) => item.id === socketId);
+          return socket === undefined
+            ? []
+            : [
+                {
+                  protocol: socket.protocol,
+                  address: socket.localAddress,
+                  port: socket.localPort,
+                  exposed: socket.exposed,
+                  evidenceIds: socket.evidenceIds,
+                },
+              ];
+        }),
+        paths: (projection.pathAssessments ?? []).filter((item) =>
+          item.serviceIds.includes(service.id),
+        ),
+        evidenceIds: service.evidenceIds,
+      })),
+    investigations: projection.discoveryWorkspace?.investigations ?? [],
+    filteredGroups: projection.discoveryWorkspace?.filteredGroups ?? [],
+    findings: projection.findings,
+    unresolvedQuestions: [
+      ...projection.unknowns,
+      ...(projection.discoveryWorkspace?.unresolvedQuestions ?? []),
+    ],
+  };
+}
+
 function compactDiscovery(
   projection: InventoryProjection,
   evidenceIndex: EvidenceIndex | undefined,
@@ -468,7 +611,7 @@ function compactDiscovery(
     };
   const associatedUnitIds = new Set(projection.services.flatMap((item) => item.systemdUnitIds));
   const protectedServices = projection.services.filter(
-    (service) => !visibilityConstraintsFor(service, projection).systemSummaryAllowed,
+    (service) => requiredServiceInvestigationReasons(projection, service).length > 0,
   );
   const routineServices = projection.services.filter(
     (service) => !protectedServices.includes(service),
@@ -479,7 +622,8 @@ function compactDiscovery(
       .filter((item) => item.serviceId !== undefined)
       .map((item) => [item.serviceId as string, item]),
   );
-  const highValueLeads = protectedServices.slice(0, 30).map((service) => {
+  const orderedProtectedServices = fairServiceOrder(protectedServices);
+  const highValueLeads = orderedProtectedServices.slice(0, 30).map((service) => {
     const candidate = indexed.get(service.id);
     return {
       id: service.id,
@@ -574,6 +718,12 @@ function compactDiscovery(
       containers: projection.containers.length,
       pathSeeds: projection.pathSeeds?.length ?? 0,
     },
+    highValueLeadCounts: {
+      total: orderedProtectedServices.length,
+      shown: highValueLeads.length,
+      omitted: Math.max(0, orderedProtectedServices.length - highValueLeads.length),
+      byDeploymentType: countBy(orderedProtectedServices, (service) => service.deploymentType),
+    },
     highValueLeads,
     rawGroups,
   };
@@ -644,33 +794,63 @@ function visibilityConstraintsFor(
   projection: InventoryProjection,
 ): { systemSummaryAllowed: boolean; reasons: string[] } {
   if (service === undefined) return { systemSummaryAllowed: true, reasons: [] };
-  const reasons = [
-    ...(service.status === 'failed' ? ['failed_status'] : []),
-    ...(service.deploymentType === 'docker' || service.deploymentType === 'compose'
-      ? ['container_deployment']
-      : []),
-    ...(service.containerIds.length > 0 ? ['container_candidate'] : []),
-    ...(service.composeProjectIds.length > 0 ? ['compose_candidate'] : []),
-    ...(service.socketIds.some((id) =>
-      projection.sockets.some((socket) => socket.id === id && socket.exposed),
-    )
-      ? ['externally_exposed_socket']
-      : []),
-    ...(servicePaths(service).some((value) =>
-      /^\/(?:apps?|data|home|opt|srv|usr\/local)(?:\/|$)/.test(value),
-    )
-      ? ['custom_or_data_path']
-      : []),
-  ];
+  const reasons = requiredServiceInvestigationReasons(projection, service);
   return { systemSummaryAllowed: reasons.length === 0, reasons };
 }
 
-function servicePaths(service: InventoryProjection['services'][number]): string[] {
-  return [
-    ...service.deployDirectories,
-    ...service.configFiles,
-    ...service.environmentFiles,
-    ...service.logLocations,
-    ...service.dataDirectories,
+function fairServiceCandidateOrder(
+  candidates: DiscoveryCandidate[],
+  projection: InventoryProjection,
+): DiscoveryCandidate[] {
+  const byId = new Map(projection.services.map((service) => [service.id, service]));
+  return interleaveGroups(candidates, (candidate) =>
+    serviceRuntimeGroup(byId.get(candidate.serviceId ?? '')),
+  );
+}
+
+function fairServiceOrder(
+  services: InventoryProjection['services'],
+): InventoryProjection['services'] {
+  return interleaveGroups(services, serviceRuntimeGroup);
+}
+
+function serviceRuntimeGroup(service: InventoryProjection['services'][number] | undefined): string {
+  if (service === undefined) return 'other';
+  if (
+    service.deploymentType === 'docker' ||
+    service.deploymentType === 'compose' ||
+    service.containerIds.length > 0 ||
+    service.composeProjectIds.length > 0
+  )
+    return 'container';
+  if (service.deploymentType === 'systemd' || service.systemdUnitIds.length > 0) return 'systemd';
+  if (service.deploymentType === 'process' || service.processIds.length > 0) return 'process';
+  return 'other';
+}
+
+function interleaveGroups<T>(items: readonly T[], groupFor: (item: T) => string): T[] {
+  const groups = new Map<string, T[]>();
+  for (const item of items)
+    groups.set(groupFor(item), [...(groups.get(groupFor(item)) ?? []), item]);
+  const preferred = ['container', 'systemd', 'process', 'other'];
+  const keys = [
+    ...preferred.filter((key) => groups.has(key)),
+    ...[...groups.keys()].filter((key) => !preferred.includes(key)),
   ];
+  const result: T[] = [];
+  for (let index = 0; result.length < items.length; index += 1)
+    for (const key of keys) {
+      const item = groups.get(key)?.[index];
+      if (item !== undefined) result.push(item);
+    }
+  return result;
+}
+
+function countBy<T>(items: readonly T[], keyFor: (item: T) => string): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const item of items) {
+    const key = keyFor(item);
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return counts;
 }

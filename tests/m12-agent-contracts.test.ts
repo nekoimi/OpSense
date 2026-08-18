@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import {
   FileAgentSessionStore,
+  AGENT_DECISION_PROMPT_CONTRACT,
   createAgentSession,
   createTranscriptEntry,
   failSessionForCodex,
@@ -59,7 +60,7 @@ describe('M12 agent contracts and session workspace', () => {
     expect(validateSchema(AgentDecisionSchema, value).valid).toBe(false);
   });
 
-  it('rejects Agent tool aliases outside the five supported tool names', async () => {
+  it('rejects Agent tool aliases outside the supported tool names', async () => {
     const value = JSON.parse(await readFixture('schema/agent-decision.json')) as Record<
       string,
       unknown
@@ -67,6 +68,58 @@ describe('M12 agent contracts and session workspace', () => {
     value.toolName = 'get_evidence';
 
     expect(validateSchema(AgentDecisionSchema, value).valid).toBe(false);
+  });
+
+  it('validates tool-specific plan_discovery arguments in AgentDecision', () => {
+    const valid = planDiscoveryDecision();
+
+    expect(validateSchema(AgentDecisionSchema, valid).valid).toBe(true);
+
+    const invalidStatus = structuredClone(valid);
+    invalidStatus.arguments.investigations[0]!.status = 'active';
+    expect(validateSchema(AgentDecisionSchema, invalidStatus).valid).toBe(false);
+
+    const missingPriority = structuredClone(valid) as Record<string, unknown>;
+    delete (
+      (missingPriority.arguments as { investigations: Record<string, unknown>[] })
+        .investigations[0] as Record<string, unknown>
+    ).priority;
+    expect(validateSchema(AgentDecisionSchema, missingPriority).valid).toBe(false);
+
+    const extraFilterProperty = structuredClone(valid) as Record<string, unknown>;
+    (
+      (extraFilterProperty.arguments as { filteredGroups: Record<string, unknown>[] })
+        .filteredGroups[0] as Record<string, unknown>
+    ).status = 'filtered';
+    expect(validateSchema(AgentDecisionSchema, extraFilterProperty).valid).toBe(false);
+  });
+
+  it('documents exact discovery enums and required fields in the shared Agent prompt', () => {
+    expect(AGENT_DECISION_PROMPT_CONTRACT).toContain(
+      '"status":"selected|investigating|resolved|needs_review"',
+    );
+    expect(AGENT_DECISION_PROMPT_CONTRACT).toContain('"priority":"critical|high|medium|low"');
+    expect(AGENT_DECISION_PROMPT_CONTRACT).toContain(
+      'active, pending, done, complete, and arbitrary values are invalid',
+    );
+    expect(AGENT_DECISION_PROMPT_CONTRACT).toContain('No additional properties');
+    expect(AGENT_DECISION_PROMPT_CONTRACT).toContain(
+      'Projection changes have exactly one representation',
+    );
+    expect(AGENT_DECISION_PROMPT_CONTRACT).toContain(
+      'Never emit kind=projection_update and never combine',
+    );
+    expect(AGENT_DECISION_PROMPT_CONTRACT).toContain('[compose_wiki]');
+    expect(AGENT_DECISION_PROMPT_CONTRACT).toContain('serviceDescriptions');
+  });
+
+  it('validates the complete AI Wiki composition contract', () => {
+    const value = composeWikiDecision();
+
+    expect(validateSchema(AgentDecisionSchema, value).valid).toBe(true);
+    const invalid = structuredClone(value) as Record<string, unknown>;
+    (invalid.arguments as Record<string, unknown>).extraNarrative = 'not allowed';
+    expect(validateSchema(AgentDecisionSchema, invalid).valid).toBe(false);
   });
 
   it('persists sessions, turns, and transcripts in the run workspace', async () => {
@@ -127,3 +180,93 @@ describe('M12 agent contracts and session workspace', () => {
     expect(entry.text).toBe('password=[REDACTED] token=[REDACTED]');
   });
 });
+
+function planDiscoveryDecision() {
+  return {
+    arguments: {
+      discoveredServices: [
+        {
+          deploymentType: 'systemd',
+          evidenceIds: ['evidence:unit:nexus'],
+          name: 'nexus.service',
+          reason: 'Custom unit requires investigation.',
+          serviceId: 'service:systemd:nexus.service',
+          sourceObjectIds: ['systemd:nexus.service'],
+          status: 'running',
+          unknownFields: ['active compose variant'],
+        },
+      ],
+      discoveryCompleted: false,
+      filteredGroups: [
+        {
+          evidenceIds: ['evidence:unit:systemd-tmpfiles'],
+          groupId: 'filter:routine-systemd',
+          label: 'Routine system units',
+          reason: 'Evidence identifies routine operating-system maintenance units.',
+          resourceClass: 'systemd-routine',
+          sourceObjectIds: ['systemd:systemd-tmpfiles-setup.service'],
+        },
+      ],
+      investigations: [
+        {
+          evidenceIds: ['evidence:unit:nexus'],
+          investigationId: 'investigation:nexus',
+          label: 'Nexus deployment',
+          priority: 'high',
+          reason: 'Custom executable and external listener require service-level evidence.',
+          serviceIds: ['service:systemd:nexus.service'],
+          sourceObjectIds: ['systemd:nexus.service'],
+          status: 'selected',
+        },
+      ],
+      planningCompleted: true,
+      reason: 'Selected meaningful service evidence and grouped routine system evidence.',
+      unresolvedQuestions: ['Which Nexus configuration is active?'],
+    },
+    decisionId: 'decision:plan-discovery',
+    kind: 'tool_call',
+    nextAction: 'Apply the evidence-driven discovery plan.',
+    nextSuggestions: [],
+    reason: 'Plan the first investigation batch.',
+    toolName: 'plan_discovery',
+    turnId: 'turn:plan-discovery',
+    unresolvedQuestions: [],
+  };
+}
+
+function composeWikiDecision() {
+  return {
+    arguments: {
+      architectureOverview: '服务通过容器运行，现有证据未确认更多依赖。',
+      deploymentOverview: '部署、配置和数据路径来自已审查证据。',
+      executiveSummary: '该服务器承载内部应用与基础服务。',
+      keyFindings: [],
+      operationsOverview: '运维时应关注服务状态和备份策略。',
+      serviceDescriptions: [
+        {
+          basis: '容器镜像名称为 minio/minio。',
+          description: 'MinIO 是兼容 S3 API 的对象存储服务，用于提供文件和对象数据存储。',
+          evidenceIds: ['evidence:container:minio'],
+          serviceId: 'service:compose:minio:minio',
+        },
+      ],
+      serviceGroups: [
+        {
+          serviceIds: ['service:compose:minio:minio'],
+          summary: '提供对象存储能力。',
+          title: '存储服务',
+        },
+      ],
+      systemOverview: 'Linux 容器应用服务器。',
+      unresolvedQuestions: [],
+    },
+    decisionId: 'decision:compose-wiki',
+    kind: 'tool_call',
+    nextAction: '完成后执行 final。',
+    nextSuggestions: [],
+    reason: '根据完成的服务调查撰写服务器 Wiki。',
+    toolName: 'compose_wiki',
+    turnId: 'turn:compose-wiki',
+    unresolvedQuestions: [],
+  };
+}
