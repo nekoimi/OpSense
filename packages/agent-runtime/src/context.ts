@@ -31,9 +31,19 @@ export interface ContextBuilderOptions {
   redact?: (value: unknown) => unknown;
 }
 
+export interface ServiceCandidateFilterIndex {
+  total: number;
+  offset: number;
+  returned: number;
+  hasMore: boolean;
+  nextOffset?: number;
+  items: unknown[];
+}
+
 const LEGACY_SERVICE_BATCH_SIZE = 2;
 const M20_SERVICE_BATCH_SIZE = 12;
 const MAX_CONTEXT_PAGE_SIZE = 12;
+const MAX_SERVICE_FILTER_PAGE_SIZE = 500;
 
 export class ContextBuilder {
   private readonly projection: InventoryProjection;
@@ -53,6 +63,7 @@ export class ContextBuilder {
     recent?: unknown[];
   }): AgentContext {
     const p = this.projection;
+    const evidenceDriven = p.discoveryWorkspace?.workflowVersion === 'm20_evidence_driven';
     const rankedCandidates = this.rankedCandidates();
     const contextCandidates = rankedCandidates.slice(0, this.serviceBatchSize());
     const reviewedServiceIds = new Set(p.reviewedServiceIds ?? []);
@@ -94,27 +105,33 @@ export class ContextBuilder {
       host: p.host === undefined ? undefined : compactHost(p.host),
       storage: compactStorage(p),
       network: compactNetwork(p),
-      services: contextCandidates.map((item) => compactCandidate(item, p)),
-      processes: p.processes.slice(0, 12).map(compactProcess),
-      containers: p.containers.slice(0, 12).map(compactContainer),
-      systemd_units: p.systemdUnits.slice(0, 12).map(compactSystemdUnit),
-      evidence: p.evidence.slice(0, 20).map((item) => ({
-        id: item.id,
-        kind: item.kind,
-        source: item.source,
-        status: item.status,
-      })),
+      services: contextCandidates.map((item) =>
+        evidenceDriven ? compactServiceFilterCandidate(item, p) : compactCandidate(item, p),
+      ),
+      processes: evidenceDriven ? [] : p.processes.slice(0, 12).map(compactProcess),
+      containers: evidenceDriven ? [] : p.containers.slice(0, 12).map(compactContainer),
+      systemd_units: evidenceDriven ? [] : p.systemdUnits.slice(0, 12).map(compactSystemdUnit),
+      evidence: evidenceDriven
+        ? []
+        : p.evidence.slice(0, 20).map((item) => ({
+            id: item.id,
+            kind: item.kind,
+            source: item.source,
+            status: item.status,
+          })),
       systemd_summary: compactSystemd(p),
-      path_candidates: (p.pathSeeds ?? []).slice(0, 10).map((item) => ({
-        id: item.id,
-        path: item.path,
-        confidence: item.confidence,
-        sources: item.sources.slice(0, 2).map((source) => ({
-          sourceId: source.sourceId,
-          sourceType: source.sourceType,
-          evidenceIds: source.evidenceIds.slice(0, 3),
-        })),
-      })),
+      path_candidates: evidenceDriven
+        ? []
+        : (p.pathSeeds ?? []).slice(0, 10).map((item) => ({
+            id: item.id,
+            path: item.path,
+            confidence: item.confidence,
+            sources: item.sources.slice(0, 2).map((source) => ({
+              sourceId: source.sourceId,
+              sourceType: source.sourceType,
+              evidenceIds: source.evidenceIds.slice(0, 3),
+            })),
+          })),
       findings: p.findings.map((item) => ({
         id: item.id,
         severity: item.severity,
@@ -123,7 +140,7 @@ export class ContextBuilder {
         evidenceIds: item.evidenceIds,
       })),
       visibility_summary: compactVisibility(p),
-      discovery: compactDiscovery(p, this.evidenceIndex),
+      discovery: compactDiscovery(p),
       wiki_source: compactWikiSource(p),
     }) as Record<string, unknown>;
     const context = { l0, l1, hash: hashValue({ l0, l1 }) };
@@ -188,6 +205,27 @@ export class ContextBuilder {
     return value ?? null;
   }
 
+  public listServiceCandidates(
+    offset = 0,
+    limit = MAX_SERVICE_FILTER_PAGE_SIZE,
+  ): ServiceCandidateFilterIndex {
+    const start = Math.max(0, offset);
+    const pageSize = Math.min(Math.max(1, limit), MAX_SERVICE_FILTER_PAGE_SIZE);
+    const candidates = this.rankedCandidates();
+    const items = candidates
+      .slice(start, start + pageSize)
+      .map((item) => compactServiceFilterCandidate(item, this.projection));
+    const nextOffset = start + items.length;
+    return this.redact({
+      total: candidates.length,
+      offset: start,
+      returned: items.length,
+      hasMore: nextOffset < candidates.length,
+      ...(nextOffset < candidates.length ? { nextOffset } : {}),
+      items,
+    }) as ServiceCandidateFilterIndex;
+  }
+
   private serviceBatchSize(): number {
     return this.projection.discoveryWorkspace?.workflowVersion === 'm20_evidence_driven'
       ? M20_SERVICE_BATCH_SIZE
@@ -202,7 +240,7 @@ export class ContextBuilder {
     );
     const workspace = this.projection.discoveryWorkspace;
     const activeServiceIds =
-      workspace?.workflowVersion === 'm20_evidence_driven'
+      workspace?.workflowVersion === 'm20_evidence_driven' && workspace.planningCompleted
         ? new Set([
             ...workspace.investigations
               .filter((item) => item.status === 'selected' || item.status === 'investigating')
@@ -348,6 +386,79 @@ function compactSystemdUnit(item: InventoryProjection['systemdUnits'][number]): 
     workingDirectory: item.workingDirectory,
     execStart: item.execStart.slice(0, 4),
     evidenceIds: item.evidenceIds.slice(0, 4),
+  };
+}
+
+function compactServiceFilterCandidate(
+  item: DiscoveryCandidate,
+  projection: InventoryProjection,
+): unknown {
+  const serviceId = item.serviceId ?? item.candidateId;
+  const service = projection.services.find((candidate) => candidate.id === serviceId);
+  const assessment = projection.serviceAssessments.find(
+    (candidate) => candidate.serviceId === serviceId,
+  );
+  const unit = projection.systemdUnits.find((candidate) =>
+    service?.systemdUnitIds.includes(candidate.id),
+  );
+  const process = projection.processes.find((candidate) =>
+    service?.processIds.includes(candidate.pid),
+  );
+  const containers = projection.containers.filter((candidate) =>
+    service?.containerIds.includes(candidate.id),
+  );
+  const sockets = projection.sockets
+    .filter((candidate) => service?.socketIds.includes(candidate.id))
+    .slice(0, 4);
+  const protectionReasons = visibilityConstraintsFor(service, projection).reasons;
+  const protectedService = protectionReasons.length > 0;
+  const commandHint = protectedService
+    ? process
+      ? [process.command, ...process.arguments.slice(0, 3)].join(' ').slice(0, 140)
+      : unit?.execStart[0]?.slice(0, 140)
+    : undefined;
+  const pathHint = [
+    ...(service?.deployDirectories ?? []),
+    ...(service?.dataDirectories ?? []),
+    ...(service?.configFiles ?? []),
+  ][0];
+  const evidenceId = service?.evidenceIds[0] ?? item.evidenceIds[0];
+  const images = [...new Set(containers.map((container) => container.image))].slice(0, 2);
+  const ports = sockets.map((socket) => ({
+    protocol: socket.protocol,
+    address: socket.localAddress,
+    port: socket.localPort,
+    exposed: socket.exposed,
+  }));
+  const flags = [
+    ...(protectionReasons.includes('listening_socket') ? ['listener'] : []),
+    ...(protectionReasons.includes('externally_exposed_socket') ? ['public_port'] : []),
+    ...(protectionReasons.includes('custom_or_data_path') ? ['custom_path'] : []),
+    ...(protectionReasons.includes('custom_systemd_unit') ? ['custom_unit'] : []),
+  ];
+  return {
+    id: serviceId,
+    name: service?.displayName ?? service?.name ?? item.displayName,
+    deploymentType: service?.deploymentType ?? 'unknown',
+    status: service?.status ?? 'unknown',
+    ...(projection.reviewedServiceIds?.includes(serviceId) === true ? { reviewed: true } : {}),
+    ...(unit?.description === undefined ? {} : { description: unit.description.slice(0, 140) }),
+    ...(commandHint === undefined || commandHint.length === 0 ? {} : { command: commandHint }),
+    ...(images.length === 0 ? {} : { images }),
+    ...(ports.length === 0 ? {} : { ports }),
+    ...(pathHint === undefined ? {} : { pathHint }),
+    ...(protectedService ? { protected: true } : {}),
+    ...(flags.length === 0 ? {} : { flags }),
+    ...(evidenceId === undefined ? {} : { evidenceId }),
+    ...(assessment === undefined
+      ? {}
+      : {
+          assessment: {
+            role: assessment.role,
+            reportPlacement: assessment.reportPlacement,
+            purpose: assessment.purpose?.slice(0, 160),
+          },
+        }),
   };
 }
 
@@ -599,10 +710,7 @@ function compactWikiSource(projection: InventoryProjection): unknown {
   };
 }
 
-function compactDiscovery(
-  projection: InventoryProjection,
-  evidenceIndex: EvidenceIndex | undefined,
-): unknown {
+function compactDiscovery(projection: InventoryProjection): unknown {
   const workspace = projection.discoveryWorkspace;
   if (workspace === undefined)
     return {
@@ -617,22 +725,14 @@ function compactDiscovery(
     (service) => !protectedServices.includes(service),
   );
   const routineUnits = projection.systemdUnits.filter((unit) => !associatedUnitIds.has(unit.id));
-  const indexed = new Map(
-    (evidenceIndex?.candidates ?? [])
-      .filter((item) => item.serviceId !== undefined)
-      .map((item) => [item.serviceId as string, item]),
-  );
   const orderedProtectedServices = fairServiceOrder(protectedServices);
-  const highValueLeads = orderedProtectedServices.slice(0, 30).map((service) => {
-    const candidate = indexed.get(service.id);
+  const highValueLeads = orderedProtectedServices.slice(0, 8).map((service) => {
     return {
       id: service.id,
       name: service.displayName ?? service.name,
       deploymentType: service.deploymentType,
       status: service.status,
       reasons: visibilityConstraintsFor(service, projection).reasons,
-      evidenceIds: service.evidenceIds.slice(0, 8),
-      signals: candidate?.signals.slice(0, 4) ?? [],
     };
   });
   const rawGroups = [
@@ -643,12 +743,8 @@ function compactDiscovery(
             groupId: 'raw-group:routine-services',
             label: '无高价值信号的原始服务记录',
             resourceClass: 'routine_service_evidence',
-            sourceObjectIds: routineServices.map((item) => item.id),
-            evidenceIds: [...new Set(routineServices.flatMap((item) => item.evidenceIds))].slice(
-              0,
-              20,
-            ),
-            samples: routineServices.slice(0, 12).map((item) => ({
+            objectCount: routineServices.length,
+            samples: routineServices.slice(0, 5).map((item) => ({
               id: item.id,
               name: item.displayName ?? item.name,
               deploymentType: item.deploymentType,
@@ -663,12 +759,8 @@ function compactDiscovery(
             groupId: 'raw-group:unassociated-systemd-units',
             label: '未归并的原始 systemd unit',
             resourceClass: 'systemd_unit_evidence',
-            sourceObjectIds: routineUnits.map((item) => item.id),
-            evidenceIds: [...new Set(routineUnits.flatMap((item) => item.evidenceIds))].slice(
-              0,
-              20,
-            ),
-            samples: routineUnits.slice(0, 12).map((item) => ({
+            objectCount: routineUnits.length,
+            samples: routineUnits.slice(0, 5).map((item) => ({
               id: item.id,
               name: item.name,
               activeState: item.activeState,
@@ -686,7 +778,8 @@ function compactDiscovery(
       label: item.label,
       status: item.status,
       priority: item.priority,
-      serviceIds: item.serviceIds,
+      serviceCount: item.serviceIds.length,
+      serviceIds: item.serviceIds.slice(0, 20),
       sourceObjectIds: item.sourceObjectIds.slice(0, 12),
       evidenceIds: item.evidenceIds.slice(0, 8),
       reason: item.reason,

@@ -148,7 +148,7 @@ Codex 必须决定：
 
 - [ ] `Must` 删除“审查每个展示的普通 Linux 系统服务”和“所有 snapshot 服务必须有决策”的 Prompt 约束。
 - [ ] `Must` Prompt 明确要求 Codex 先筛选、再按价值调查、最后归并，不得把原始目录或 unit 名当作直接事实。
-- [ ] `Must` 将 `list_candidates` 改为读取调查工作区和按证据聚合的索引，不再默认返回全量未审查服务。
+- [x] `Must` 将 `list_candidates` 收敛为一次性轻量服务过滤索引，默认单次返回最多 500 个候选；完整详情改由其他上下文工具按需读取，并持久化已读进度以阻止跨 Thread 重复传输。
 - [ ] `Must` 保留 `read_context`、`read_evidence`、`execute_governed_probe` 和 Projection 更新能力的完整 ToolActivity 审计。
 - [ ] `Must` 新增筛选决策、过滤组、调查计划、Probe 请求、服务归并和报告生成之间的可追溯链路。
 - [ ] `Must` 旧 M19 会话与新 M20 会话使用显式 `workflowVersion` 区分，避免恢复时套用错误 Prompt 或门禁。

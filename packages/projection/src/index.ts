@@ -507,12 +507,9 @@ export function applyDiscoveryPlan(
     next.discoveryWorkspace = workspace;
     const missingRequired = missingRequiredInvestigationServices(next);
     if (missingRequired.length > 0) {
-      const examples = missingRequired
-        .slice(0, 12)
-        .map((service) => service.id)
-        .join(', ');
+      const missingIds = missingRequired.map((service) => service.id);
       throw new Error(
-        `Codex 调查计划遗漏 ${missingRequired.length} 个高价值服务，必须进入 investigation：${examples}${missingRequired.length > 12 ? ' 等' : ''}。请分页读取 services 候选后重新提交完整计划。`,
+        `Codex 调查计划遗漏 ${missingRequired.length} 个受保护服务。轻量服务索引已经完整读取，不要再次调用 list_candidates；请将以下全部 ID 补入一个或多个 investigation 后重新提交 plan_discovery：${JSON.stringify(missingIds)}。`,
       );
     }
   }

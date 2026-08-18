@@ -69,6 +69,71 @@ describe('M20 evidence-driven discovery', () => {
     expect(context.readSection('systemd_units', 12, 12)).toHaveLength(5);
   });
 
+  it('returns one lightweight service-filtering index and suppresses duplicate reads', async () => {
+    const snapshot = await snapshotWithServices();
+    const composeSeed = snapshot.services[1]!;
+    snapshot.services = [
+      ...Array.from({ length: 30 }, (_, index) => ({
+        ...structuredClone(composeSeed),
+        composeProjectIds: [`compose:project-${index}`],
+        configFiles: [`/opt/application-${index}/config/application.yaml`],
+        dataDirectories: [`/data/application-${index}`],
+        deployDirectories: [`/opt/application-${index}`],
+        id: `service:compose:application-${index}`,
+        name: `application-${index}`,
+      })),
+      redisService(),
+    ];
+    snapshot.processes = [redisProcess()];
+    snapshot.sockets = [redisSocket()];
+    snapshot.systemdUnits = [redisUnit()];
+    const projection = buildInventoryProjection(snapshot, {
+      mode: 'agent',
+      workflowVersion: 'm20_evidence_driven',
+    });
+    const context = new ContextBuilder({
+      evidenceIndex: buildEvidenceIndex(projection),
+      projection,
+    });
+    const index = context.listServiceCandidates() as {
+      hasMore: boolean;
+      items: Array<{ id: string }>;
+      returned: number;
+      total: number;
+    };
+
+    expect(index).toMatchObject({ total: 31, returned: 31, hasMore: false });
+    expect(index.items.map((item) => item.id)).toContain(
+      'service:systemd:redis-server.service',
+    );
+    expect(JSON.stringify(index)).not.toContain('configCandidates');
+    expect(JSON.stringify(index)).not.toContain('mounts');
+    expect(JSON.stringify(index)).not.toContain('evidenceIds');
+
+    const session = createAgentSession({
+      scanId: snapshot.session.id,
+      workflowVersion: 'm20_evidence_driven',
+    });
+    const router = new ToolRouter({
+      projection,
+      context,
+      governor: new ProbeGovernor({ snapshot, session }),
+    });
+    router.setSession(session);
+    const first = await router.execute('list_candidates', {}, 'turn:first-index');
+    const second = await router.execute('list_candidates', {}, 'turn:duplicate-index');
+
+    expect(first.status).toBe('completed');
+    expect(session.candidateIndexCoverage).toEqual({
+      total: 31,
+      nextOffset: 31,
+      complete: true,
+    });
+    expect(second.status).toBe('completed');
+    expect(second.summary).toContain('已经完整读取');
+    expect(second.value).toMatchObject({ alreadyRead: true, complete: true, total: 31 });
+  });
+
   it('keeps a systemd Redis listener visible when Compose candidates fill the first page', async () => {
     const snapshot = await snapshotWithServices();
     const composeSeed = snapshot.services[1]!;
@@ -119,6 +184,9 @@ describe('M20 evidence-driven discovery', () => {
 
     expect(() => applyDiscoveryPlan(projection, discoveryPlan(true, 'resolved'))).toThrow(
       'service:systemd:redis-server.service',
+    );
+    expect(() => applyDiscoveryPlan(projection, discoveryPlan(true, 'resolved'))).toThrow(
+      '不要再次调用 list_candidates',
     );
   });
 

@@ -38,8 +38,8 @@ section is required. No additional properties.`,
 {"ids"?:["existing-evidence-id",... 1..20],"serviceId"?:"existing-service-id","field"?:"non-empty field or source fragment"}
 An empty object and an empty ids array are invalid.`,
   list_candidates: `arguments may contain only:
-{"section"?:"services|processes|containers|systemd_units|paths|network|storage|findings","offset"?:integer >= 0,"limit"?:integer 1..12}
-No additional properties.`,
+{"offset"?:integer >= 0,"limit"?:integer 1..500}
+This tool returns a lightweight service-filtering index only. Omit offset and limit to read up to 500 current service candidates in one call. Use read_context for detailed processes, containers, systemd units, paths, network, storage, or findings. No additional properties.`,
   execute_governed_probe: `arguments must use exactly one of these forms:
 {"request":ProbeRequest}
 {"requests":[ProbeRequest,... 1..4]}
@@ -61,6 +61,7 @@ DiscoveredService contains exactly:
 {"serviceId":"valid-id","name":"non-empty string","displayName"?:string,"deploymentType":"systemd|process|docker|compose|unknown","status":"running|stopped|failed|unknown","sourceObjectIds":["existing-raw-object-id",... at least 1],"evidenceIds":["existing-evidence-id",... at least 1],"unknownFields":["non-empty string",...],"reason":"non-empty string"}
 DiscoveryFilterGroup contains exactly:
 {"groupId":"valid-id","label":"non-empty string","resourceClass":"non-empty string","sourceObjectIds":["existing-raw-object-id",... at least 1],"evidenceIds":["existing-evidence-id",... at least 1],"reason":"non-empty string"}
+Existing service IDs returned by list_candidates belong only in investigations; never copy an existing service into discoveredServices. discoveredServices is exclusively for a genuinely new merged identity and its serviceId must start with service:agent:. Every list_candidates item with protected=true must appear in an investigation when planningCompleted=true. Related protected services may share one batch investigation; they do not require one investigation per service.
 For investigation status, active, pending, done, complete, and arbitrary values are invalid. Use only selected, investigating, resolved, or needs_review. Every investigation requires priority, label, serviceIds, sourceObjectIds, evidenceIds, and reason. Filter groups do not accept status, priority, serviceIds, resourceType, count, or arbitrary metadata.`,
   update_projection: `arguments must contain exactly:
 {"changes":[ServiceAssessmentChange|PathAssessmentChange,... at least 1],"evidenceIds":["existing-evidence-id",...],"reason"?:"non-empty string"}

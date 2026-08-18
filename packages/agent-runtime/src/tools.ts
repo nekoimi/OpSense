@@ -217,19 +217,44 @@ export class ToolRouter {
     }
     if (name === 'list_candidates') {
       assertSchema(ListCandidatesArgumentsSchema, value);
-      const section = value.section ?? 'services';
-      const valueForSection =
-        section === 'services'
-          ? this.context.readSection('services', value.offset ?? 0, value.limit)
-          : section === 'paths'
-            ? this.context.readSection('path_candidates', value.offset ?? 0, value.limit)
-            : this.context.readSection(section as ContextSection, value.offset ?? 0, value.limit);
+      const requestedOffset = value.offset ?? 0;
+      const coverage = this.session?.candidateIndexCoverage;
+      if (coverage !== undefined && requestedOffset < coverage.nextOffset) {
+        return {
+          changedIds: [],
+          evidenceIds: [],
+          status: 'completed',
+          summary: coverage.complete
+            ? '轻量服务过滤索引已经完整读取，请直接执行 plan_discovery。'
+            : `该候选页已经读取，请从 offset=${coverage.nextOffset} 继续。`,
+          value: {
+            alreadyRead: true,
+            total: coverage.total,
+            nextOffset: coverage.nextOffset,
+            complete: coverage.complete,
+          },
+        };
+      }
+      if (coverage !== undefined && requestedOffset > coverage.nextOffset) {
+        throw new Error(`不能跳过服务候选；下一页必须从 offset=${coverage.nextOffset} 开始。`);
+      }
+      const candidateIndex = this.context.listServiceCandidates(
+        requestedOffset,
+        value.limit ?? 500,
+      );
+      if (this.session !== undefined) {
+        this.session.candidateIndexCoverage = {
+          total: candidateIndex.total,
+          nextOffset: candidateIndex.nextOffset ?? candidateIndex.total,
+          complete: !candidateIndex.hasMore,
+        };
+      }
       return {
         changedIds: [],
         evidenceIds: [],
         status: 'completed',
-        summary: `已列出 ${section} 候选。`,
-        value: valueForSection,
+        summary: '已列出轻量服务过滤索引。',
+        value: candidateIndex,
       };
     }
     if (name === 'execute_governed_probe') {

@@ -70,6 +70,21 @@ describe('M12 agent contracts and session workspace', () => {
     expect(validateSchema(AgentDecisionSchema, value).valid).toBe(false);
   });
 
+  it('keeps list_candidates limited to the lightweight service index contract', async () => {
+    const value = JSON.parse(await readFixture('schema/agent-decision.json')) as Record<
+      string,
+      unknown
+    >;
+    value.arguments = { limit: 500 };
+    expect(validateSchema(AgentDecisionSchema, value).valid).toBe(true);
+
+    value.arguments = { section: 'services' };
+    expect(validateSchema(AgentDecisionSchema, value).valid).toBe(false);
+
+    value.arguments = { limit: 501 };
+    expect(validateSchema(AgentDecisionSchema, value).valid).toBe(false);
+  });
+
   it('validates tool-specific plan_discovery arguments in AgentDecision', () => {
     const valid = planDiscoveryDecision();
 
@@ -111,6 +126,8 @@ describe('M12 agent contracts and session workspace', () => {
     );
     expect(AGENT_DECISION_PROMPT_CONTRACT).toContain('[compose_wiki]');
     expect(AGENT_DECISION_PROMPT_CONTRACT).toContain('serviceDescriptions');
+    expect(AGENT_DECISION_PROMPT_CONTRACT).toContain('protected=true');
+    expect(AGENT_DECISION_PROMPT_CONTRACT).toContain('must start with service:agent:');
   });
 
   it('validates the complete AI Wiki composition contract', () => {

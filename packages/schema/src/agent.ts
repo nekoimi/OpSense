@@ -51,20 +51,8 @@ export const ReadEvidenceArgumentsSchema = Type.Object(
 
 export const ListCandidatesArgumentsSchema = Type.Object(
   {
-    section: Type.Optional(
-      Type.Union([
-        Type.Literal('services'),
-        Type.Literal('processes'),
-        Type.Literal('containers'),
-        Type.Literal('systemd_units'),
-        Type.Literal('paths'),
-        Type.Literal('network'),
-        Type.Literal('storage'),
-        Type.Literal('findings'),
-      ]),
-    ),
     offset: Type.Optional(Type.Integer({ minimum: 0 })),
-    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 12 })),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500 })),
   },
   { additionalProperties: false },
 );
@@ -470,6 +458,16 @@ export const AgentSessionSchema = Type.Object(
     lastError: Type.Optional(Type.String()),
     repairSuggestions: Type.Array(Type.String()),
     outputFiles: Type.Array(Type.String()),
+    candidateIndexCoverage: Type.Optional(
+      Type.Object(
+        {
+          total: Type.Integer({ minimum: 0 }),
+          nextOffset: Type.Integer({ minimum: 0 }),
+          complete: Type.Boolean(),
+        },
+        { additionalProperties: false },
+      ),
+    ),
     stopReason: Type.Optional(AgentStopReasonSchema),
   },
   { $id: 'AgentSession', additionalProperties: false },

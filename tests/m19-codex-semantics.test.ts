@@ -596,7 +596,7 @@ describe('M19 Codex semantic classification loop', () => {
             if (turn === 1)
               return {
                 decision: {
-                  arguments: { section: 'services' },
+                  arguments: {},
                   decisionId: 'decision:m19-list',
                   kind: 'tool_call' as const,
                   nextAction: 'continue',
