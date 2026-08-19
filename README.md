@@ -58,6 +58,7 @@ OpSense 目前处于 **Alpha** 阶段，适合在可控环境中试用和参与�
 
 - Linux 服务器和可用的 SSH 账户
 - 账户能够读取需要调查的系统、进程、容器和部署目录信息
+- 非 root 账户需要具备必要命令的 sudo 权限；无法使用 `sudo -n` 时，交互式终端会隐藏提示一次 sudo 密码并在本次运行中复用
 - Docker 信息的完整度取决于 SSH 账户是否有权访问 Docker daemon
 
 ## 快速开始
@@ -127,6 +128,10 @@ pnpm --filter @opsense/cli dev -- agent `
 
 命令行密码仍可能短暂出现在本机进程参数中，生产环境应优先使用 SSH Agent 或私钥认证。OpSense 不会把密码写入配置、Snapshot、审计日志或报告。
 
+使用非 root SSH 账户时，OpSense 会优先检查无密码的非交互式 sudo。若当前终端可交互且 `sudo -n` 不可用，会显示 `Sudo password:` 并隐藏读取一次密码；后续只读提权命令复用进程内密码，不会重复询问。sudo 密码通过 SSH channel stdin 发送，不会写入命令参数、配置、本地工作区或审计日志。CI 等非交互环境应为所需只读命令配置 `NOPASSWD` sudo。
+
+Agent 运行期间的心跳会显示当前 Turn、当前动作、调查状态、服务评估数量、计划/调查/Wiki 门禁，以及最近一次工具调用的结果。服务评估达到总数不等于整个工作流完成；只有“调查收尾”和“Wiki”门禁也完成后，`--complete` 才会退出并生成文档。
+
 ## 继续中断的任务
 
 发生 Codex 超时、限流或手动中断时，使用日志中的 `Agent session` 继续。恢复不需要重新扫描服务器，也不需要再次提供 SSH 密码：
@@ -141,6 +146,8 @@ pnpm --filter @opsense/cli dev -- agent `
   --max-agent-runs 200 `
   --turn-timeout-ms 300000
 ```
+
+`--max-agent-runs` 是 `--complete` 的自动运行批次上限，每个批次最多执行 `--max-agent-rounds` 个模型 Turn。限流恢复时可以先使用 `--once --max-agent-rounds 1` 只执行一个 Turn，确认进度后再继续。
 
 也可以从已有 Snapshot 创建新的 Agent 会话：
 

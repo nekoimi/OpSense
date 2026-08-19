@@ -7,6 +7,7 @@ import {
   createReportModel,
   formatDateTime,
   generateReportArtifacts,
+  renderHtmlReport,
   sanitizeReportIdentifier,
   validateDocxBuffer,
 } from '@opsense/report';
@@ -69,6 +70,46 @@ describe('M8 report generation', () => {
     expect(model.services[0]?.ports).toContain('TCP 0.0.0.0:8080 (external)');
   });
 
+  it('keeps collected service paths when Codex has not assessed every path', async () => {
+    const projection = buildInventoryProjection(await reportSnapshot());
+    projection.classificationProvider = 'codex';
+    projection.pathAssessments = [
+      {
+        confidence: 'inferred',
+        evidenceIds: ['evidence:service'],
+        path: '/opt/order-api/config.yml',
+        reason: 'Codex 将该路径重新归类为数据文件。',
+        semantic: 'data',
+        serviceIds: ['service:order-api'],
+      },
+    ];
+
+    const service = createReportModel(projection).services[0];
+
+    expect(service?.deployDirectories).toEqual(['/opt/order-api']);
+    expect(service?.environmentFiles).toEqual(['/opt/order-api/.env']);
+    expect(service?.logLocations).toEqual(['/var/log/order-api']);
+    expect(service?.configFiles).toEqual([]);
+    expect(service?.dataDirectories).toEqual(['/opt/order-api/config.yml', '/var/lib/order-api']);
+  });
+
+  it('uses fixed service-directory columns and summarizes long port lists', async () => {
+    const snapshot = await reportSnapshot();
+    const baseSocket = snapshot.sockets[0]!;
+    for (const port of [8081, 8082, 8083, 8084]) {
+      const id = `socket:${port}`;
+      snapshot.sockets.push({ ...baseSocket, id, localPort: port });
+      snapshot.services[0]!.socketIds.push(id);
+    }
+
+    const html = renderHtmlReport(createReportModel(buildInventoryProjection(snapshot)));
+
+    expect(html).toContain('<table class="service-directory"><colgroup>');
+    expect(html).toContain('class="port-summary"');
+    expect(html).toContain('另 2 个，查看详情');
+    expect(html).toContain('.service-directory col:nth-child(5) { width: 24%; }');
+  });
+
   it('writes redacted Markdown, offline HTML, and a valid DOCX from one model', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'opsense-report-test-'));
     temporaryDirectories.push(root);
@@ -113,6 +154,9 @@ describe('M8 report generation', () => {
       ),
     );
     expect(html).toContain('<!doctype html>');
+    expect(html).toContain('<dt>IP</dt><dd>192.168.168.12</dd>');
+    expect(html).toContain('<dt>SSH 端口</dt><dd>22</dd>');
+    expect(html).toContain('<dt>扫描时间</dt>');
     expect(html).toContain('部署服务');
     expect(html).toContain('运行架构与服务关系');
     expect(html).toContain('服务手册');
@@ -138,10 +182,16 @@ describe('M8 report generation', () => {
     expect(validation.hasWatermark).toBe(true);
     expect(validation.hasCopyrightNotice).toBe(true);
     expect(validation.text).toContain('服务器巡检报告');
+    expect(validation.text).toContain('IP：192.168.168.12');
+    expect(validation.text).toContain('SSH 端口：22');
     expect(validation.text).toContain('主机运行基线');
     expect(validation.text).toContain('服务运行手册');
     expect(validation.text).not.toContain('证据附录');
     expect(validation.text).not.toContain('Evidence ID');
+
+    const markdown = await readFile(path.join(root, 'README.md'), 'utf8');
+    expect(markdown).toContain('| IP | 192.168.168.12 |');
+    expect(markdown).toContain('| SSH 端口 | 22 |');
   });
 });
 

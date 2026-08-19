@@ -37,9 +37,44 @@ describe('M16 agent CLI workspace', () => {
     expect(output).toContain('证据筛选与调查规划');
     expect(output).toContain('模型 gpt-5.6-luna');
     expect(output).toContain('调查：完成 0/0');
+    expect(output).toContain('门禁：计划 未完成 | 调查收尾 未完成');
     expect(output).not.toContain('%');
     expect(formatAgentHeartbeat(progress, 72_000)).toContain(
-      'Codex 处理中 | 证据筛选与调查规划 | 已运行 1m 12s',
+      'Codex 处理中 | 证据筛选与调查规划 | 本次 1m 12s',
+    );
+  });
+
+  it('shows the current Codex action and last tool failure in heartbeats', async () => {
+    const snapshot = JSON.parse(await readFixture('schema/minimal-snapshot.json')) as ScanSnapshot;
+    const projection = buildInventoryProjection(snapshot, {
+      mode: 'agent',
+      workflowVersion: 'm20_evidence_driven',
+    });
+    const session = createAgentSession({
+      scanId: snapshot.session.id,
+      workflowVersion: 'm20_evidence_driven',
+    });
+    const progress = buildAgentProgressSnapshot(session, projection, {
+      current: {
+        detail: '等待 Codex 返回结构化决策',
+        phase: 'waiting_for_codex',
+        sequence: 43,
+        startedAt: '2026-08-18T16:01:29.000Z',
+      },
+      lastTool: {
+        resultSummary: '请同时修改 role 与 reportPlacement。',
+        sequence: 42,
+        status: 'failed',
+        toolName: 'update_projection',
+      },
+    });
+
+    const output = formatAgentHeartbeat(progress, 120_000, Date.parse('2026-08-18T16:03:29Z'));
+
+    expect(output).toContain('Turn 43');
+    expect(output).toContain('当前 等待 Codex 返回结构化决策 2m 0s');
+    expect(output).toContain(
+      '上一步 Turn 42 update_projection 失败: 请同时修改 role 与 reportPlacement。',
     );
   });
 

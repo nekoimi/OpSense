@@ -4,7 +4,7 @@ import { redactForAudit, redactSnapshot } from '@opsense/redaction';
 import { SCHEMA_VERSION, ScanSnapshotSchema, assertSchema } from '@opsense/schema';
 import type { OpsenseConfig, ScanSession, ScanSnapshot, ScanStage } from '@opsense/schema';
 import { SafeCommandExecutor, connectSsh, detectPermissions } from '@opsense/ssh';
-import type { SshConnection } from '@opsense/ssh';
+import type { SshConnection, SudoPasswordProvider } from '@opsense/ssh';
 import {
   appendJsonLine,
   createScanId,
@@ -27,6 +27,7 @@ export interface ScanWorkflowOptions {
   port: number;
   retainConnection?: boolean;
   signal?: AbortSignal;
+  sudoPasswordProvider?: SudoPasswordProvider;
   user: string;
   workspace?: string;
 }
@@ -134,10 +135,33 @@ export async function runScanWorkflow(
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     });
     throwIfAborted(options.signal);
+    let sudoPasswordAuthenticated = false;
+    if (
+      loaded.config.scan.useSudo !== 'never' &&
+      permissions.uid !== 0 &&
+      !permissions.sudoNonInteractive &&
+      options.sudoPasswordProvider !== undefined
+    ) {
+      executor.setSudoPasswordProvider(options.sudoPasswordProvider);
+      const sudoResult = await executor.executeById(
+        'permission.sudo-auth',
+        {},
+        {
+          ...(options.signal === undefined ? {} : { signal: options.signal }),
+          useSudo: true,
+        },
+      );
+      permissions.results.push(sudoResult);
+      if (sudoResult.status !== 'success') {
+        throw new Error('Sudo authentication failed. Check the password and sudo permission.');
+      }
+      permissions.level = 'privileged';
+      sudoPasswordAuthenticated = true;
+    }
     const useSudo = shouldUseSudo(
       loaded.config.scan.useSudo,
       permissions.uid,
-      permissions.sudoNonInteractive,
+      permissions.sudoNonInteractive || sudoPasswordAuthenticated,
     );
     const collectionOptions = {
       commandTimeoutMs: loaded.config.ssh.commandTimeoutMs,

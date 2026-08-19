@@ -45,9 +45,17 @@ class FakeConnectClient extends EventEmitter {
 }
 
 class FakeChannel extends PassThrough {
+  public receivedInput = '';
   public readonly stderr = new PassThrough();
   public readonly signal = vi.fn();
   private closed = false;
+
+  public constructor() {
+    super();
+    this.on('data', (chunk: Buffer) => {
+      this.receivedInput += chunk.toString('utf8');
+    });
+  }
 
   public close(): void {
     if (!this.closed) {
@@ -224,6 +232,32 @@ describe('raw SSH command execution', () => {
     });
 
     expect(result).toMatchObject({ status: 'success', stderr: 'warning', stdout: 'hello' });
+  });
+
+  it('writes command stdin without including it in the remote command', async () => {
+    let openedChannel: FakeChannel | undefined;
+    let executedCommand = '';
+    const client = new FakeExecClient((channel) => {
+      openedChannel = channel;
+      channel.emit('exit', 0, null);
+      channel.close();
+    });
+    const originalExec = client.exec.bind(client);
+    client.exec = (command, callback): void => {
+      executedCommand = command;
+      originalExec(command, callback);
+    };
+    const connection = new SshConnection(client as never, 'server', 22, 'ops');
+
+    const result = await connection.executeRaw("'sudo' '-S' '--' 'true'", {
+      maxOutputBytes: 1000,
+      stdin: 'sudo-password-value\n',
+      timeoutMs: 1000,
+    });
+
+    expect(result.status).toBe('success');
+    expect(openedChannel?.receivedInput).toBe('sudo-password-value\n');
+    expect(executedCommand).not.toContain('sudo-password-value');
   });
 
   it('classifies missing commands and permission failures', async () => {

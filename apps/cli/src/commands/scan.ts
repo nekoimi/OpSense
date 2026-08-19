@@ -2,6 +2,7 @@ import { Command, InvalidArgumentError } from 'commander';
 
 import { ExitCode, exitCodeForError } from '../exit-code.js';
 import type { LoggerFactory } from '../logger.js';
+import { createInteractiveSudoPasswordProvider } from '../sudo-password.js';
 import { runScanWorkflow } from '../workflows/scan-workflow.js';
 
 interface GlobalOptions {
@@ -37,7 +38,14 @@ export function createScanCommand(loggerFactory: LoggerFactory): Command {
   command.action(async (options: ScanOptions) => {
     const logger = loggerFactory(command.optsWithGlobals<GlobalOptions>());
     try {
-      const result = await runScanWorkflow(options, (stage) => logger.info(`Stage: ${stage}`));
+      const sudoPasswordProvider = createInteractiveSudoPasswordProvider();
+      const result = await runScanWorkflow(
+        {
+          ...options,
+          ...(sudoPasswordProvider === undefined ? {} : { sudoPasswordProvider }),
+        },
+        (stage) => logger.info(`Stage: ${stage}`),
+      );
       logger.info(`Scan ${result.scanId} completed with state '${result.snapshot.session.state}'.`);
       logger.info(`Local run directory: ${result.layout.runDirectory}`);
       logger.info(`Snapshot: ${result.layout.snapshotFile}`);

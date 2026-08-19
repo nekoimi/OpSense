@@ -3,6 +3,7 @@ import type { ReportFormat } from '@opsense/report';
 
 import { ExitCode, exitCodeForError } from '../exit-code.js';
 import type { LoggerFactory } from '../logger.js';
+import { createInteractiveSudoPasswordProvider } from '../sudo-password.js';
 import { runInspectWorkflow } from '../workflows/inspect-workflow.js';
 import { parseReportFormats } from '../workflows/report-workflow.js';
 import { parsePort } from './scan.js';
@@ -68,8 +69,14 @@ export function createInspectCommand(loggerFactory: LoggerFactory): Command {
       if (!['codex', 'noop', 'baseline'].includes(options.provider)) {
         throw new InvalidArgumentError(`Unsupported AI provider '${options.provider}'.`);
       }
+      const sudoPasswordProvider = createInteractiveSudoPasswordProvider();
       const result = await runInspectWorkflow(
-        { ...options, formats: options.format ?? ['docx', 'html'], signal: controller.signal },
+        {
+          ...options,
+          formats: options.format ?? ['docx', 'html'],
+          signal: controller.signal,
+          ...(sudoPasswordProvider === undefined ? {} : { sudoPasswordProvider }),
+        },
         (stage) => {
           lastStage = stage;
           logger.info(`Stage: ${stage}`);

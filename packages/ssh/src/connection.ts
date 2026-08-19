@@ -22,6 +22,7 @@ export type RawExecutionStatus =
 export interface RawCommandOptions {
   maxOutputBytes: number;
   signal?: AbortSignal;
+  stdin?: string;
   timeoutMs: number;
 }
 
@@ -179,6 +180,7 @@ export class SshConnection {
         });
         openedChannel.on('error', (channelError: Error) => finish(channelError.message));
         openedChannel.on('close', () => finish());
+        if (options.stdin !== undefined) openedChannel.end(options.stdin);
       });
     });
   }

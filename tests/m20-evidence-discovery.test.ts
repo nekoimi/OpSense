@@ -103,9 +103,7 @@ describe('M20 evidence-driven discovery', () => {
     };
 
     expect(index).toMatchObject({ total: 31, returned: 31, hasMore: false });
-    expect(index.items.map((item) => item.id)).toContain(
-      'service:systemd:redis-server.service',
-    );
+    expect(index.items.map((item) => item.id)).toContain('service:systemd:redis-server.service');
     expect(JSON.stringify(index)).not.toContain('configCandidates');
     expect(JSON.stringify(index)).not.toContain('mounts');
     expect(JSON.stringify(index)).not.toContain('evidenceIds');
@@ -315,6 +313,32 @@ describe('M20 evidence-driven discovery', () => {
     expect(() =>
       applyProjectionDecision(projection, serviceDecision('service:system-helper')),
     ).toThrow('尚未进入 Codex 调查工作区');
+  });
+
+  it('completes discovery locally once every selected service is assessed', async () => {
+    const projection = buildInventoryProjection(await snapshotWithServices(), {
+      mode: 'agent',
+      workflowVersion: 'm20_evidence_driven',
+    });
+    applyDiscoveryPlan(projection, discoveryPlan(false, 'investigating'));
+
+    applyProjectionDecision(projection, serviceDecision('service:order-api'), {
+      threadId: 'codex-thread-m20-classification',
+    });
+
+    expect(projection.discoveryWorkspace).toMatchObject({
+      discoveryCompleted: true,
+      investigations: [{ investigationId: 'investigation:order-api', status: 'resolved' }],
+    });
+    expect(projection.classificationCompleted).toBe(true);
+    expect(projection.classificationThreadId).toBe('codex-thread-m20-classification');
+    const context = new ContextBuilder({ projection }).build({
+      budget: {},
+      round: 2,
+      stage: 'composing',
+    });
+    expect(context.l1.services).toEqual([]);
+    expect(context.l0.counts).toMatchObject({ candidates: 0, classificationCompleted: true });
   });
 
   it('renders only Codex-selected and assessed services in an M20 Wiki', async () => {

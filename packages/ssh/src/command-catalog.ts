@@ -8,6 +8,7 @@ export const COMMAND_CATALOG = [
   command('permission.user', 'id', ['-un']),
   command('permission.groups', 'id', ['-Gn']),
   command('permission.sudo', 'sudo', ['-n', '--', 'true']),
+  command('permission.sudo-auth', 'true', [], { sudo: 'allowed' }),
   command('host.uname', 'uname', ['-a']),
   command('host.kernel-release', 'uname', ['-r']),
   command('host.architecture', 'uname', ['-m']),

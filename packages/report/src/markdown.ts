@@ -9,6 +9,7 @@ import {
   formatDateTime,
   formatDuration,
   statusLabel,
+  targetHostLabel,
 } from './format.js';
 import { sanitizeReportIdentifier } from './filename.js';
 
@@ -36,7 +37,8 @@ function renderOverview(model: ReportModel): string {
 
 | 项目 | 内容 |
 | --- | --- |
-| 扫描目标 | ${cell(model.metadata.targetHost)}:${model.metadata.targetPort} |
+| ${targetHostLabel(model.metadata.targetHost)} | ${cell(model.metadata.targetHost)} |
+| SSH 端口 | ${model.metadata.targetPort} |
 | 主机标识 | ${cell(model.metadata.displayHost)} |
 | 扫描状态 | ${statusLabel(model.metadata.state)} |
 | 扫描时间 | ${formatDateTime(model.metadata.scannedAt)} |

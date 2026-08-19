@@ -81,6 +81,21 @@ export interface RedactionResult<T> {
   value: T;
 }
 
+const MAX_REDACTION_ERROR_FINDINGS = 5;
+const REDACTION_FINDING_LABELS: Readonly<Record<string, string>> = {
+  'command.sensitive-option': 'sensitive command option',
+  'command.short-password': 'short password option',
+  'connection.database-uri': 'database URI credentials',
+  'connection.key-value': 'credential key/value pair',
+  'content.authorization': 'authorization credentials',
+  'content.cloud-credential': 'cloud access credential',
+  'content.jwt': 'JWT',
+  'content.private-key': 'private key',
+  'content.secret-assignment': 'secret assignment',
+  'field.secret-key': 'secret-valued field',
+  'url.credentials-or-query': 'URL credentials or sensitive query parameter',
+};
+
 interface RedactionState {
   hits: Map<string, number>;
   sensitivityCounts: Record<Sensitivity, number>;
@@ -97,10 +112,28 @@ export class RedactionError extends Error {
   public readonly findings: RedactionFinding[];
 
   public constructor(findings: RedactionFinding[]) {
-    super(`Sensitive data remained after redaction (${findings.length} finding(s)).`);
+    super(formatRedactionError(findings));
     this.name = 'RedactionError';
     this.findings = findings;
   }
+}
+
+function formatRedactionError(findings: readonly RedactionFinding[]): string {
+  const visible = findings.slice(0, MAX_REDACTION_ERROR_FINDINGS);
+  const details = visible
+    .map(
+      ({ path, ruleId }) =>
+        `${REDACTION_FINDING_LABELS[ruleId] ?? 'sensitive data'} [${ruleId}] at ${safeDiagnosticPath(path)}`,
+    )
+    .join('; ');
+  const omitted = findings.length - visible.length;
+  const omission = omitted > 0 ? `; ${omitted} additional finding(s) omitted` : '';
+  return `Sensitive data remained after redaction (${findings.length} finding(s)): ${details}${omission}. Secret values were not logged.`;
+}
+
+function safeDiagnosticPath(path: string): string {
+  const singleLine = path.replaceAll('\r', ' ').replaceAll('\n', ' ');
+  return singleLine.length <= 240 ? singleLine : `${singleLine.slice(0, 237)}...`;
 }
 
 export function redactSnapshot(
@@ -501,12 +534,12 @@ function scanCommandTokenArray(
     }
     if (item === REDACTED_VALUE) return;
     const inline = /^(--?[A-Za-z0-9_-]+)=(.*)$/.exec(item);
-    if (
-      inline?.[1] !== undefined &&
-      inline[2] !== REDACTED_VALUE &&
-      isSensitiveCommandOption(inline[1])
-    ) {
-      findings.push({ path: itemPath, ruleId: 'command.sensitive-option' });
+    if (inline?.[1] !== undefined && isSensitiveCommandOption(inline[1])) {
+      if (inline[2] !== REDACTED_VALUE) {
+        findings.push({ path: itemPath, ruleId: 'command.sensitive-option' });
+      }
+      expectsSecretValue = false;
+      return;
     }
     if (/^-p=.+$/i.test(item) && item !== `-p=${REDACTED_VALUE}`) {
       findings.push({ path: itemPath, ruleId: 'command.short-password' });

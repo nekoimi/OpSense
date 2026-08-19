@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
 
 import { AgentDecisionSchema, AgentTurnSchema, assertSchema } from '@opsense/schema';
-import type { AgentDecision, AgentResponse, AgentSession, AgentTurn } from '@opsense/schema';
+import type {
+  AgentDecision,
+  AgentResponse,
+  AgentSession,
+  AgentToolActivity,
+  AgentTurn,
+} from '@opsense/schema';
 
 import type { ContextBuilder } from './context.js';
 import { AGENT_DECISION_PROMPT_CONTRACT } from './decision-contract.js';
@@ -47,6 +53,21 @@ export interface AgentRuntimeOptions {
   now?: () => Date;
 }
 
+export interface AgentRuntimeProgress {
+  current: {
+    detail: string;
+    phase: 'idle' | 'bootstrapping' | 'waiting_for_codex' | 'executing_tool' | 'persisting';
+    sequence?: number;
+    startedAt: string;
+  };
+  lastTool?: {
+    resultSummary: string;
+    sequence: number;
+    status: 'completed' | 'failed';
+    toolName: string;
+  };
+}
+
 export class AgentRuntime {
   private session: AgentSession;
   private readonly options: AgentRuntimeOptions;
@@ -56,10 +77,18 @@ export class AgentRuntime {
   private usedOutputBytes = 0;
   private threadTurnCount = 0;
   private readonly recentResults: unknown[] = [];
+  private progress: AgentRuntimeProgress;
 
   public constructor(options: AgentRuntimeOptions) {
     this.options = options;
     this.now = options.now ?? (() => new Date());
+    this.progress = {
+      current: {
+        detail: '等待 Agent 运行',
+        phase: 'idle',
+        startedAt: this.now().toISOString(),
+      },
+    };
     this.session =
       options.session ??
       createAgentSession({
@@ -71,6 +100,10 @@ export class AgentRuntime {
 
   public get currentSession(): AgentSession {
     return this.session;
+  }
+
+  public get currentProgress(): AgentRuntimeProgress {
+    return this.progress;
   }
 
   public async addOutputFiles(files: readonly string[]): Promise<AgentSession> {
@@ -127,6 +160,7 @@ export class AgentRuntime {
     await this.options.store.appendTranscript(
       createTranscriptEntry(this.session.sessionId, sequence, 'user', userMessage, this.now),
     );
+    this.setProgress('waiting_for_codex', '等待 Codex 返回结构化决策', sequence);
     const startedAt = this.now().toISOString();
     let decision: AgentDecision;
     let responseId: string | undefined;
@@ -143,6 +177,7 @@ export class AgentRuntime {
         turnSignal,
       );
       decision = parseDecision(result.decision);
+      this.setProgress('persisting', '校验 Codex 决策', sequence);
       decision.turnId = turnId;
       if (result.threadId !== undefined) this.session.threadId = result.threadId;
       responseId = result.responseId;
@@ -173,12 +208,14 @@ export class AgentRuntime {
     let message = decision.reason;
     let observations: string[] = [];
     if (decision.kind === 'tool_call') {
+      this.setProgress('executing_tool', `执行工具 ${decision.toolName}`, sequence);
       const result = await this.options.tools.execute(
         decision.toolName,
         decision.arguments,
         turnId,
       );
       toolCalls.push(result.activity);
+      this.recordToolProgress(sequence, result.activity);
       evidenceAdded = result.evidenceIds;
       projectionChanges = result.changedIds;
       message = result.summary;
@@ -202,8 +239,10 @@ export class AgentRuntime {
       if (decision.toolName === 'compose_wiki' && result.status === 'completed')
         this.session.currentStage = 'reviewing';
     } else if (decision.kind === 'projection_update') {
+      this.setProgress('executing_tool', '执行工具 update_projection', sequence);
       const result = await this.options.tools.execute('update_projection', decision, turnId);
       toolCalls.push(result.activity);
+      this.recordToolProgress(sequence, result.activity);
       evidenceAdded = result.evidenceIds;
       projectionChanges = result.changedIds;
       message = result.summary;
@@ -286,6 +325,7 @@ export class AgentRuntime {
       Buffer.byteLength(message) +
       observations.reduce((total, item) => total + Buffer.byteLength(item), 0);
     this.options.tools.setSession(this.session);
+    this.setProgress('persisting', `保存 Turn ${sequence} 结果`, sequence);
     const turn: AgentTurn = {
       turnId,
       sessionId: this.session.sessionId,
@@ -315,6 +355,7 @@ export class AgentRuntime {
       ),
     );
     await this.options.store.save(this.session);
+    this.setProgress('idle', `Turn ${sequence} 已完成，准备下一轮`, sequence);
     return this.response(
       message,
       observations,
@@ -339,21 +380,13 @@ export class AgentRuntime {
     const runStartedAt = this.now().getTime();
     const startingUsedTokens = this.usedTokens;
     const startingUsedOutputBytes = this.usedOutputBytes;
-    let response = await this.runTurn(userMessage);
+    let response = await this.runTurn(this.continuationMessage(userMessage));
     while (
       this.session.state === 'running' &&
       this.canContinue(startingTurnCount, runStartedAt, startingUsedTokens, startingUsedOutputBytes)
     ) {
       if (!this.options.tools.classificationStatus().completed) await this.rotateThreadIfNeeded();
-      const classificationCompleted = this.options.tools.classificationStatus().completed;
-      const compositionCompleted = this.options.tools.wikiCompositionStatus().completed;
-      response = await this.runTurn(
-        !classificationCompleted
-          ? '根据上一轮结果继续调查最有价值的证据，并在信息充分时结束。'
-          : !compositionCompleted
-            ? '服务调查已完成。请根据 wiki_source 使用 compose_wiki 撰写完整服务器知识手册。'
-            : 'AI Wiki 综合稿件已成功写入。请检查完成门禁并使用 kind=final 结束。',
-      );
+      response = await this.runTurn(this.continuationMessage());
     }
     if (this.session.state === 'running') {
       const classification = this.options.tools.classificationStatus();
@@ -372,7 +405,17 @@ export class AgentRuntime {
     return response;
   }
 
+  private continuationMessage(fallback?: string): string {
+    const classification = this.options.tools.classificationStatus();
+    if (!classification.completed)
+      return fallback ?? '根据上一轮结果继续调查最有价值的证据，并在信息充分时结束。';
+    if (!this.options.tools.wikiCompositionStatus().completed)
+      return '服务调查已经通过本地完成门禁。不要继续修改服务投影；请根据 wiki_source 使用 compose_wiki 撰写完整服务器知识手册。';
+    return 'AI Wiki 综合稿件已成功写入。请检查完成门禁并使用 kind=final 结束。';
+  }
+
   private async bootstrap(resume: boolean): Promise<AgentSession> {
+    this.setProgress('bootstrapping', '检查 Codex 环境并准备 Thread');
     const previousStopReason = this.session.stopReason;
     const initial: AgentSession = {
       ...this.session,
@@ -415,7 +458,7 @@ export class AgentRuntime {
       const failed = failSessionForCodex(
         initial,
         error instanceof Error ? error.message : String(error),
-        ['修复 Codex 环境后使用 resume 恢复会话。'],
+        repairSuggestionsForCodexFailure(error),
         this.now,
       );
       await this.options.store.save(failed);
@@ -470,7 +513,7 @@ L0.recent is authoritative cross-thread history of completed or rejected OpSense
 
 Treat the displayed services and their related evidence as one batch. Prefer one update_projection decision covering 5-12 services and all evidence-backed paths visible for them. Do not spend one turn on each service or path. Read more context or request execute_governed_probe only where it closes a concrete shared gap. Probe requests must be narrow and evidence-linked. Use update_projection only for serviceIds already selected by plan_discovery. Evidence gaps are not fatal: use confidence=unknown, role=unknown, reportPlacement=needs_review, unknowns, and reviewItems as appropriate. Never use kind=failed merely because evidence is incomplete, context is static, a probe is unavailable, or the completion gate is not met. kind=failed is reserved for an irrecoverable local capability or contract failure that prevents every allowed next action.
 
-Once every selected service has an evidence-backed assessment, call plan_discovery again with all existing investigations and filter groups preserved, set each investigation to resolved or needs_review, and set discoveryCompleted=true. Do not use final yet. When L0 reports classificationCompleted=true, L1.wiki_source contains the complete assessed server knowledge source. Use compose_wiki exactly once to write the final server Wiki narrative, service groups, key findings, and detailed service descriptions. Then use kind=final. final is accepted only after both the classification and Wiki composition gates pass.
+Once every selected service has an evidence-backed assessment, the local completion gate preserves the existing discovery plan, marks each investigation resolved or needs_review from its assessments, and sets discoveryCompleted=true automatically. Do not repeat update_projection or restate the full plan after the visible services are already reviewed. Do not use final yet. When L0 reports classificationCompleted=true, L1.wiki_source contains the complete assessed server knowledge source. Use compose_wiki exactly once to write the final server Wiki narrative, service groups, key findings, and detailed service descriptions. Then use kind=final. final is accepted only after both the classification and Wiki composition gates pass.
 
 The report must be genuinely AI-authored rather than a count-only template. In compose_wiki, write a professional Chinese server handbook for operations engineers: use short paragraphs, keep each overview module focused, avoid repeating the same facts, and explain what the server does, how important services are deployed and grouped, where configuration/data/log paths live, what is exposed, and what remains uncertain. Put every assessed non-system-summary service in exactly one meaningful serviceGroup; this grouping renders the deployment relationship view, so describe only evidence-backed grouping and never invent dependencies. For each recognizable product, use the collected service name, container name, and image identity to explain its function. For example, an image or service clearly identified as MinIO should be described as an S3-compatible object-storage service. This product-level explanation is an AI inference and must cite the collected service/container Evidence IDs. Omit serviceDescriptions for identities that cannot be responsibly recognized. Never invent topology, dependencies, credentials, commands, paths, ports, recovery guarantees, or Evidence IDs.
 
@@ -529,11 +572,39 @@ L1 index: ${JSON.stringify(context.l1)}`;
     this.session = failSessionForCodex(
       this.session,
       message,
-      ['检查 Codex 输出是否符合 AgentDecision Schema 后 resume。'],
+      repairSuggestionsForCodexFailure(message),
       this.now,
     );
     this.options.tools.setSession(this.session);
     await this.options.store.save(this.session);
+  }
+
+  private setProgress(
+    phase: AgentRuntimeProgress['current']['phase'],
+    detail: string,
+    sequence?: number,
+  ): void {
+    this.progress = {
+      ...this.progress,
+      current: {
+        detail,
+        phase,
+        ...(sequence === undefined ? {} : { sequence }),
+        startedAt: this.now().toISOString(),
+      },
+    };
+  }
+
+  private recordToolProgress(sequence: number, activity: AgentToolActivity): void {
+    this.progress = {
+      ...this.progress,
+      lastTool: {
+        resultSummary: activity.resultSummary ?? activity.error ?? '工具未返回摘要。',
+        sequence,
+        status: activity.status === 'completed' ? 'completed' : 'failed',
+        toolName: activity.toolName,
+      },
+    };
   }
   private finish(
     state: 'completed' | 'partial' | 'interrupted',
@@ -595,6 +666,20 @@ function isTransientThreadError(error: unknown): boolean {
 function isTimeoutError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /timeout|timed out|ETIMEDOUT/i.test(message);
+}
+
+function repairSuggestionsForCodexFailure(error: unknown): string[] {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/429|too many requests|rate limit/i.test(message))
+    return [
+      'Codex 服务触发限流；等待配额恢复后使用 --resume 继续，会话进度不会丢失。',
+      '降低 --max-agent-runs 或使用 --once 控制连续请求数量。',
+    ];
+  if (/timeout|timed out|ETIMEDOUT/i.test(message))
+    return ['Codex 请求超时；检查网络或提高 --turn-timeout-ms 后使用 --resume 继续。'];
+  if (/invalid AgentDecision|schema|payloadJson/i.test(message))
+    return ['检查 Codex 输出是否符合 AgentDecision Schema 后使用 --resume 继续。'];
+  return ['检查 Codex 服务状态和错误信息后使用 --resume 恢复会话。'];
 }
 
 function raceWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {

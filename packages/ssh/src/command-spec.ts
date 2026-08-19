@@ -36,6 +36,7 @@ export interface RenderedCommand {
 }
 
 export interface RenderCommandOptions {
+  sudoPassword?: boolean;
   useSudo?: boolean;
 }
 
@@ -60,10 +61,24 @@ export function renderCommand(
 
   if (sudoUsed) {
     pushToken(executionTokens, 'sudo');
-    pushToken(executionTokens, '-n');
+    if (options.sudoPassword === true) {
+      pushToken(executionTokens, '-S');
+      pushToken(executionTokens, '-k');
+      pushToken(executionTokens, '-p');
+      pushToken(executionTokens, '');
+    } else {
+      pushToken(executionTokens, '-n');
+    }
     pushToken(executionTokens, '--');
     pushToken(auditTokens, 'sudo');
-    pushToken(auditTokens, '-n');
+    if (options.sudoPassword === true) {
+      pushToken(auditTokens, '-S');
+      pushToken(auditTokens, '-k');
+      pushToken(auditTokens, '-p');
+      pushToken(auditTokens, '');
+    } else {
+      pushToken(auditTokens, '-n');
+    }
     pushToken(auditTokens, '--');
   }
 

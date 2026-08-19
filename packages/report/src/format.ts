@@ -1,3 +1,5 @@
+import { isIP } from 'node:net';
+
 export function formatBytes(value: number | undefined): string {
   if (value === undefined) return '-';
   if (value < 1024) return `${value} B`;
@@ -9,6 +11,10 @@ export function formatBytes(value: number | undefined): string {
     unit += 1;
   } while (current >= 1024 && unit < units.length - 1);
   return `${current >= 100 ? current.toFixed(0) : current.toFixed(1)} ${units[unit]}`;
+}
+
+export function targetHostLabel(host: string): 'IP' | '主机' {
+  return isIP(host) === 0 ? '主机' : 'IP';
 }
 
 export function formatDuration(seconds: number | undefined): string {

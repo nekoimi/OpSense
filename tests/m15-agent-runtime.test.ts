@@ -148,6 +148,7 @@ describe('M15 agent runtime', () => {
       const failed = await store.load();
       expect(failed.state).toBe('failed');
       expect(failed.lastError).toBe('Codex turn timed out after 20 ms.');
+      expect(failed.repairSuggestions.join('\n')).toContain('--turn-timeout-ms');
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -184,6 +185,42 @@ describe('M15 agent runtime', () => {
       await expect(runtime.start('开始')).rejects.toThrow('context window');
       expect(calls).toBe(1);
       expect((await store.load()).state).toBe('failed');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('persists actionable recovery guidance for Codex rate limits', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'opsense-m15-rate-limit-'));
+    try {
+      const snapshot = await fixtureSnapshot();
+      const projection = buildInventoryProjection(snapshot);
+      const session = createAgentSession({ scanId: snapshot.session.id });
+      const store = new FileAgentSessionStore(createRunWorkspaceLayout(snapshot.session.id, root));
+      await store.save(session);
+      const context = new ContextBuilder({ projection });
+      const runtime = new AgentRuntime({
+        scanId: snapshot.session.id,
+        store,
+        thread: {
+          start: async () => ({ threadId: 'codex-rate-limit-thread' }),
+          resume: async (threadId: string) => ({ threadId }),
+          run: async () => {
+            throw new Error('exceeded retry limit, last status: 429 Too Many Requests');
+          },
+        },
+        context,
+        tools: new ToolRouter({
+          projection,
+          context,
+          governor: new ProbeGovernor({ snapshot, session }),
+        }),
+      });
+
+      await expect(runtime.start('开始')).rejects.toThrow('429 Too Many Requests');
+      const failed = await store.load();
+      expect(failed.repairSuggestions.join('\n')).toContain('等待配额恢复');
+      expect(failed.repairSuggestions.join('\n')).toContain('--max-agent-runs');
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -311,6 +348,14 @@ describe('M15 agent runtime', () => {
       expect(prompts[1]).toContain('"arguments":{"section":"services"}');
       expect((await store.load()).threadId).toBe('codex-real-thread');
       expect((await store.load()).state).toBe('completed');
+      expect(runtime.currentProgress).toMatchObject({
+        current: { detail: 'Turn 2 已完成，准备下一轮', phase: 'idle', sequence: 2 },
+        lastTool: {
+          sequence: 1,
+          status: 'completed',
+          toolName: 'read_context',
+        },
+      });
     } finally {
       await rm(root, { recursive: true, force: true });
     }

@@ -628,10 +628,15 @@ export function applyProjectionDecision(
         throw new Error(`非 unknown 服务判断必须引用 Evidence ID：${update.serviceId}。`);
       if (update.reportPlacement === 'system_summary' && update.evidenceIds.length === 0)
         throw new Error(`隐藏到系统摘要的判断必须引用 Evidence ID：${update.serviceId}。`);
+      if (
+        mustRemainVisible(next, service) &&
+        (update.role === 'system' || update.reportPlacement === 'system_summary')
+      )
+        throw new Error(
+          `受保护服务不能使用 role=system 或 reportPlacement=system_summary：${update.serviceId}。请同时改为证据支持的非 system 角色与 primary、supporting 或 needs_review；证据不足时使用 role=unknown、reportPlacement=needs_review。不要只修改其中一个字段。`,
+        );
       if ((update.role === 'system') !== (update.reportPlacement === 'system_summary'))
         throw new Error(`system 角色必须与 system_summary 报告位置成对：${update.serviceId}。`);
-      if (update.reportPlacement === 'system_summary' && mustRemainVisible(next, service))
-        throw new Error(`安全可见性规则禁止将服务隐藏到系统摘要：${update.serviceId}。`);
       const assessment: AiServiceAssessment = {
         classificationSource: 'codex',
         confidence: update.confidence,
@@ -702,16 +707,78 @@ export function applyProjectionDecision(
   next.reviewedPathKeys = [...candidatePathKeySet].filter((key) => reviewedPaths.has(key));
   next.reviewedPathCount = next.reviewedPathKeys.length;
   next.classificationProvider = 'codex';
+  const classificationUpdatedAt = now().toISOString();
+  if (evidenceDriven) completeDiscoveryWorkspaceIfReady(next, classificationUpdatedAt);
   next.classificationCompleted = evidenceDriven
     ? next.discoveryWorkspace?.discoveryCompleted === true &&
       reviewedServiceIds.length === candidateServiceIds.length
     : reviewedServiceIds.length === candidateServiceIds.length &&
       next.reviewedPathCount === next.candidatePathCount;
-  next.classificationUpdatedAt = now().toISOString();
+  next.classificationUpdatedAt = classificationUpdatedAt;
   if (options.threadId !== undefined) next.classificationThreadId = options.threadId;
   assertSchema(InventoryProjectionSchema, next);
   Object.assign(projection, next);
   return [...changedIds];
+}
+
+export function finalizeDiscoveryIfReady(
+  projection: InventoryProjection,
+  options: { now?: () => Date } = {},
+): string[] {
+  const next = structuredClone(projection);
+  const updatedAt = (options.now ?? (() => new Date()))().toISOString();
+  const changedIds = completeDiscoveryWorkspaceIfReady(next, updatedAt);
+  if (changedIds.length === 0) return [];
+  next.classificationProvider = 'codex';
+  next.classificationCompleted = true;
+  next.classificationUpdatedAt = updatedAt;
+  assertSchema(InventoryProjectionSchema, next);
+  Object.assign(projection, next);
+  return changedIds;
+}
+
+function completeDiscoveryWorkspaceIfReady(
+  projection: InventoryProjection,
+  updatedAt: string,
+): string[] {
+  const workspace = projection.discoveryWorkspace;
+  if (
+    workspace?.workflowVersion !== 'm20_evidence_driven' ||
+    !workspace.planningCompleted ||
+    workspace.discoveryCompleted
+  )
+    return [];
+  const reviewed = new Set(projection.reviewedServiceIds ?? []);
+  const selected = new Set(workspace.investigations.flatMap((item) => item.serviceIds));
+  if ([...selected].some((serviceId) => !reviewed.has(serviceId))) return [];
+  const assessments = new Map(
+    projection.serviceAssessments.map((assessment) => [assessment.serviceId, assessment]),
+  );
+  if (
+    [...selected].some((serviceId) => assessments.get(serviceId)?.classificationSource !== 'codex')
+  )
+    return [];
+  workspace.investigations = workspace.investigations.map((investigation) => {
+    const needsReview =
+      investigation.status === 'needs_review' ||
+      investigation.serviceIds.some((serviceId) => {
+        const assessment = assessments.get(serviceId);
+        return (
+          assessment?.reportPlacement === 'needs_review' ||
+          assessment?.confidence === 'unknown' ||
+          assessment?.confidence === 'conflict' ||
+          (assessment?.unknowns?.length ?? 0) > 0 ||
+          (assessment?.reviewItems?.length ?? 0) > 0
+        );
+      });
+    return {
+      ...investigation,
+      status: needsReview ? ('needs_review' as const) : ('resolved' as const),
+    };
+  });
+  workspace.discoveryCompleted = true;
+  workspace.updatedAt = updatedAt;
+  return ['discovery:completed', ...workspace.investigations.map((item) => item.investigationId)];
 }
 
 export function codexClassificationStatus(

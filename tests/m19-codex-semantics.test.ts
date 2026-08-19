@@ -220,12 +220,18 @@ describe('M19 Codex semantic classification loop', () => {
 
     expect(() =>
       applyProjectionDecision(projection, decision, { threadId: 'codex-thread-m19' }),
-    ).toThrow('安全可见性规则');
+    ).toThrow('请同时改为证据支持的非 system 角色');
   });
 
   it('rejects incoherent system role and report placement combinations', async () => {
     const snapshot = await snapshotWithService('system-helper');
     const projection = buildInventoryProjection(snapshot, { mode: 'agent' });
+    Object.assign(projection.services[0]!, {
+      configFiles: [],
+      dataDirectories: [],
+      deployDirectories: [],
+      logLocations: [],
+    });
     const decision = projectionDecision('service:system-helper');
     const serviceChange = decision.changes[0];
     if (serviceChange?.changeType !== 'service_assessment') throw new Error('invalid fixture');

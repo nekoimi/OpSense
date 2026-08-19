@@ -1,7 +1,10 @@
+import { PassThrough } from 'node:stream';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createCliPasswordProvider } from '../apps/cli/src/commands/scan.js';
 import { createProgram } from '../apps/cli/src/program.js';
+import { createInteractiveSudoPasswordProvider } from '../apps/cli/src/sudo-password.js';
 
 afterEach(() => {
   process.exitCode = undefined;
@@ -62,5 +65,38 @@ describe('opsense CLI skeleton', () => {
 
     await expect(provider?.()).resolves.toBe('temporary-password');
     expect(createCliPasswordProvider(undefined)).toBeUndefined();
+  });
+
+  it('reads a sudo password once without echoing it and reuses the cached value', async () => {
+    const input = new PassThrough() as PassThrough & {
+      isRaw: boolean;
+      isTTY: boolean;
+      setRawMode(mode: boolean): void;
+    };
+    input.isRaw = false;
+    input.isTTY = true;
+    input.setRawMode = vi.fn((mode: boolean) => {
+      input.isRaw = mode;
+    });
+    const output: string[] = [];
+    const provider = createInteractiveSudoPasswordProvider(input, {
+      write: (value) => output.push(value),
+    });
+
+    const first = provider?.();
+    input.write('sudo-password-value\r');
+
+    await expect(first).resolves.toBe('sudo-password-value');
+    await expect(provider?.()).resolves.toBe('sudo-password-value');
+    expect(output.join('')).toBe('Sudo password: \n');
+    expect(output.join('')).not.toContain('sudo-password-value');
+    expect(input.setRawMode).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not offer an interactive sudo provider without a TTY', () => {
+    const input = new PassThrough() as PassThrough & { isTTY: boolean };
+    input.isTTY = false;
+
+    expect(createInteractiveSudoPasswordProvider(input)).toBeUndefined();
   });
 });

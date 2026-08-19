@@ -10,10 +10,12 @@ import { createReportDirectory } from '@opsense/workspace';
 import { ExitCode, exitCodeForError } from '../exit-code.js';
 import {
   buildAgentProgressSnapshot,
+  formatAgentCompletionProgress,
   formatAgentHeartbeat,
   formatAgentProgress,
 } from '../agent-progress.js';
 import type { Logger, LoggerFactory } from '../logger.js';
+import { createInteractiveSudoPasswordProvider } from '../sudo-password.js';
 import {
   prepareAgentWorkflow,
   type AgentWorkflowOptions,
@@ -116,6 +118,9 @@ export function createAgentCommand(loggerFactory: LoggerFactory): Command {
     process.on('SIGINT', interrupt);
     try {
       const workflowOptions = validateOptions(options, controller.signal);
+      const sudoPasswordProvider = createInteractiveSudoPasswordProvider();
+      if (options.host !== undefined && sudoPasswordProvider !== undefined)
+        workflowOptions.sudoPasswordProvider = sudoPasswordProvider;
       prepared = await prepareAgentWorkflow(workflowOptions);
       logger.info(`Agent session: ${prepared.runtime.currentSession.sessionId}`);
       logger.info(`Local run directory: ${prepared.layout.runDirectory}`);
@@ -174,6 +179,7 @@ interface CompletionRuntime {
     AgentSession,
     'coverage' | 'state' | 'stopReason' | 'turnCount' | 'workflowVersion'
   >;
+  progressSummary?(): string;
   resume(userMessage?: string): Promise<AgentResponse>;
 }
 
@@ -218,7 +224,7 @@ export async function runAgentToCompletion(
       throw new Error(`自动编排无法继续，Agent 当前状态为 ${session.state}。`);
     if (runsUsed >= maxRuns) break;
     logger.info(
-      `Auto-resume ${runsUsed + 1}/${maxRuns}: turns=${session.turnCount}, ${progressLabel(session)}=${formatCoverage(session.coverage.classification)}.`,
+      `Auto-resume ${runsUsed + 1}/${maxRuns}: turns=${session.turnCount}, ${completionProgress(runtime, session)}.`,
     );
     const attempt = await executeWithTimeoutRecovery(
       runtime,
@@ -233,7 +239,7 @@ export async function runAgentToCompletion(
   }
   const session = runtime.currentSession;
   throw new Error(
-    `自动编排达到 ${maxRuns} 次运行上限，${progressLabel(session)}仍未完成：turns=${session.turnCount}, ${progressLabel(session)}=${formatCoverage(session.coverage.classification)}。可使用 --resume 继续，或提高 --max-agent-runs。`,
+    `自动编排达到 ${maxRuns} 次运行上限，工作流仍未完成：turns=${session.turnCount}, ${completionProgress(runtime, session)}。可使用 --resume 继续，或提高 --max-agent-runs。`,
   );
 }
 
@@ -436,8 +442,7 @@ export function assertWikiThreadAudit(
 
 function printStatus(logger: Logger, prepared: PreparedAgentWorkflow): void {
   const session = prepared.runtime.currentSession;
-  for (const line of formatAgentProgress(buildAgentProgressSnapshot(session, prepared.projection)))
-    logger.info(line);
+  for (const line of formatAgentProgress(buildProgressSnapshot(prepared))) logger.info(line);
   logger.info(
     `  预算：${formatBytes(session.budgets.usedBytes)}/${formatBytes(session.budgets.maxBytes)}，${formatDuration(session.budgets.usedDurationMs)}/${formatDuration(session.budgets.maxDurationMs)}`,
   );
@@ -452,6 +457,7 @@ function createProgressRuntime(
     get currentSession() {
       return prepared.runtime.currentSession;
     },
+    progressSummary: () => formatAgentCompletionProgress(buildProgressSnapshot(prepared)),
     resume: (message) =>
       runWithAgentHeartbeat(prepared, logger, () => prepared.runtime.resume(message)),
     start: (message) =>
@@ -466,12 +472,7 @@ async function runWithAgentHeartbeat<T>(
 ): Promise<T> {
   const startedAt = Date.now();
   const report = (): void => {
-    logger.info(
-      formatAgentHeartbeat(
-        buildAgentProgressSnapshot(prepared.runtime.currentSession, prepared.projection),
-        Date.now() - startedAt,
-      ),
-    );
+    logger.info(formatAgentHeartbeat(buildProgressSnapshot(prepared), Date.now() - startedAt));
   };
   report();
   const heartbeat = setInterval(report, AGENT_HEARTBEAT_INTERVAL_MS);
@@ -483,6 +484,14 @@ async function runWithAgentHeartbeat<T>(
   } finally {
     clearInterval(heartbeat);
   }
+}
+
+function buildProgressSnapshot(prepared: PreparedAgentWorkflow) {
+  return buildAgentProgressSnapshot(
+    prepared.runtime.currentSession,
+    prepared.projection,
+    prepared.runtime.currentProgress,
+  );
 }
 
 function printServices(logger: Logger, prepared: PreparedAgentWorkflow): void {
@@ -556,9 +565,13 @@ function printResponse(
     );
   const detail = response.observations.join('\n');
   if (detail.length > 0)
-    logger.info(detail.length > 4_000 ? `${detail.slice(0, 4_000)}\n[output truncated]` : detail);
+    logger.info(
+      detail.length > 4_000
+        ? `${detail.slice(0, 4_000)}\n[终端详情已截断至 4000 字符；不会截断已采集证据或生成的报告]`
+        : detail,
+    );
   if (response.unresolvedQuestions.length > 0)
-    logger.info(`Unresolved: ${response.unresolvedQuestions.join('; ')}`);
+    logger.info(`待确认（不代表运行失败）: ${response.unresolvedQuestions.join('; ')}`);
 }
 
 function validateOptions(options: AgentCommandOptions, signal: AbortSignal): AgentWorkflowOptions {
@@ -599,10 +612,6 @@ function withFocus(prompt: string, focusService: string | undefined): string {
   return focusService === undefined ? prompt : `${prompt}\n优先调查服务：${focusService}`;
 }
 
-function formatCoverage(value: number | undefined): string {
-  return value === undefined ? 'unknown' : `${(value * 100).toFixed(1)}%`;
-}
-
 function formatBytes(value: number): string {
   if (value < 1024) return `${value} B`;
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
@@ -615,8 +624,14 @@ function formatDuration(value: number): string {
   return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
-function progressLabel(session: Pick<AgentSession, 'workflowVersion'>): string {
-  return session.workflowVersion === 'm20_evidence_driven' ? 'discovery' : 'classification';
+function completionProgress(
+  runtime: CompletionRuntime,
+  session: Pick<AgentSession, 'coverage' | 'workflowVersion'>,
+): string {
+  if (runtime.progressSummary !== undefined) return runtime.progressSummary();
+  const value = session.coverage.classification;
+  const coverage = value === undefined ? 'unknown' : `${(value * 100).toFixed(1)}%`;
+  return `${session.workflowVersion === 'm20_evidence_driven' ? 'discovery' : 'classification'}=${coverage}`;
 }
 
 function parsePositiveInteger(value: string): number {

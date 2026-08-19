@@ -17,6 +17,7 @@ import {
   applyDiscoveryPlan,
   applyWikiNarrative,
   buildInventoryProjection,
+  finalizeDiscoveryIfReady,
   promoteOrphanProcessCandidates,
 } from '@opsense/projection';
 import { redactSnapshot } from '@opsense/redaction';
@@ -33,6 +34,7 @@ import type {
   ScanSnapshot,
 } from '@opsense/schema';
 import type { CodexPreflightProbe } from '@opsense/agent-runtime';
+import type { SudoPasswordProvider } from '@opsense/ssh';
 import {
   createRunWorkspaceLayout,
   createWorkspaceLayout,
@@ -60,6 +62,7 @@ export interface AgentWorkflowOptions {
   resume?: string;
   scan?: string;
   signal?: AbortSignal;
+  sudoPasswordProvider?: SudoPasswordProvider;
   turnTimeoutMs?: number;
   user?: string;
   workspace?: string;
@@ -104,6 +107,7 @@ export async function prepareAgentWorkflow(
   let evidenceIndex = buildEvidenceIndex(projection);
   if (promoteOrphanProcessCandidates(projection, evidenceIndex.candidates).length > 0)
     evidenceIndex = buildEvidenceIndex(projection);
+  finalizeDiscoveryIfReady(projection);
   const existingSession = source.session;
   const migratedFromM19 =
     existingSession !== undefined &&
@@ -238,6 +242,9 @@ async function resolveSource(options: AgentWorkflowOptions): Promise<{
       ...(options.identity === undefined ? {} : { identity: options.identity }),
       ...(options.password === undefined ? {} : { password: options.password }),
       ...(options.signal === undefined ? {} : { signal: options.signal }),
+      ...(options.sudoPasswordProvider === undefined
+        ? {}
+        : { sudoPasswordProvider: options.sudoPasswordProvider }),
       ...(options.workspace === undefined ? {} : { workspace: options.workspace }),
     });
     return {

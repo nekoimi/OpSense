@@ -30,6 +30,7 @@ import {
   formatDateTime,
   formatDuration,
   statusLabel,
+  targetHostLabel,
 } from './format.js';
 
 const BODY_FONT = { ascii: 'Arial', eastAsia: 'Microsoft YaHei', hAnsi: 'Arial' } as const;
@@ -211,7 +212,15 @@ function cover(model: ReportModel): Paragraph[] {
     new Paragraph({ heading: HeadingLevel.TITLE, text: model.metadata.title }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      children: [text(`${model.metadata.targetHost}:${model.metadata.targetPort}`, { size: 24 })],
+      children: [
+        text(`${targetHostLabel(model.metadata.targetHost)}：${model.metadata.targetHost}`, {
+          size: 24,
+        }),
+      ],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [text(`SSH 端口：${model.metadata.targetPort}`, { size: 24 })],
       spacing: { after: 700 },
     }),
     new Paragraph({

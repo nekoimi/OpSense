@@ -239,6 +239,7 @@ export class ContextBuilder {
         .map((candidate) => [candidate.serviceId as string, candidate]),
     );
     const workspace = this.projection.discoveryWorkspace;
+    const reviewedServiceIds = new Set(this.projection.reviewedServiceIds ?? []);
     const activeServiceIds =
       workspace?.workflowVersion === 'm20_evidence_driven' && workspace.planningCompleted
         ? new Set([
@@ -255,7 +256,13 @@ export class ContextBuilder {
           ])
         : undefined;
     const candidates = this.projection.services
-      .filter((service) => activeServiceIds === undefined || activeServiceIds.has(service.id))
+      .filter(
+        (service) =>
+          (activeServiceIds === undefined || activeServiceIds.has(service.id)) &&
+          (workspace?.workflowVersion !== 'm20_evidence_driven' ||
+            !workspace.planningCompleted ||
+            !reviewedServiceIds.has(service.id)),
+      )
       .map(
         (service) =>
           indexedByServiceId.get(service.id) ?? {

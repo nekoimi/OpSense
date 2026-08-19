@@ -37,6 +37,16 @@ describe('safe command specifications', () => {
 
     const allowed = renderCommand(getCommandSpec('network.sockets'), {}, { useSudo: true });
     expect(allowed.execution).toMatch(/^'sudo' '-n' '--'/);
+
+    const passwordAuthenticated = renderCommand(
+      getCommandSpec('network.sockets'),
+      {},
+      {
+        sudoPassword: true,
+        useSudo: true,
+      },
+    );
+    expect(passwordAuthenticated.execution).toMatch(/^'sudo' '-S' '-k' '-p' '' '--'/);
   });
 
   it('contains unique, read-only command identifiers across scan categories', () => {
@@ -151,6 +161,24 @@ describe('safe command executor', () => {
     expect(result.status).toBe('failed');
     expect(result.errorMessage).toBe('connection lost');
     expect(auditRecords[0]?.status).toBe('failed');
+  });
+
+  it('passes a cached sudo password only through stdin and keeps it out of audit records', async () => {
+    const executeRaw = vi.fn(async (): Promise<RawCommandResult> => success('socket metadata'));
+    const auditRecords: CommandAuditRecord[] = [];
+    const passwordProvider = vi.fn(async () => 'sudo-password-value');
+    const executor = new SafeCommandExecutor({ executeRaw }, (record) => auditRecords.push(record));
+    executor.setSudoPasswordProvider(passwordProvider);
+
+    await executor.executeById('network.sockets', {}, { useSudo: true });
+
+    expect(passwordProvider).toHaveBeenCalledOnce();
+    expect(executeRaw).toHaveBeenCalledWith(
+      expect.not.stringContaining('sudo-password-value'),
+      expect.objectContaining({ stdin: 'sudo-password-value\n' }),
+    );
+    expect(auditRecords[0]?.command).not.toContain('sudo-password-value');
+    expect(auditRecords[0]?.command).toContain("'sudo' '-S' '-k' '-p' '' '--'");
   });
 
   it('maps execution statuses to evidence collection statuses', () => {

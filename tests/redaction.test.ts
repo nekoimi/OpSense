@@ -5,6 +5,7 @@ import path from 'node:path';
 import {
   REDACTED_VALUE,
   REDACTION_RULES_VERSION,
+  RedactionError,
   classifySensitivity,
   redactForAiInput,
   redactForAudit,
@@ -50,6 +51,33 @@ afterEach(async () => {
 });
 
 describe('M7 redaction and security checks', () => {
+  it('identifies residual secret types and paths without logging values', () => {
+    const error = new RedactionError([
+      { path: '$.evidence[3].value', ruleId: 'connection.database-uri' },
+      { path: '$.processes[0].arguments[2]', ruleId: 'command.sensitive-option' },
+    ]);
+
+    expect(error.message).toBe(
+      'Sensitive data remained after redaction (2 finding(s)): database URI credentials [connection.database-uri] at $.evidence[3].value; sensitive command option [command.sensitive-option] at $.processes[0].arguments[2]. Secret values were not logged.',
+    );
+    expect(error.findings).toHaveLength(2);
+  });
+
+  it('does not treat the token after an inline sensitive option as its value', () => {
+    const result = redactPayload(
+      {
+        arguments: ['--password-store=basic', '--disable-features=DialMediaRouteProvider'],
+      },
+      { mode: 'persistence' },
+    );
+
+    expect(result.value.arguments).toEqual([
+      `--password-store=${REDACTED_VALUE}`,
+      '--disable-features=DialMediaRouteProvider',
+    ]);
+    expect(scanForSecrets(result.value)).toEqual([]);
+  });
+
   it('classifies public, internal, sensitive, and secret values', () => {
     expect(classifySensitivity('version', '24.04')).toBe('public');
     expect(classifySensitivity('serviceName', 'order-api')).toBe('internal');

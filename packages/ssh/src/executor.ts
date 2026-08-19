@@ -23,6 +23,7 @@ export interface CommandAuditRecord {
 }
 
 export type CommandAuditSink = (record: CommandAuditRecord) => Promise<void> | void;
+export type SudoPasswordProvider = () => Promise<string>;
 
 export interface CommandExecutionOptions {
   maxOutputBytes?: number;
@@ -42,10 +43,16 @@ export interface RemoteCommandTransport {
 }
 
 export class SafeCommandExecutor {
+  private sudoPasswordProvider?: SudoPasswordProvider;
+
   public constructor(
     private readonly transport: RemoteCommandTransport | SshConnection,
     private readonly auditSink?: CommandAuditSink,
   ) {}
+
+  public setSudoPasswordProvider(provider: SudoPasswordProvider): void {
+    this.sudoPasswordProvider = provider;
+  }
 
   public executeById(
     commandId: string,
@@ -60,11 +67,17 @@ export class SafeCommandExecutor {
     parameters: Readonly<Record<string, CommandParameterValue>> = {},
     options: CommandExecutionOptions = {},
   ): Promise<CommandExecutionResult> {
-    const rendered = renderCommand(
-      spec,
-      parameters,
-      options.useSudo === undefined ? {} : { useSudo: options.useSudo },
-    );
+    const sudoUsed = spec.sudo === 'required' || options.useSudo === true;
+    const sudoPassword =
+      sudoUsed && this.sudoPasswordProvider !== undefined
+        ? await this.sudoPasswordProvider()
+        : undefined;
+    if (sudoPassword !== undefined && sudoPassword.length === 0)
+      throw new Error('Sudo password cannot be empty.');
+    const rendered = renderCommand(spec, parameters, {
+      ...(options.useSudo === undefined ? {} : { useSudo: options.useSudo }),
+      ...(sudoPassword === undefined ? {} : { sudoPassword: true }),
+    });
     const startedAt = new Date();
     let rawResult: RawCommandResult;
 
@@ -72,6 +85,7 @@ export class SafeCommandExecutor {
       rawResult = await this.transport.executeRaw(rendered.execution, {
         maxOutputBytes: options.maxOutputBytes ?? spec.maxOutputBytes,
         ...(options.signal === undefined ? {} : { signal: options.signal }),
+        ...(sudoPassword === undefined ? {} : { stdin: `${sudoPassword}\n` }),
         timeoutMs: options.timeoutMs ?? spec.timeoutMs,
       });
     } catch (error) {

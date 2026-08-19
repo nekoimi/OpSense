@@ -296,16 +296,29 @@ function servicePathsForReport(
   const assessments = (projection.pathAssessments ?? []).filter((item) =>
     item.serviceIds.includes(service.id),
   );
-  const values = (semantic: (typeof assessments)[number]['semantic']): string[] => [
-    ...new Set(assessments.filter((item) => item.semantic === semantic).map((item) => item.path)),
+  const assessedSemanticByPath = new Map(assessments.map((item) => [item.path, item.semantic]));
+  const values = (
+    semantic: (typeof assessments)[number]['semantic'],
+    collected: readonly string[],
+  ): string[] => [
+    ...new Set([
+      ...assessments.filter((item) => item.semantic === semantic).map((item) => item.path),
+      ...collected.filter((item) => !assessedSemanticByPath.has(item)),
+    ]),
   ];
-  const config = values('config');
+  const environment = service.environmentFiles.filter((item) => {
+    const semantic = assessedSemanticByPath.get(item);
+    return semantic === undefined || semantic === 'config';
+  });
+  const config = values('config', service.configFiles).filter(
+    (item) => !environment.includes(item),
+  );
   return {
     config,
-    data: values('data'),
-    deploy: values('deploy'),
-    environment: service.environmentFiles.filter((item) => config.includes(item)),
-    log: values('log'),
+    data: values('data', service.dataDirectories),
+    deploy: values('deploy', service.deployDirectories),
+    environment,
+    log: values('log', service.logLocations),
   };
 }
 
