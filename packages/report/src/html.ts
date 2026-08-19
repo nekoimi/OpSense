@@ -1,6 +1,11 @@
 import type { FindingRecord, ReportModel, ReportService } from '@opsense/schema';
 
-import { REPORT_WATERMARK, reportCopyrightNotice } from './branding.js';
+import {
+  REPORT_BRAND,
+  REPORT_PROJECT_URL,
+  REPORT_WATERMARK,
+  reportCopyrightNotice,
+} from './branding.js';
 import {
   displayBoolean,
   displayList,
@@ -60,7 +65,7 @@ export function renderHtmlReport(model: ReportModel): string {
       ${renderFindings(model)}
     </main>
   </div>
-  <footer><strong>${escapeHtml(reportCopyrightNotice(model.metadata.generatedAt))}</strong><span>OpSense ${escapeHtml(model.metadata.opsenseVersion)} · ${escapeHtml(model.metadata.scanId)}</span></footer>
+  <footer><strong>${renderLinkedCopyright(model.metadata.generatedAt)}</strong><span>${renderProjectLink()} ${escapeHtml(model.metadata.opsenseVersion)} · ${escapeHtml(model.metadata.scanId)}</span></footer>
 </body>
 </html>
 `;
@@ -71,6 +76,15 @@ function renderWatermarkLayer(): string {
     { length: 24 },
     () => `<span>${escapeHtml(REPORT_WATERMARK)}</span>`,
   ).join('')}</div>`;
+}
+
+function renderLinkedCopyright(generatedAt: string): string {
+  const notice = escapeHtml(reportCopyrightNotice(generatedAt));
+  return notice.replace(REPORT_BRAND, renderProjectLink());
+}
+
+function renderProjectLink(): string {
+  return `<a href="${REPORT_PROJECT_URL}" target="_blank" rel="noopener noreferrer">${REPORT_BRAND}</a>`;
 }
 
 export function escapeHtml(value: unknown): string {
@@ -524,6 +538,7 @@ footer { padding: 22px 32px 34px; border-top: 1px solid #dfe3e5; color: #68737a;
 footer strong, footer span { display: block; }
 footer strong { color: #465158; font-weight: 600; }
 footer span { margin-top: 4px; }
+footer a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 @media (max-width: 900px) { .topbar { min-height: 0; padding: 28px 20px; align-items: start; flex-direction: column; gap: 24px; } h1 { font-size: 27px; } .top-meta { min-width: 0; width: 100%; } .top-meta div { grid-template-columns: minmax(0, 1fr); gap: 2px; } .top-meta dd { text-align: left; } .layout { width: 100%; grid-template-columns: minmax(0, 1fr); padding: 18px; } .sidebar { max-width: 100%; position: static; display: flex; flex-wrap: wrap; overflow: hidden; border-top: 0; border-bottom: 2px solid #16836a; } .sidebar a { flex: 0 1 auto; padding: 8px 10px; border: 0; font-size: 13px; } section { padding-bottom: 34px; } .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .metric { min-width: 0; border-bottom: 1px solid #d9dee1; } .overview-grid, .topology-groups, .service-facts, .finding-list { grid-template-columns: 1fr; } .overview-block, .overview-block:nth-child(even), .overview-block:nth-last-child(-n+2) { padding: 16px 0; border-right: 0; border-bottom: 1px solid #e2e6e7; } .overview-block:last-child { border-bottom: 0; } .service-nodes { grid-template-columns: 1fr; } .service-facts article, .service-facts article + article { padding: 14px 0; border-right: 0; border-bottom: 1px solid #e0e4e5; } .service-facts article:last-child { border-bottom: 0; } .handbook-heading { align-items: start; flex-direction: column; gap: 2px; } .watermark-layer { grid-template-columns: repeat(2, minmax(160px, 1fr)); gap: 90px 35px; } .watermark-layer span { font-size: 22px; } }
 @media print { :root { background: #fff; } .topbar { min-height: auto; padding: 18mm 15mm 10mm; background: #fff; color: #000; border-bottom: 2px solid #333; } .target-meta, .target-meta dt, .top-meta dt { color: #444; } .layout { display: block; padding: 0; } .sidebar { display: none; } section { break-inside: auto; padding: 10mm 15mm; } .service, .finding, .topology-group { break-inside: avoid; } a { color: #000; } footer { padding: 8mm 15mm; } .watermark-layer { opacity: .07; } }
 `;

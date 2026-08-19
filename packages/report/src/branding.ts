@@ -1,4 +1,5 @@
 export const REPORT_BRAND = 'OpSense';
+export const REPORT_PROJECT_URL = 'https://github.com/nekoimi/OpSense';
 export const REPORT_WATERMARK = 'OpSense 版权所有';
 
 export function reportCopyrightNotice(generatedAt: string): string {

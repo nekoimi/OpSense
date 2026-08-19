@@ -164,7 +164,9 @@ describe('M8 report generation', () => {
     expect(html).not.toContain('Evidence ID');
     expect(html).toContain('class="watermark-layer"');
     expect(html).toContain('OpSense 版权所有');
-    expect(html).toContain('© 2026 OpSense. 保留所有权利。');
+    expect(html.replaceAll(/<[^>]+>/g, '')).toContain('© 2026 OpSense. 保留所有权利。');
+    expect(html.match(/href="https:\/\/github\.com\/nekoimi\/OpSense"/g)).toHaveLength(2);
+    expect(html).toContain('target="_blank" rel="noopener noreferrer">OpSense</a>');
     expect(html).toContain('&lt;script&gt;alert(&quot;report&quot;)&lt;/script&gt;');
     expect(html).not.toContain('<script>alert("report")</script>');
     expect(persisted.join('\n')).not.toContain('OPSENSE_REPORT_SECRET');

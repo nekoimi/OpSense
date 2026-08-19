@@ -21,6 +21,12 @@ OpSense 面向需要快速理解陌生 Linux 服务器的开发和运维人员�
 - **本地可恢复会话**：扫描、Projection、Codex Thread、ToolActivity 和报告产物可审计；超时或限流后可以通过 Session ID 继续。
 - **安全与脱敏**：命令白名单、主机密钥校验、结构化探测治理、敏感字段分级和报告前二次脱敏均为默认行为。
 
+## 报告示例
+
+HTML 报告集中展示服务器概览、运行架构、服务目录、服务手册、主机基线、存储、网络以及风险与待办。点击图片可以查看完整尺寸。
+
+[![OpSense HTML 服务器 Wiki 报告示例](example/report-example.png)](example/report-example.png)
+
 ## 工作流程
 
 ```mermaid
