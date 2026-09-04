@@ -1,10 +1,27 @@
-import { collectM3Snapshot, collectM4Snapshot, collectM5Snapshot } from '@opsense/collectors';
+import { createHash } from 'node:crypto';
+
+import { PipelineRunTracker, RunMetricsCollector } from '@opsense/collection-runtime';
+import {
+  buildPathSeeds,
+  collectM3Snapshot,
+  collectM4Snapshot,
+  collectM5Snapshot,
+} from '@opsense/collectors';
 import { normalizeAndMergeServices } from '@opsense/core';
 import { redactForAudit, redactSnapshot } from '@opsense/redaction';
 import { SCHEMA_VERSION, ScanSnapshotSchema, assertSchema } from '@opsense/schema';
-import type { OpsenseConfig, ScanSession, ScanSnapshot, ScanStage } from '@opsense/schema';
+import type {
+  OpsenseConfig,
+  PipelineProfile,
+  PipelineRun,
+  PipelineStage,
+  RunMetrics,
+  ScanSession,
+  ScanSnapshot,
+  ScanStage,
+} from '@opsense/schema';
 import { SafeCommandExecutor, connectSsh, detectPermissions } from '@opsense/ssh';
-import type { SshConnection, SudoPasswordProvider } from '@opsense/ssh';
+import type { CommandAuditRecord, SshConnection, SudoPasswordProvider } from '@opsense/ssh';
 import {
   appendJsonLine,
   createScanId,
@@ -25,6 +42,7 @@ export interface ScanWorkflowOptions {
   identity?: string;
   password?: string;
   port: number;
+  profile?: PipelineProfile;
   retainConnection?: boolean;
   signal?: AbortSignal;
   sudoPasswordProvider?: SudoPasswordProvider;
@@ -46,6 +64,8 @@ export interface ScanWorkflowResult {
   connection?: SshConnection;
   executor?: SafeCommandExecutor;
   layout: RunWorkspaceLayout;
+  metrics: RunMetrics;
+  pipelineRun: PipelineRun;
   scanId: string;
   snapshot: ScanSnapshot;
   workspaceRoot: string;
@@ -68,15 +88,34 @@ export async function runScanWorkflow(
   const workspaceRoot = options.workspace ?? loaded.config.workspace.rootDirectory;
   const scanId = createScanId(startedAt);
   const layout = await ensureRunWorkspace(scanId, workspaceRoot);
+  const profile = options.profile ?? 'standard';
+  const metrics = new RunMetricsCollector(scanId, now);
+  const pipeline = new PipelineRunTracker({
+    now,
+    profile,
+    runId: scanId,
+    target: { host: options.host, port: options.port, user: options.user },
+  });
   let connection: SshConnection | undefined;
   let executor: SafeCommandExecutor | undefined;
   let currentStage = 'created';
+  let currentPipelineStage: PipelineStage | undefined;
   let auditWrite = Promise.resolve();
   const writeStage = async (
     stage: string,
     state: ScanSession['state'] = stage as ScanSession['state'],
   ): Promise<void> => {
     currentStage = stage;
+    const nextPipelineStage = pipelineStageForScanStage(stage);
+    if (nextPipelineStage !== currentPipelineStage) {
+      if (currentPipelineStage !== undefined) {
+        metrics.finishStage();
+        pipeline.checkpoint(currentPipelineStage);
+      }
+      currentPipelineStage = nextPipelineStage;
+      metrics.startStage(nextPipelineStage);
+      pipeline.transition(nextPipelineStage);
+    }
     await onStage?.(stage);
     const session: ScanSession = {
       configSummary: summarizeConfig(loaded.config),
@@ -90,7 +129,11 @@ export async function runScanWorkflow(
       target: { host: options.host, port: options.port, user: options.user },
       ...(stage === 'created' ? {} : { currentStage: stage as ScanStage }),
     };
-    await writeJsonAtomic(layout.metaFile, session);
+    await Promise.all([
+      writeJsonAtomic(layout.metaFile, session),
+      writeJsonAtomic(layout.metricsFile, metrics.snapshot()),
+      writeJsonAtomic(layout.pipelineRunFile, pipeline.snapshot()),
+    ]);
   };
 
   try {
@@ -118,7 +161,8 @@ export async function runScanWorkflow(
       ...(workspaceRoot === undefined ? {} : { workspaceRoot }),
     });
     throwIfAborted(options.signal);
-    const executorAudit = (record: unknown): Promise<void> => {
+    const executorAudit = (record: CommandAuditRecord): Promise<void> => {
+      metrics.recordCommand(record);
       auditWrite = auditWrite.then(() =>
         appendJsonLine(layout.auditFile, redactForAudit(record, now).value),
       );
@@ -174,26 +218,31 @@ export async function runScanWorkflow(
     throwIfAborted(options.signal);
     const services = await collectM4(executor, collectionOptions);
     throwIfAborted(options.signal);
-    const directories = await collectM5(
-      executor,
-      {
-        composeProjects: services.composeProjects,
-        containers: services.containers,
-        processes: services.processes,
-        systemdUnits: services.systemdUnits,
-      },
-      {
-        commandTimeoutMs: loaded.config.ssh.commandTimeoutMs,
-        crossFileSystems: loaded.config.scan.crossFileSystems,
-        maxConfigFileBytes: loaded.config.scan.maxConfigFileBytes,
-        maxDirectoryDepth: loaded.config.scan.maxDirectoryDepth,
-        maxFilesPerDirectory: loaded.config.scan.maxFilesPerDirectory,
-        maxOutputBytes: loaded.config.scan.maxCommandOutputBytes,
-        opsenseVersion: VERSION,
-        useSudo,
-        ...(options.signal === undefined ? {} : { signal: options.signal }),
-      },
-    );
+    const pathInput = {
+      composeProjects: services.composeProjects,
+      containers: services.containers,
+      processes: services.processes,
+      systemdUnits: services.systemdUnits,
+    };
+    const directories =
+      profile === 'deep'
+        ? await collectM5(executor, pathInput, {
+            commandTimeoutMs: loaded.config.ssh.commandTimeoutMs,
+            crossFileSystems: loaded.config.scan.crossFileSystems,
+            maxConfigFileBytes: loaded.config.scan.maxConfigFileBytes,
+            maxDirectoryDepth: loaded.config.scan.maxDirectoryDepth,
+            maxFilesPerDirectory: loaded.config.scan.maxFilesPerDirectory,
+            maxOutputBytes: loaded.config.scan.maxCommandOutputBytes,
+            opsenseVersion: VERSION,
+            useSudo,
+            ...(options.signal === undefined ? {} : { signal: options.signal }),
+          })
+        : {
+            artifacts: [],
+            evidence: [],
+            pathSeeds: buildPathSeeds(pathInput),
+            unknowns: [],
+          };
     throwIfAborted(options.signal);
     await auditWrite;
 
@@ -247,33 +296,74 @@ export async function runScanWorkflow(
       writeJsonAtomic(layout.metaFile, redacted.value.session),
       writeJsonAtomic(layout.redactionReportFile, redacted.report),
     ]);
+    if (currentPipelineStage !== undefined) {
+      metrics.finishStage();
+      pipeline.checkpoint(currentPipelineStage, {
+        outputHash: hashJson(redacted.value),
+      });
+    }
+    currentPipelineStage = 'inventory_ready';
+    metrics.startStage(currentPipelineStage);
+    pipeline.transition(currentPipelineStage);
+    pipeline.addOutputFiles([layout.snapshotFile, layout.redactionReportFile, layout.metricsFile]);
+    metrics.finishStage();
+    pipeline.checkpoint(currentPipelineStage, { outputHash: hashJson(redacted.value) });
+    await Promise.all([
+      writeJsonAtomic(layout.metricsFile, metrics.snapshot()),
+      writeJsonAtomic(layout.pipelineRunFile, pipeline.snapshot()),
+    ]);
     await onStage?.(redacted.value.session.state);
     if (!options.retainConnection) connection.close();
     return {
       config: loaded.config,
       ...(options.retainConnection ? { connection, executor } : {}),
       layout,
+      metrics: metrics.snapshot(),
+      pipelineRun: pipeline.snapshot(),
       scanId,
       snapshot: redacted.value,
       workspaceRoot: layout.rootDirectory,
     };
   } catch (error) {
-    await writeJsonAtomic(layout.metaFile, {
-      configSummary: summarizeConfig(loaded.config),
-      currentStage: currentStage as ScanStage,
-      finishedAt: now().toISOString(),
-      id: scanId,
-      opsenseVersion: VERSION,
-      permissionLevel: 'unknown',
-      rulesVersion: VERSION,
-      schemaVersion: SCHEMA_VERSION,
-      startedAt: startedAt.toISOString(),
-      state: 'failed',
-      target: { host: options.host, port: options.port, user: options.user },
-    }).catch(() => undefined);
+    metrics.finishStage(options.signal?.aborted === true ? 'interrupted' : 'failed');
+    const message = error instanceof Error ? error.message : String(error);
+    pipeline.finish(options.signal?.aborted === true ? 'interrupted' : 'failed', {
+      code: options.signal?.aborted === true ? 'SCAN_INTERRUPTED' : 'SCAN_FAILED',
+      message,
+      retryable: options.signal?.aborted !== true,
+      ...(currentPipelineStage === undefined ? {} : { stage: currentPipelineStage }),
+    });
+    await Promise.all([
+      writeJsonAtomic(layout.metaFile, {
+        configSummary: summarizeConfig(loaded.config),
+        currentStage: currentStage as ScanStage,
+        finishedAt: now().toISOString(),
+        id: scanId,
+        opsenseVersion: VERSION,
+        permissionLevel: 'unknown',
+        rulesVersion: VERSION,
+        schemaVersion: SCHEMA_VERSION,
+        startedAt: startedAt.toISOString(),
+        state: 'failed',
+        target: { host: options.host, port: options.port, user: options.user },
+      }),
+      writeJsonAtomic(layout.metricsFile, metrics.snapshot()),
+      writeJsonAtomic(layout.pipelineRunFile, pipeline.snapshot()),
+    ]).catch(() => undefined);
     connection?.close();
     throw error;
   }
+}
+
+function pipelineStageForScanStage(stage: string): PipelineStage {
+  if (stage === 'created') return 'created';
+  if (stage === 'connecting') return 'preflighting';
+  if (stage === 'collecting') return 'collecting_baseline';
+  return 'correlating';
+}
+
+function hashJson(value: unknown): string {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 
 export function createCliPasswordProvider(

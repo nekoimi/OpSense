@@ -20,6 +20,7 @@
     "@opsense/agent-runtime": "workspace:*",
     "@opsense/ai-codex": "workspace:*",
     "@opsense/ai-provider": "workspace:*",
+    "@opsense/collection-runtime": "workspace:*",
     "@opsense/collectors": "workspace:*",
     "@opsense/core": "workspace:*",
     "@opsense/discovery": "workspace:*",

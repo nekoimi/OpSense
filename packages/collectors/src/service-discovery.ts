@@ -6,6 +6,7 @@ import type {
   SocketRecord,
   SystemdUnitRecord,
 } from '@opsense/schema';
+import { mapWithConcurrency } from '@opsense/collection-runtime';
 import { getCommandSpec, toCollectionStatus } from '@opsense/ssh';
 import type { CommandExecutionResult, SafeCommandExecutor } from '@opsense/ssh';
 
@@ -452,24 +453,6 @@ function createCommandEvidence(
     },
     ...(status === 'success' || message.length === 0 ? {} : { message }),
   };
-}
-
-async function mapWithConcurrency<T, R>(
-  values: readonly T[],
-  concurrency: number,
-  worker: (value: T) => Promise<R>,
-): Promise<R[]> {
-  const results = new Array<R>(values.length);
-  let nextIndex = 0;
-  const runWorker = async (): Promise<void> => {
-    while (nextIndex < values.length) {
-      const index = nextIndex++;
-      const value = values[index];
-      if (value !== undefined) results[index] = await worker(value);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, runWorker));
-  return results;
 }
 
 function evidenceId(value: string): string {

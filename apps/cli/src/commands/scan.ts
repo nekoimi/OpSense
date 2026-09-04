@@ -1,4 +1,5 @@
 import { Command, InvalidArgumentError } from 'commander';
+import type { PipelineProfile } from '@opsense/schema';
 
 import { ExitCode, exitCodeForError } from '../exit-code.js';
 import type { LoggerFactory } from '../logger.js';
@@ -17,6 +18,7 @@ interface ScanOptions {
   identity?: string;
   password?: string;
   port: number;
+  profile: PipelineProfile;
   user: string;
   workspace?: string;
 }
@@ -32,6 +34,12 @@ export function createScanCommand(loggerFactory: LoggerFactory): Command {
     .option('--identity <path>', 'SSH private key file')
     .option('--password <password>', 'SSH password (not persisted)')
     .option('--accept-new-host-key', 'trust and store the host key on first connection')
+    .option(
+      '--profile <profile>',
+      'scan profile: fast, standard, or deep',
+      parseScanProfile,
+      'standard',
+    )
     .option('--config <path>', 'configuration file path')
     .option('--workspace <path>', 'local OpSense workspace directory');
 
@@ -66,6 +74,11 @@ export function parsePort(value: string): number {
     throw new InvalidArgumentError('SSH port must be an integer between 1 and 65535.');
   }
   return port;
+}
+
+export function parseScanProfile(value: string): PipelineProfile {
+  if (value === 'fast' || value === 'standard' || value === 'deep') return value;
+  throw new InvalidArgumentError('Scan profile must be fast, standard, or deep.');
 }
 
 export { createCliPasswordProvider } from '../workflows/scan-workflow.js';

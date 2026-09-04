@@ -1,12 +1,13 @@
 import { Command, InvalidArgumentError } from 'commander';
 import type { ReportFormat } from '@opsense/report';
+import type { PipelineProfile } from '@opsense/schema';
 
 import { ExitCode, exitCodeForError } from '../exit-code.js';
 import type { LoggerFactory } from '../logger.js';
 import { createInteractiveSudoPasswordProvider } from '../sudo-password.js';
 import { runInspectWorkflow } from '../workflows/inspect-workflow.js';
 import { parseReportFormats } from '../workflows/report-workflow.js';
-import { parsePort } from './scan.js';
+import { parsePort, parseScanProfile } from './scan.js';
 
 interface InspectOptions {
   acceptNewHostKey?: boolean;
@@ -19,6 +20,7 @@ interface InspectOptions {
   password?: string;
   port: number;
   provider: string;
+  profile: PipelineProfile;
   threadTimeoutMs: number;
   timeZone?: string;
   user: string;
@@ -39,6 +41,12 @@ export function createInspectCommand(loggerFactory: LoggerFactory): Command {
     .option('--identity <path>', 'SSH private key file')
     .option('--password <password>', 'SSH password (not persisted)')
     .option('--accept-new-host-key', 'trust and store the host key on first connection')
+    .option(
+      '--profile <profile>',
+      'scan profile: fast, standard, or deep',
+      parseScanProfile,
+      'standard',
+    )
     .option('--provider <provider>', 'AI provider: codex or noop', 'codex')
     .option('--model <model>', 'Codex model override')
     .option(

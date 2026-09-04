@@ -8,6 +8,7 @@ import type {
   NetworkSnapshot,
   StorageSnapshot,
 } from '@opsense/schema';
+import { mapWithConcurrency } from '@opsense/collection-runtime';
 import { getCommandSpec, toCollectionStatus } from '@opsense/ssh';
 import type { CommandExecutionResult, DistributionFamily, SafeCommandExecutor } from '@opsense/ssh';
 
@@ -299,24 +300,6 @@ export async function collectM3Snapshot(
   };
 
   return { evidence, host: { ...host, memory }, network, storage, unknowns };
-}
-
-async function mapWithConcurrency<T, R>(
-  values: readonly T[],
-  concurrency: number,
-  worker: (value: T) => Promise<R>,
-): Promise<R[]> {
-  const results = new Array<R>(values.length);
-  let nextIndex = 0;
-  const runWorker = async (): Promise<void> => {
-    while (nextIndex < values.length) {
-      const index = nextIndex++;
-      const value = values[index];
-      if (value !== undefined) results[index] = await worker(value);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, runWorker));
-  return results;
 }
 
 function buildCapabilities(attempts: ProbeAttempt[]): CommandCapability[] {

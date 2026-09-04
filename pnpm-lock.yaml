@@ -47,6 +47,9 @@ importers:
       '@opsense/ai-provider':
         specifier: workspace:*
         version: link:../../packages/ai-provider
+      '@opsense/collection-runtime':
+        specifier: workspace:*
+        version: link:../../packages/collection-runtime
       '@opsense/collectors':
         specifier: workspace:*
         version: link:../../packages/collectors
@@ -117,8 +120,17 @@ importers:
         specifier: workspace:*
         version: link:../schema
 
+  packages/collection-runtime:
+    dependencies:
+      '@opsense/schema':
+        specifier: workspace:*
+        version: link:../schema
+
   packages/collectors:
     dependencies:
+      '@opsense/collection-runtime':
+        specifier: workspace:*
+        version: link:../collection-runtime
       '@opsense/schema':
         specifier: workspace:*
         version: link:../schema

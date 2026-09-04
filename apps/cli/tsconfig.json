@@ -11,6 +11,7 @@
     { "path": "../../packages/agent-runtime" },
     { "path": "../../packages/ai-provider" },
     { "path": "../../packages/ai-codex" },
+    { "path": "../../packages/collection-runtime" },
     { "path": "../../packages/collectors" },
     { "path": "../../packages/core" },
     { "path": "../../packages/discovery" },

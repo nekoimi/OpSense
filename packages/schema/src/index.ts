@@ -7,6 +7,7 @@ export * from './discovery.js';
 export * from './evidence.js';
 export * from './host.js';
 export * from './network.js';
+export * from './pipeline.js';
 export * from './projection.js';
 export * from './redaction.js';
 export * from './report.js';

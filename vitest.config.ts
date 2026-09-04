@@ -11,6 +11,9 @@ export default defineConfig({
       '@opsense/agent-runtime': fileURLToPath(
         new URL('./packages/agent-runtime/src/index.ts', import.meta.url),
       ),
+      '@opsense/collection-runtime': fileURLToPath(
+        new URL('./packages/collection-runtime/src/index.ts', import.meta.url),
+      ),
       '@opsense/ai-provider': fileURLToPath(
         new URL('./packages/ai-provider/src/index.ts', import.meta.url),
       ),

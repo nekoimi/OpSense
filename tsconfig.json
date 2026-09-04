@@ -5,6 +5,7 @@
     { "path": "apps/cli" },
     { "path": "packages/ai-codex" },
     { "path": "packages/ai-provider" },
+    { "path": "packages/collection-runtime" },
     { "path": "packages/collectors" },
     { "path": "packages/core" },
     { "path": "packages/redaction" },

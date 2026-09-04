@@ -26,6 +26,7 @@
       "@opsense/ai-codex": ["packages/ai-codex/src/index.ts"],
       "@opsense/agent-runtime": ["packages/agent-runtime/src/index.ts"],
       "@opsense/ai-provider": ["packages/ai-provider/src/index.ts"],
+      "@opsense/collection-runtime": ["packages/collection-runtime/src/index.ts"],
       "@opsense/collectors": ["packages/collectors/src/index.ts"],
       "@opsense/core": ["packages/core/src/index.ts"],
       "@opsense/discovery": ["packages/discovery/src/index.ts"],

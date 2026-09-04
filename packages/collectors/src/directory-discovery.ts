@@ -1,3 +1,4 @@
+import { mapWithConcurrency } from '@opsense/collection-runtime';
 import type { ArtifactRecord, EvidenceRecord, PathSeedRecord } from '@opsense/schema';
 import { getCommandSpec, toCollectionStatus } from '@opsense/ssh';
 import type { CommandExecutionResult, SafeCommandExecutor } from '@opsense/ssh';
@@ -380,22 +381,4 @@ function syntheticResult(
     stdout: '',
     stdoutBytes: 0,
   };
-}
-
-async function mapWithConcurrency<T, R>(
-  values: readonly T[],
-  concurrency: number,
-  worker: (value: T) => Promise<R>,
-): Promise<R[]> {
-  const results = new Array<R>(values.length);
-  let nextIndex = 0;
-  const runWorker = async (): Promise<void> => {
-    while (nextIndex < values.length) {
-      const index = nextIndex++;
-      const value = values[index];
-      if (value !== undefined) results[index] = await worker(value);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, runWorker));
-  return results;
 }

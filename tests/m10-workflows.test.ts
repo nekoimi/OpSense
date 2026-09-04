@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { BaselineRelevanceClassifier } from '@opsense/ai-provider';
+import { PipelineRunTracker, emptyRunMetrics } from '@opsense/collection-runtime';
 import { redactSnapshot } from '@opsense/redaction';
 import type { AiAnalysis, AnalysisResult, ScanSnapshot } from '@opsense/schema';
 import {
@@ -94,6 +95,11 @@ describe('M10 CLI workflows', () => {
       connection: fakeConnection,
       executor: fakeExecutor,
       layout,
+      metrics: emptyRunMetrics(snapshot.session.id),
+      pipelineRun: new PipelineRunTracker({
+        runId: snapshot.session.id,
+        target: snapshot.session.target,
+      }).snapshot(),
       scanId: snapshot.session.id,
       snapshot: redacted.value,
       workspaceRoot: root,
