@@ -9,6 +9,7 @@ import type {
   StorageSnapshot,
 } from '@opsense/schema';
 import { mapWithConcurrency } from '@opsense/collection-runtime';
+import type { CollectionScheduler } from '@opsense/collection-runtime';
 import { getCommandSpec, toCollectionStatus } from '@opsense/ssh';
 import type { CommandExecutionResult, DistributionFamily, SafeCommandExecutor } from '@opsense/ssh';
 
@@ -199,6 +200,7 @@ export interface M3CollectionOptions {
   maxOutputBytes?: number;
   now?: () => Date;
   opsenseVersion: string;
+  scheduler?: CollectionScheduler;
   signal?: AbortSignal;
   useSudo?: boolean;
 }
@@ -223,10 +225,19 @@ export async function collectM3Snapshot(
     ...(options.signal === undefined ? {} : { signal: options.signal }),
     useSudo: (commandId: string) => options.useSudo === true && SUDO_COMMANDS.has(commandId),
   };
-  const osReleaseOutcome = await runProbe(executor, OS_RELEASE_PROBE, 'unknown', executionOptions);
+  const [osReleaseOutcome] = await mapWithConcurrency(
+    [OS_RELEASE_PROBE],
+    M3_COMMAND_CONCURRENCY,
+    (probe) => runProbe(executor, probe, 'unknown', executionOptions),
+    options.scheduler,
+  );
+  if (osReleaseOutcome === undefined) throw new Error('OS release probe was not scheduled.');
   const distribution = detectDistributionFamily(osReleaseOutcome.value ?? '');
-  const outcomes = await mapWithConcurrency(M3_PROBES, M3_COMMAND_CONCURRENCY, (probe) =>
-    runProbe(executor, probe, distribution, executionOptions),
+  const outcomes = await mapWithConcurrency(
+    M3_PROBES,
+    M3_COMMAND_CONCURRENCY,
+    (probe) => runProbe(executor, probe, distribution, executionOptions),
+    options.scheduler,
   );
   const allOutcomes: ProbeOutcome<unknown>[] = [osReleaseOutcome, ...outcomes];
   const attempts = allOutcomes.flatMap((outcome) => outcome.attempts);

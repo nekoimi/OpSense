@@ -64,14 +64,17 @@ describe('safe command specifications', () => {
         'process.list',
         'process.links',
         'service.systemd-details',
+        'service.systemd-show-batch',
         'docker.ps-basic',
         'docker.inspect',
+        'docker.inspect-batch',
         'directory.scan',
         'directory.scan-stat',
         'directory.read-config',
         'directory.stat-basic',
         'service.systemd-units',
         'directory.stat',
+        'directory.stat-batch',
       ]),
     );
     for (const forbidden of [
@@ -104,6 +107,21 @@ describe('safe command specifications', () => {
     expect(() =>
       renderCommand(getCommandSpec('service.systemd-show'), {
         unitName: "bad.service'; touch /tmp/owned; echo '",
+      }),
+    ).toThrowError(CommandSpecError);
+    expect(() =>
+      renderCommand(getCommandSpec('service.systemd-show-batch'), {
+        unitNames: ['safe.service', "bad.service'; touch /tmp/owned"],
+      }),
+    ).toThrowError(CommandSpecError);
+    const batch = renderCommand(getCommandSpec('directory.stat-batch'), {
+      paths: ['/opt/app one', '/srv/app-two'],
+    });
+    expect(batch.execution).toContain("'/opt/app one' '/srv/app-two'");
+    expect(batch.audit).not.toContain('/opt/app');
+    expect(() =>
+      renderCommand(getCommandSpec('directory.stat-batch'), {
+        paths: Array.from({ length: 65 }, (_, index) => `/opt/app-${index}`),
       }),
     ).toThrowError(CommandSpecError);
     expect(

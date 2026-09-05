@@ -1,11 +1,16 @@
 import { createHash } from 'node:crypto';
 
-import { PipelineRunTracker, RunMetricsCollector } from '@opsense/collection-runtime';
+import {
+  CollectionScheduler,
+  PipelineRunTracker,
+  RunMetricsCollector,
+} from '@opsense/collection-runtime';
 import {
   buildPathSeeds,
   collectM3Snapshot,
   collectM4Snapshot,
   collectM5Snapshot,
+  collectPathMetadataSnapshot,
 } from '@opsense/collectors';
 import { normalizeAndMergeServices } from '@opsense/core';
 import { redactForAudit, redactSnapshot } from '@opsense/redaction';
@@ -56,6 +61,7 @@ export interface ScanWorkflowDependencies {
   collectM3?: typeof collectM3Snapshot;
   collectM4?: typeof collectM4Snapshot;
   collectM5?: typeof collectM5Snapshot;
+  collectPathMetadata?: typeof collectPathMetadataSnapshot;
   now?: () => Date;
 }
 
@@ -90,6 +96,10 @@ export async function runScanWorkflow(
   const layout = await ensureRunWorkspace(scanId, workspaceRoot);
   const profile = options.profile ?? 'standard';
   const metrics = new RunMetricsCollector(scanId, now);
+  const scheduler = new CollectionScheduler({
+    concurrency: 4,
+    onTaskCompleted: (result) => metrics.addSchedulerMetrics(result),
+  });
   const pipeline = new PipelineRunTracker({
     now,
     profile,
@@ -101,6 +111,7 @@ export async function runScanWorkflow(
   let currentStage = 'created';
   let currentPipelineStage: PipelineStage | undefined;
   let auditWrite = Promise.resolve();
+  let auditWriteError: unknown;
   const writeStage = async (
     stage: string,
     state: ScanSession['state'] = stage as ScanSession['state'],
@@ -161,18 +172,20 @@ export async function runScanWorkflow(
       ...(workspaceRoot === undefined ? {} : { workspaceRoot }),
     });
     throwIfAborted(options.signal);
-    const executorAudit = (record: CommandAuditRecord): Promise<void> => {
+    const executorAudit = (record: CommandAuditRecord): void => {
       metrics.recordCommand(record);
-      auditWrite = auditWrite.then(() =>
-        appendJsonLine(layout.auditFile, redactForAudit(record, now).value),
-      );
-      return auditWrite;
+      auditWrite = auditWrite
+        .then(() => appendJsonLine(layout.auditFile, redactForAudit(record, now).value))
+        .catch((error: unknown) => {
+          auditWriteError ??= error;
+        });
     };
     executor = new SafeCommandExecutor(connection, executorAudit);
     const permissionsProbe = dependencies.detectPermissions ?? detectPermissions;
     const collectM3 = dependencies.collectM3 ?? collectM3Snapshot;
     const collectM4 = dependencies.collectM4 ?? collectM4Snapshot;
     const collectM5 = dependencies.collectM5 ?? collectM5Snapshot;
+    const collectPathMetadata = dependencies.collectPathMetadata ?? collectPathMetadataSnapshot;
 
     await writeStage('collecting');
     const permissions = await permissionsProbe(executor, {
@@ -211,12 +224,14 @@ export async function runScanWorkflow(
       commandTimeoutMs: loaded.config.ssh.commandTimeoutMs,
       maxOutputBytes: loaded.config.scan.maxCommandOutputBytes,
       opsenseVersion: VERSION,
+      scheduler,
       useSudo,
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     };
-    const collected = await collectM3(executor, collectionOptions);
-    throwIfAborted(options.signal);
-    const services = await collectM4(executor, collectionOptions);
+    const [collected, services] = await Promise.all([
+      collectM3(executor, collectionOptions),
+      collectM4(executor, collectionOptions),
+    ]);
     throwIfAborted(options.signal);
     const pathInput = {
       composeProjects: services.composeProjects,
@@ -234,17 +249,21 @@ export async function runScanWorkflow(
             maxFilesPerDirectory: loaded.config.scan.maxFilesPerDirectory,
             maxOutputBytes: loaded.config.scan.maxCommandOutputBytes,
             opsenseVersion: VERSION,
+            scheduler,
             useSudo,
             ...(options.signal === undefined ? {} : { signal: options.signal }),
           })
-        : {
-            artifacts: [],
-            evidence: [],
-            pathSeeds: buildPathSeeds(pathInput),
-            unknowns: [],
-          };
+        : await collectPathMetadata(executor, buildPathSeeds(pathInput), {
+            commandTimeoutMs: loaded.config.ssh.commandTimeoutMs,
+            maxOutputBytes: loaded.config.scan.maxCommandOutputBytes,
+            opsenseVersion: VERSION,
+            scheduler,
+            useSudo,
+            ...(options.signal === undefined ? {} : { signal: options.signal }),
+          });
     throwIfAborted(options.signal);
     await auditWrite;
+    if (auditWriteError !== undefined) throw auditWriteError;
 
     await writeStage('normalizing');
     const normalized = normalizeAndMergeServices({

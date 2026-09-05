@@ -30,6 +30,32 @@ describe('v3 collection runtime', () => {
     expect(results.map((result) => result.value)).toEqual([0, 1, 2, 3]);
   });
 
+  it('enforces one global concurrency limit across concurrent scheduler runs', async () => {
+    const completed: string[] = [];
+    const scheduler = new CollectionScheduler({
+      concurrency: 2,
+      onTaskCompleted: (result) => completed.push(result.taskId),
+    });
+    let active = 0;
+    let peak = 0;
+    const tasks = (prefix: string) =>
+      [0, 1, 2].map((value) => ({
+        taskId: `${prefix}-${value}`,
+        execute: async () => {
+          active += 1;
+          peak = Math.max(peak, active);
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          active -= 1;
+          return value;
+        },
+      }));
+
+    await Promise.all([scheduler.run(tasks('m3')), scheduler.run(tasks('m4'))]);
+
+    expect(peak).toBe(2);
+    expect(completed).toHaveLength(6);
+  });
+
   it('honors dependencies and skips dependants after failure', async () => {
     const events: string[] = [];
     const scheduler = new CollectionScheduler({ concurrency: 3 });

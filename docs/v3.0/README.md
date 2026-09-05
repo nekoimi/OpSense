@@ -25,7 +25,10 @@ v3.0 是未正式发布项目的全新主线，不兼容旧版数据、CLI、工
 - 每次扫描持续写入 `run.json` 与 `metrics.json`，记录阶段、检查点、SSH 命令次数和耗时。
 - 新增共享 Collection Scheduler，支持统一并发、优先级、依赖、取消和运行内语义缓存。
 - M3、M4、M5 采集器已移除各自重复的并发辅助实现，统一使用 Collection Runtime。
+- M3 与 M4 基线采集已并行运行，并由同一个全局 Scheduler 限制为最多 4 个 SSH channel；审计写入改为阶段末汇合，不阻塞后续 channel 调度。
+- systemd 详情按 48 个 unit 分块、Docker inspect 按 48 个容器分块；失败批次使用二分隔离，正常路径不再逐对象查询。
+- 初始路径元数据按 64 个路径执行批量 `stat`，不读取配置内容。
 - `scan` 与 `inspect` 支持 `--profile fast|standard|deep`，默认 `standard`。
 - `fast` 和 `standard` 初扫只构建路径种子；仅 `deep` 执行原 M5 递归目录与配置读取，从默认链路移除主要 N+1 来源。
 
-这一批完成了 M30 的扫描侧骨架，并启动了 M31/M32。全流程指标与预算执行、批量 systemd/Docker/stat、Resource Graph、稳定 Deployment Inventory 和 Batch Discovery 尚未完成，不能把当前状态视为 v3.0 Definition of Done。
+这一批完成了 M30 的扫描侧骨架和 M31 的核心 N+1 改造，并启动了 M32。自适应并发、全流程指标与预算执行、Resource Graph、稳定 Deployment Inventory 和 Batch Discovery 尚未完成，不能把当前状态视为 v3.0 Definition of Done。

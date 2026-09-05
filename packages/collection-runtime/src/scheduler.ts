@@ -23,6 +23,7 @@ export interface CollectionTaskResult<T> {
 export interface CollectionSchedulerOptions {
   concurrency?: number;
   now?: () => number;
+  onTaskCompleted?: (result: CollectionTaskResult<unknown>) => void;
 }
 
 interface CachedExecution {
@@ -39,7 +40,10 @@ const PRIORITY_ORDER: Record<CollectionTaskPriority, number> = {
 export class CollectionScheduler {
   private readonly concurrency: number;
   private readonly now: () => number;
+  private readonly onTaskCompleted: ((result: CollectionTaskResult<unknown>) => void) | undefined;
   private readonly cache = new Map<string, CachedExecution>();
+  private activeExecutions = 0;
+  private readonly permitWaiters: Array<(release: () => void) => void> = [];
 
   public constructor(options: CollectionSchedulerOptions = {}) {
     const concurrency = options.concurrency ?? 4;
@@ -47,6 +51,7 @@ export class CollectionScheduler {
       throw new Error('Collection scheduler concurrency must be a positive integer.');
     this.concurrency = concurrency;
     this.now = options.now ?? (() => Date.now());
+    this.onTaskCompleted = options.onTaskCompleted;
   }
 
   public clearCache(): void {
@@ -72,28 +77,32 @@ export class CollectionScheduler {
         if (
           dependencyResults.some((result) => result !== undefined && result.status !== 'success')
         ) {
-          completed.set(taskId, {
+          const result: CollectionTaskResult<T> = {
             cacheHit: false,
             durationMs: 0,
             error: 'A dependency did not complete successfully.',
             queuedDurationMs: Math.max(0, this.now() - runStartedAt),
             status: 'skipped',
             taskId,
-          });
+          };
+          completed.set(taskId, result);
+          this.onTaskCompleted?.(result);
           remaining.delete(taskId);
         }
       }
 
       if (options.signal?.aborted === true) {
         for (const taskId of remaining) {
-          completed.set(taskId, {
+          const result: CollectionTaskResult<T> = {
             cacheHit: false,
             durationMs: 0,
             error: 'Collection task was cancelled.',
             queuedDurationMs: Math.max(0, this.now() - runStartedAt),
             status: 'cancelled',
             taskId,
-          });
+          };
+          completed.set(taskId, result);
+          this.onTaskCompleted?.(result);
         }
         remaining.clear();
       }
@@ -133,6 +142,7 @@ export class CollectionScheduler {
       const settled = await Promise.race(active.values());
       active.delete(settled.id);
       completed.set(settled.id, settled.result);
+      this.onTaskCompleted?.(settled.result);
     }
 
     return tasks.map((task) => completed.get(task.taskId)!);
@@ -143,18 +153,34 @@ export class CollectionScheduler {
     queuedDurationMs: number,
     signal: AbortSignal | undefined,
   ): Promise<CollectionTaskResult<T>> {
+    const waitingAt = this.now();
+    const release = await this.acquirePermit();
+    const globallyQueuedDurationMs = Math.max(0, this.now() - waitingAt);
+    if (signal?.aborted === true) {
+      release();
+      return {
+        cacheHit: false,
+        durationMs: 0,
+        error: 'Collection task was cancelled.',
+        queuedDurationMs: queuedDurationMs + globallyQueuedDurationMs,
+        status: 'cancelled',
+        taskId: task.taskId,
+      };
+    }
     const startedAt = this.now();
     const existing = task.cacheKey === undefined ? undefined : this.cache.get(task.cacheKey);
-    const execution = existing?.promise ?? task.execute(signal);
-    if (task.cacheKey !== undefined && existing === undefined)
+    const execution = existing?.promise ?? Promise.resolve().then(() => task.execute(signal));
+    if (task.cacheKey !== undefined && existing === undefined) {
       this.cache.set(task.cacheKey, { ownerTaskId: task.taskId, promise: execution });
+    }
+    if (existing !== undefined) release();
 
     try {
       const value = (await execution) as T;
       return {
         cacheHit: existing !== undefined,
         durationMs: existing === undefined ? Math.max(0, this.now() - startedAt) : 0,
-        queuedDurationMs,
+        queuedDurationMs: queuedDurationMs + globallyQueuedDurationMs,
         status: 'success',
         taskId: task.taskId,
         value,
@@ -165,11 +191,35 @@ export class CollectionScheduler {
         cacheHit: existing !== undefined,
         durationMs: Math.max(0, this.now() - startedAt),
         error: error instanceof Error ? error.message : String(error),
-        queuedDurationMs,
-        status: signal?.aborted === true ? 'cancelled' : 'failed',
+        queuedDurationMs: queuedDurationMs + globallyQueuedDurationMs,
+        status: isAborted(signal) ? 'cancelled' : 'failed',
         taskId: task.taskId,
       };
+    } finally {
+      if (existing === undefined) release();
     }
+  }
+
+  private acquirePermit(): Promise<() => void> {
+    if (this.activeExecutions < this.concurrency) {
+      this.activeExecutions += 1;
+      return Promise.resolve(this.createRelease());
+    }
+    return new Promise((resolve) => this.permitWaiters.push(resolve));
+  }
+
+  private createRelease(): () => void {
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.activeExecutions -= 1;
+      const next = this.permitWaiters.shift();
+      if (next !== undefined) {
+        this.activeExecutions += 1;
+        next(this.createRelease());
+      }
+    };
   }
 }
 
@@ -177,8 +227,8 @@ export async function mapWithConcurrency<T, R>(
   values: readonly T[],
   concurrency: number,
   worker: (value: T, index: number) => Promise<R>,
+  scheduler = new CollectionScheduler({ concurrency }),
 ): Promise<R[]> {
-  const scheduler = new CollectionScheduler({ concurrency });
   const results = await scheduler.run(
     values.map((value, index) => ({
       execute: () => worker(value, index),
@@ -217,4 +267,8 @@ function validateTasks<T>(tasks: readonly CollectionTask<T>[]): void {
     visited.add(taskId);
   };
   for (const task of tasks) visit(task.taskId);
+}
+
+function isAborted(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true;
 }

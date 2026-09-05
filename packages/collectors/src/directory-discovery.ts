@@ -1,4 +1,5 @@
 import { mapWithConcurrency } from '@opsense/collection-runtime';
+import type { CollectionScheduler } from '@opsense/collection-runtime';
 import type { ArtifactRecord, EvidenceRecord, PathSeedRecord } from '@opsense/schema';
 import { getCommandSpec, toCollectionStatus } from '@opsense/ssh';
 import type { CommandExecutionResult, SafeCommandExecutor } from '@opsense/ssh';
@@ -41,6 +42,7 @@ export interface M5CollectionOptions {
   maxFilesPerDirectory: number;
   maxOutputBytes?: number;
   opsenseVersion: string;
+  scheduler?: CollectionScheduler;
   signal?: AbortSignal;
   useSudo?: boolean;
 }
@@ -62,6 +64,7 @@ export async function collectM5Snapshot(
     pathSeeds.filter(isPathSeedScanEligible),
     M5_COMMAND_CONCURRENCY,
     (seed) => scanSeed(executor, seed, options),
+    options.scheduler,
   );
   const attempts = scanResults.flatMap((result) => result.attempts);
   const unknowns = scanResults.flatMap((result) => result.unknowns);
@@ -191,42 +194,47 @@ async function collectConfigSummaries(
     return format === undefined ? [] : [{ artifact, format }];
   });
   return (
-    await mapWithConcurrency(candidates, M5_COMMAND_CONCURRENCY, async ({ artifact, format }) => {
-      const evidenceId = `evidence:config.summary:${artifact.id.slice('artifact:'.length)}`;
-      artifact.evidenceIds = [...new Set([...artifact.evidenceIds, evidenceId])];
-      if (artifact.sizeBytes !== undefined && artifact.sizeBytes > options.maxConfigFileBytes) {
-        return {
-          commandExecuted: false,
-          evidenceId,
-          kind: 'derived' as const,
-          result: syntheticResult('directory.read-config', 'success'),
-          source: artifact.path,
-          status: 'success' as const,
-          value: {
-            format,
-            maxBytes: options.maxConfigFileBytes,
-            read: false,
-            reason: 'size_limit',
-          },
-        };
-      }
-      const result = await executeConfigRead(executor, artifact.path, options);
-      const attempt: M5Attempt = { evidenceId, result, source: artifact.path };
-      if (result.status !== 'success') {
-        if (result.status !== 'command_missing') {
-          unknowns.push(`config.read:${artifact.path}: ${result.status}`);
+    await mapWithConcurrency(
+      candidates,
+      M5_COMMAND_CONCURRENCY,
+      async ({ artifact, format }) => {
+        const evidenceId = `evidence:config.summary:${artifact.id.slice('artifact:'.length)}`;
+        artifact.evidenceIds = [...new Set([...artifact.evidenceIds, evidenceId])];
+        if (artifact.sizeBytes !== undefined && artifact.sizeBytes > options.maxConfigFileBytes) {
+          return {
+            commandExecuted: false,
+            evidenceId,
+            kind: 'derived' as const,
+            result: syntheticResult('directory.read-config', 'success'),
+            source: artifact.path,
+            status: 'success' as const,
+            value: {
+              format,
+              maxBytes: options.maxConfigFileBytes,
+              read: false,
+              reason: 'size_limit',
+            },
+          };
+        }
+        const result = await executeConfigRead(executor, artifact.path, options);
+        const attempt: M5Attempt = { evidenceId, result, source: artifact.path };
+        if (result.status !== 'success') {
+          if (result.status !== 'command_missing') {
+            unknowns.push(`config.read:${artifact.path}: ${result.status}`);
+          }
+          return attempt;
+        }
+        try {
+          attempt.value = { ...parseConfigSummary(format, result.stdout), read: true };
+        } catch {
+          attempt.status = 'failed';
+          attempt.message = 'Structured parser rejected the configuration file.';
+          attempt.value = { format, read: true };
         }
         return attempt;
-      }
-      try {
-        attempt.value = { ...parseConfigSummary(format, result.stdout), read: true };
-      } catch {
-        attempt.status = 'failed';
-        attempt.message = 'Structured parser rejected the configuration file.';
-        attempt.value = { format, read: true };
-      }
-      return attempt;
-    })
+      },
+      options.scheduler,
+    )
   ).filter((attempt): attempt is M5Attempt => attempt !== undefined);
 }
 

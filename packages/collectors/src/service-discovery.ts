@@ -7,13 +7,18 @@ import type {
   SystemdUnitRecord,
 } from '@opsense/schema';
 import { mapWithConcurrency } from '@opsense/collection-runtime';
+import type { CollectionScheduler } from '@opsense/collection-runtime';
 import { getCommandSpec, toCollectionStatus } from '@opsense/ssh';
-import type { CommandExecutionResult, SafeCommandExecutor } from '@opsense/ssh';
+import type {
+  CommandExecutionResult,
+  CommandParameterValue,
+  SafeCommandExecutor,
+} from '@opsense/ssh';
 
 import {
   buildComposeProjects,
   minimalContainer,
-  parseDockerInspect,
+  parseDockerInspectBatch,
   parseDockerPs,
   parseDockerPsBasic,
 } from './docker.js';
@@ -32,11 +37,12 @@ interface M4Attempt extends ProbeAttempt {
 }
 
 export const M4_COMMAND_CONCURRENCY = 4;
+export const SYSTEMD_DETAIL_BATCH_SIZE = 48;
+export const DOCKER_INSPECT_BATCH_SIZE = 48;
 
 const M4_BASE_COMMAND_IDS = [
   'service.systemd-units',
   'service.systemd-files',
-  'service.systemd-details',
   'process.list',
   'process.links',
   'process.passwd',
@@ -53,6 +59,7 @@ const SUDO_COMMANDS = new Set([
   'docker.ps',
   'docker.ps-basic',
   'docker.inspect',
+  'docker.inspect-batch',
   'docker.compose-ls',
   'docker-compose.ls',
 ]);
@@ -62,6 +69,7 @@ export interface M4CollectionOptions {
   maxOutputBytes?: number;
   now?: () => Date;
   opsenseVersion: string;
+  scheduler?: CollectionScheduler;
   signal?: AbortSignal;
   useSudo?: boolean;
 }
@@ -84,6 +92,7 @@ export async function collectM4Snapshot(
     M4_BASE_COMMAND_IDS,
     M4_COMMAND_CONCURRENCY,
     async (commandId) => [commandId, await executeCommand(executor, commandId, options)] as const,
+    options.scheduler,
   );
   const results = new Map(baseEntries);
   const processLinksResult = normalizePartialFindResult(results.get('process.links'));
@@ -136,7 +145,7 @@ export async function collectM4Snapshot(
         successfulOutput(results, 'service.systemd-files'),
         systemdDetails.source,
         {
-          details: evidenceId('service.systemd-details'),
+          details: evidenceId('service.systemd-show-batch'),
           detailsByUnit: systemdDetails.evidenceIds,
           files: evidenceId('service.systemd-files'),
           units: evidenceId('service.systemd-units'),
@@ -178,36 +187,96 @@ async function collectSystemdDetails(
 ): Promise<{ evidenceIds: Map<string, string>; source: string }> {
   const units = parseUnitList(successfulOutput(results, 'service.systemd-units'));
   const files = parseUnitFiles(successfulOutput(results, 'service.systemd-files'));
-  const bulkSource = successfulOutput(results, 'service.systemd-details');
-  const bulkDetails = parseUnitDetails(bulkSource);
-  const names = [...new Set([...units.keys(), ...files.keys()])];
-  const evidenceIds = new Map<string, string>(
-    [...bulkDetails.keys()].map((name) => [name, evidenceId('service.systemd-details')]),
-  );
-  const missingNames = names.filter(
-    (name) => !bulkDetails.has(name) && !name.endsWith('@.service'),
-  );
-  const detailSources = await mapWithConcurrency(
-    missingNames,
+  const names = [...new Set([...units.keys(), ...files.keys()])]
+    .filter((name) => !name.endsWith('@.service'))
+    .sort();
+  const batches = await mapWithConcurrency(
+    chunk(names, SYSTEMD_DETAIL_BATCH_SIZE),
     M4_COMMAND_CONCURRENCY,
-    async (unitName) => {
-      const result = await executeCommand(executor, 'service.systemd-show', options, { unitName });
-      const unitEvidenceId = evidenceId(`service.systemd-show:${safeIdPart(unitName)}`);
-      attempts.push({ evidenceId: unitEvidenceId, result });
-      if (result.status !== 'success') {
-        unknowns.push(`service.systemd-show:${unitName}: ${result.status}`);
-        return '';
-      }
-      evidenceIds.set(unitName, unitEvidenceId);
-      return result.stdout;
-    },
+    (unitNames) => collectSystemdDetailBatch(executor, unitNames, attempts, options, unknowns),
+    options.scheduler,
   );
   return {
-    evidenceIds,
-    source: [bulkSource, ...detailSources]
+    evidenceIds: new Map(batches.flatMap((batch) => [...batch.evidenceIds.entries()])),
+    source: batches
+      .flatMap((batch) => batch.sources)
       .filter((source) => source.trim().length > 0)
       .join('\n\n'),
   };
+}
+
+interface SystemdDetailBatchResult {
+  evidenceIds: Map<string, string>;
+  sources: string[];
+}
+
+async function collectSystemdDetailBatch(
+  executor: SafeCommandExecutor,
+  unitNames: readonly string[],
+  attempts: M4Attempt[],
+  options: M4CollectionOptions,
+  unknowns: string[],
+): Promise<SystemdDetailBatchResult> {
+  const result = await executeCommand(executor, 'service.systemd-show-batch', options, {
+    unitNames,
+  });
+  const batchEvidenceId = evidenceId(batchId('service.systemd-show-batch', unitNames));
+  attempts.push({ evidenceId: batchEvidenceId, result });
+  if (result.status !== 'success') {
+    if (unitNames.length > 1) {
+      const [left, right] = splitBatch(unitNames);
+      return mergeSystemdBatches(
+        await collectSystemdDetailBatch(executor, left, attempts, options, unknowns),
+        await collectSystemdDetailBatch(executor, right, attempts, options, unknowns),
+      );
+    }
+    unknowns.push(`service.systemd-show:${unitNames[0] ?? 'unknown'}: ${result.status}`);
+    return { evidenceIds: new Map(), sources: [] };
+  }
+
+  const requestedNames = new Set(unitNames);
+  const details = new Map(
+    [...parseUnitDetails(result.stdout)].filter(([name]) => requestedNames.has(name)),
+  );
+  const evidenceIds = new Map([...details.keys()].map((name) => [name, batchEvidenceId]));
+  const missing = unitNames.filter((name) => !details.has(name));
+  const current = { evidenceIds, sources: [formatUnitDetails(details)] };
+  if (missing.length === 0) return current;
+  if (unitNames.length === 1) {
+    unknowns.push(`service.systemd-show:${unitNames[0] ?? 'unknown'}: detail_missing`);
+    return current;
+  }
+  if (missing.length === unitNames.length) {
+    const [left, right] = splitBatch(unitNames);
+    return mergeSystemdBatches(
+      await collectSystemdDetailBatch(executor, left, attempts, options, unknowns),
+      await collectSystemdDetailBatch(executor, right, attempts, options, unknowns),
+    );
+  }
+  return mergeSystemdBatches(
+    current,
+    await collectSystemdDetailBatch(executor, missing, attempts, options, unknowns),
+  );
+}
+
+function mergeSystemdBatches(
+  left: SystemdDetailBatchResult,
+  right: SystemdDetailBatchResult,
+): SystemdDetailBatchResult {
+  return {
+    evidenceIds: new Map([...left.evidenceIds, ...right.evidenceIds]),
+    sources: [...left.sources, ...right.sources],
+  };
+}
+
+function formatUnitDetails(details: ReadonlyMap<string, Record<string, string>>): string {
+  return [...details.values()]
+    .map((values) =>
+      Object.entries(values)
+        .map(([key, value]) => `${key}=${value}`)
+        .join('\n'),
+    )
+    .join('\n\n');
 }
 
 async function collectSockets(
@@ -230,7 +299,7 @@ async function collectSockets(
     }
   }
 
-  const fallback = await executeCommand(executor, 'network.sockets-netstat', options);
+  const fallback = await executeStandaloneCommand(executor, 'network.sockets-netstat', options);
   results.set(fallback.commandId, fallback);
   attempts.push({ result: fallback });
   if (fallback.status === 'success') {
@@ -266,7 +335,7 @@ async function collectDocker(
 
   let summaries = parseDockerSummaries(psResult, attempts, parseDockerPs);
   if (summaries === undefined || psResult === undefined) {
-    const fallback = await executeCommand(executor, 'docker.ps-basic', options);
+    const fallback = await executeStandaloneCommand(executor, 'docker.ps-basic', options);
     results.set(fallback.commandId, fallback);
     attempts.push({ result: fallback });
     psResult = fallback;
@@ -285,28 +354,22 @@ async function collectDocker(
 
   const dockerListEvidenceId = evidenceId(psResult.commandId);
 
-  const containers = await mapWithConcurrency(
-    summaries,
-    M4_COMMAND_CONCURRENCY,
-    async (summary): Promise<ContainerRecord> => {
-      const result = await executeCommand(executor, 'docker.inspect', options, {
-        containerId: summary.id,
-      });
-      const inspectId = evidenceId(`docker.inspect:${summary.id.toLowerCase()}`);
-      attempts.push({ evidenceId: inspectId, result });
-      if (result.status !== 'success') {
-        unknowns.push(`docker.inspect:${shortId(summary.id)}: ${result.status}`);
-        return minimalContainer(summary, dockerListEvidenceId);
-      }
-      try {
-        return parseDockerInspect(result.stdout, inspectId, summary);
-      } catch (error) {
-        markParseError(attempts, result, error);
-        unknowns.push(`docker.inspect:${shortId(summary.id)}: parsing_failed`);
-        return minimalContainer(summary, dockerListEvidenceId);
-      }
-    },
-  );
+  const containers = (
+    await mapWithConcurrency(
+      chunk(summaries, DOCKER_INSPECT_BATCH_SIZE),
+      M4_COMMAND_CONCURRENCY,
+      (batch) =>
+        collectDockerInspectBatch(
+          executor,
+          batch,
+          dockerListEvidenceId,
+          attempts,
+          options,
+          unknowns,
+        ),
+      options.scheduler,
+    )
+  ).flat();
 
   const composeResult = await collectComposeList(executor, attempts, options);
   const composeProjects = parseOptional(
@@ -321,6 +384,115 @@ async function collectDocker(
     buildComposeProjects(containers, undefined, undefined),
   );
   return { composeProjects, containers };
+}
+
+async function collectDockerInspectBatch(
+  executor: SafeCommandExecutor,
+  summaries: readonly DockerPsSummary[],
+  dockerListEvidenceId: string,
+  attempts: M4Attempt[],
+  options: M4CollectionOptions,
+  unknowns: string[],
+): Promise<ContainerRecord[]> {
+  const result = await executeCommand(executor, 'docker.inspect-batch', options, {
+    containerIds: summaries.map((summary) => summary.id),
+  });
+  const inspectId = evidenceId(
+    batchId(
+      'docker.inspect-batch',
+      summaries.map((summary) => summary.id.toLowerCase()),
+    ),
+  );
+  attempts.push({ evidenceId: inspectId, result });
+  if (result.status !== 'success') {
+    return recoverDockerBatch(
+      executor,
+      summaries,
+      dockerListEvidenceId,
+      attempts,
+      options,
+      unknowns,
+      result.status,
+    );
+  }
+
+  let parsed: ContainerRecord[];
+  try {
+    parsed = parseDockerInspectBatch(result.stdout, inspectId, summaries);
+  } catch (error) {
+    markParseError(attempts, result, error);
+    return recoverDockerBatch(
+      executor,
+      summaries,
+      dockerListEvidenceId,
+      attempts,
+      options,
+      unknowns,
+      'parsing_failed',
+    );
+  }
+
+  const parsedIds = new Set(parsed.map((container) => container.id.slice('container:'.length)));
+  const missing = summaries.filter((summary) => !parsedIds.has(summary.id.toLowerCase()));
+  if (missing.length === 0) return parsed;
+  if (missing.length === summaries.length) {
+    return recoverDockerBatch(
+      executor,
+      summaries,
+      dockerListEvidenceId,
+      attempts,
+      options,
+      unknowns,
+      'detail_missing',
+    );
+  }
+  return [
+    ...parsed,
+    ...(await collectDockerInspectBatch(
+      executor,
+      missing,
+      dockerListEvidenceId,
+      attempts,
+      options,
+      unknowns,
+    )),
+  ];
+}
+
+async function recoverDockerBatch(
+  executor: SafeCommandExecutor,
+  summaries: readonly DockerPsSummary[],
+  dockerListEvidenceId: string,
+  attempts: M4Attempt[],
+  options: M4CollectionOptions,
+  unknowns: string[],
+  failure: string,
+): Promise<ContainerRecord[]> {
+  if (summaries.length > 1) {
+    const [left, right] = splitBatch(summaries);
+    return [
+      ...(await collectDockerInspectBatch(
+        executor,
+        left,
+        dockerListEvidenceId,
+        attempts,
+        options,
+        unknowns,
+      )),
+      ...(await collectDockerInspectBatch(
+        executor,
+        right,
+        dockerListEvidenceId,
+        attempts,
+        options,
+        unknowns,
+      )),
+    ];
+  }
+  const summary = summaries[0];
+  if (summary === undefined) return [];
+  unknowns.push(`docker.inspect:${shortId(summary.id)}: ${failure}`);
+  return [minimalContainer(summary, dockerListEvidenceId)];
 }
 
 function parseDockerSummaries(
@@ -343,7 +515,7 @@ async function collectComposeList(
   options: M4CollectionOptions,
 ): Promise<CommandExecutionResult | undefined> {
   for (const commandId of ['docker.compose-ls', 'docker-compose.ls']) {
-    const result = await executeCommand(executor, commandId, options);
+    const result = await executeStandaloneCommand(executor, commandId, options);
     attempts.push({ result });
     if (result.status === 'success') return result;
   }
@@ -354,7 +526,7 @@ async function executeCommand(
   executor: SafeCommandExecutor,
   commandId: string,
   options: M4CollectionOptions,
-  parameters: Readonly<Record<string, string>> = {},
+  parameters: Readonly<Record<string, CommandParameterValue>> = {},
 ): Promise<CommandExecutionResult> {
   const spec = getCommandSpec(commandId);
   return executor.execute(spec, parameters, {
@@ -369,6 +541,40 @@ async function executeCommand(
         : Math.min(spec.timeoutMs, options.commandTimeoutMs),
     ...(options.useSudo === true && SUDO_COMMANDS.has(commandId) ? { useSudo: true } : {}),
   });
+}
+
+async function executeStandaloneCommand(
+  executor: SafeCommandExecutor,
+  commandId: string,
+  options: M4CollectionOptions,
+  parameters: Readonly<Record<string, CommandParameterValue>> = {},
+): Promise<CommandExecutionResult> {
+  if (options.scheduler === undefined) {
+    return executeCommand(executor, commandId, options, parameters);
+  }
+  const [scheduled] = await options.scheduler.run(
+    [
+      {
+        execute: () => executeCommand(executor, commandId, options, parameters),
+        taskId: `command:${commandId}`,
+      },
+    ],
+    options.signal === undefined ? {} : { signal: options.signal },
+  );
+  if (scheduled?.status === 'success' && scheduled.value !== undefined) return scheduled.value;
+  const at = (options.now ?? (() => new Date()))().toISOString();
+  return {
+    commandId,
+    durationMs: scheduled?.durationMs ?? 0,
+    errorMessage: scheduled?.error ?? 'Command was not scheduled.',
+    finishedAt: at,
+    startedAt: at,
+    status: scheduled?.status === 'cancelled' ? 'cancelled' : 'failed',
+    stderr: '',
+    stderrBytes: 0,
+    stdout: '',
+    stdoutBytes: 0,
+  };
 }
 
 function parseOrFallback<T>(
@@ -461,6 +667,25 @@ function evidenceId(value: string): string {
 
 function shortId(value: string): string {
   return value.slice(0, 12).toLowerCase();
+}
+
+function chunk<T>(values: readonly T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return chunks;
+}
+
+function splitBatch<T>(values: readonly T[]): [readonly T[], readonly T[]] {
+  const middle = Math.ceil(values.length / 2);
+  return [values.slice(0, middle), values.slice(middle)];
+}
+
+function batchId(prefix: string, values: readonly string[]): string {
+  const first = safeIdPart(values[0] ?? 'empty');
+  const last = safeIdPart(values.at(-1) ?? 'empty');
+  return `${prefix}:${first}:${last}:${values.length}`;
 }
 
 function safeIdPart(value: string): string {

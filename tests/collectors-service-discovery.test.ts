@@ -1,4 +1,9 @@
-import { M4_COMMAND_CONCURRENCY, collectM4Snapshot } from '@opsense/collectors';
+import {
+  DOCKER_INSPECT_BATCH_SIZE,
+  M4_COMMAND_CONCURRENCY,
+  SYSTEMD_DETAIL_BATCH_SIZE,
+  collectM4Snapshot,
+} from '@opsense/collectors';
 import {
   ComposeProjectRecordSchema,
   ContainerRecordSchema,
@@ -8,7 +13,7 @@ import {
   validateSchema,
 } from '@opsense/schema';
 import { SafeCommandExecutor, getCommandSpec, renderCommand } from '@opsense/ssh';
-import type { RawCommandResult, RemoteCommandTransport } from '@opsense/ssh';
+import type { CommandParameterValue, RawCommandResult, RemoteCommandTransport } from '@opsense/ssh';
 import { describe, expect, it } from 'vitest';
 
 import { readFixture } from './support/read-fixture.js';
@@ -149,15 +154,38 @@ describe('M4 collection orchestration', () => {
     expect(transport.maximumActive).toBeLessThanOrEqual(M4_COMMAND_CONCURRENCY);
     expect(transport.maximumActive).toBeGreaterThan(1);
   });
+
+  it('does not produce systemd or Docker N+1 detail commands on large hosts', async () => {
+    const systemdCount = 300;
+    const dockerCount = 100;
+    const outputs = createLargeHostOutputs(systemdCount, dockerCount);
+    const transport = new FixtureTransport(outputs);
+
+    const collected = await collectM4Snapshot(new SafeCommandExecutor(transport), {
+      opsenseVersion: '3.0.0',
+    });
+
+    expect(collected.systemdUnits).toHaveLength(systemdCount);
+    expect(collected.containers).toHaveLength(dockerCount);
+    expect(
+      transport.commands.filter((command) => command.startsWith("'systemctl' 'show'")).length,
+    ).toBe(Math.ceil(systemdCount / SYSTEMD_DETAIL_BATCH_SIZE));
+    expect(
+      transport.commands.filter((command) => command.startsWith("'docker' 'inspect'")).length,
+    ).toBe(Math.ceil(dockerCount / DOCKER_INSPECT_BATCH_SIZE));
+  });
 });
 
 class FixtureTransport implements RemoteCommandTransport {
+  public readonly commands: string[] = [];
+
   public constructor(
     private readonly outputs: ReadonlyMap<string, string>,
     private readonly overrides: ReadonlyMap<string, RawCommandResult> = new Map(),
   ) {}
 
   public executeRaw(command: string): Promise<RawCommandResult> {
+    this.commands.push(command);
     const override = this.overrides.get(command);
     if (override !== undefined) return Promise.resolve(override);
     const stdout = this.outputs.get(command);
@@ -182,6 +210,78 @@ class FixtureTransport implements RemoteCommandTransport {
       stdoutBytes: Buffer.byteLength(stdout),
     });
   }
+}
+
+function createLargeHostOutputs(systemdCount: number, dockerCount: number): Map<string, string> {
+  const unitNames = Array.from(
+    { length: systemdCount },
+    (_, index) => `app-${String(index).padStart(4, '0')}.service`,
+  );
+  const containerIds = Array.from({ length: dockerCount }, (_, index) =>
+    index.toString(16).padStart(64, '0'),
+  );
+  const outputs = new Map<string, string>([
+    [
+      executionCommand('service.systemd-units'),
+      unitNames.map((name) => `${name} loaded active running Application`).join('\n'),
+    ],
+    [
+      executionCommand('service.systemd-files'),
+      unitNames.map((name) => `${name} enabled enabled`).join('\n'),
+    ],
+    [executionCommand('process.list'), ''],
+    [executionCommand('process.links'), ''],
+    [executionCommand('process.passwd'), ''],
+    [executionCommand('network.sockets'), ''],
+    [executionCommand('docker.info'), '{}'],
+    [
+      executionCommand('docker.ps'),
+      containerIds
+        .map((id, index) =>
+          JSON.stringify({
+            ID: id,
+            Image: `example/app:${index}`,
+            Names: `app-${index}`,
+            State: 'running',
+          }),
+        )
+        .join('\n'),
+    ],
+    [executionCommand('docker.compose-ls'), '[]'],
+  ]);
+  for (let index = 0; index < unitNames.length; index += SYSTEMD_DETAIL_BATCH_SIZE) {
+    const batch = unitNames.slice(index, index + SYSTEMD_DETAIL_BATCH_SIZE);
+    outputs.set(
+      executionCommand('service.systemd-show-batch', { unitNames: batch }),
+      batch
+        .map(
+          (name) =>
+            `Id=${name}\nDescription=Application\nLoadState=loaded\nActiveState=active\nSubState=running\nUnitFileState=enabled\nMainPID=0`,
+        )
+        .join('\n\n'),
+    );
+  }
+  for (let index = 0; index < containerIds.length; index += DOCKER_INSPECT_BATCH_SIZE) {
+    const batch = containerIds.slice(index, index + DOCKER_INSPECT_BATCH_SIZE);
+    outputs.set(
+      executionCommand('docker.inspect-batch', { containerIds: batch }),
+      JSON.stringify(
+        batch.map((id) => {
+          const itemIndex = Number.parseInt(id.slice(-8), 16);
+          return {
+            Config: { Env: [], Image: `example/app:${itemIndex}`, Labels: {} },
+            HostConfig: {},
+            Id: id,
+            Mounts: [],
+            Name: `/app-${itemIndex}`,
+            NetworkSettings: { Networks: {}, Ports: {} },
+            State: { Pid: itemIndex + 1, Status: 'running' },
+          };
+        }),
+      ),
+    );
+  }
+  return outputs;
 }
 
 class ConcurrencyTransport implements RemoteCommandTransport {
@@ -222,13 +322,18 @@ async function createOutputs(): Promise<Map<string, string>> {
     readFixture('m4/docker-inspect-worker.json'),
     readFixture('m4/compose-ls.json'),
   ]);
+  const systemdNames = ['legacy-worker.service', 'order-api.service', 'ssh.service'];
+  const dockerIds = [containerId, stoppedContainerId];
+  const dockerBatch = JSON.stringify([
+    ...(JSON.parse(fixtures[9] ?? '[]') as unknown[]),
+    ...(JSON.parse(fixtures[10] ?? '[]') as unknown[]),
+  ]);
   return new Map([
     [executionCommand('service.systemd-units'), fixtures[0] ?? ''],
     [executionCommand('service.systemd-files'), fixtures[1] ?? ''],
-    [executionCommand('service.systemd-details'), fixtures[2] ?? ''],
     [
-      executionCommand('service.systemd-show', { unitName: 'legacy-worker.service' }),
-      fixtures[3] ?? '',
+      executionCommand('service.systemd-show-batch', { unitNames: systemdNames }),
+      `${fixtures[2] ?? ''}\n\n${fixtures[3] ?? ''}`,
     ],
     [executionCommand('process.list'), fixtures[4] ?? ''],
     [executionCommand('process.links'), fixtures[5] ?? ''],
@@ -236,15 +341,14 @@ async function createOutputs(): Promise<Map<string, string>> {
     [executionCommand('network.sockets'), fixtures[7] ?? ''],
     [executionCommand('docker.info'), '{}'],
     [executionCommand('docker.ps'), fixtures[8] ?? ''],
-    [executionCommand('docker.inspect', { containerId }), fixtures[9] ?? ''],
-    [executionCommand('docker.inspect', { containerId: stoppedContainerId }), fixtures[10] ?? ''],
+    [executionCommand('docker.inspect-batch', { containerIds: dockerIds }), dockerBatch],
     [executionCommand('docker.compose-ls'), fixtures[11] ?? ''],
   ]);
 }
 
 function executionCommand(
   commandId: string,
-  parameters: Readonly<Record<string, string>> = {},
+  parameters: Readonly<Record<string, CommandParameterValue>> = {},
 ): string {
   return renderCommand(getCommandSpec(commandId), parameters).execution;
 }

@@ -71,6 +71,42 @@ export function parseDockerInspect(
   const item = Array.isArray(parsed) ? asRecord(parsed[0]) : asRecord(parsed);
   if (item === undefined) throw new Error('docker inspect output does not contain a container.');
 
+  return parseDockerInspectItem(item, evidenceId, summary);
+}
+
+export function parseDockerInspectBatch(
+  source: string,
+  evidenceId: string,
+  summaries: readonly DockerPsSummary[],
+): ContainerRecord[] {
+  const parsed = JSON.parse(source) as unknown;
+  if (!Array.isArray(parsed)) throw new Error('docker inspect batch output is not an array.');
+  const summariesById = new Map(summaries.map((summary) => [summary.id.toLowerCase(), summary]));
+  return parsed.map((value) => {
+    const item = asRecord(value);
+    if (item === undefined) throw new Error('docker inspect batch contains an invalid item.');
+    const id = stringValue(item.Id)?.toLowerCase();
+    const summary =
+      id === undefined
+        ? undefined
+        : (summariesById.get(id) ??
+          summaries.find(
+            (candidate) =>
+              id.startsWith(candidate.id.toLowerCase()) ||
+              candidate.id.toLowerCase().startsWith(id),
+          ));
+    if (summary === undefined) {
+      throw new Error('docker inspect batch returned an unrequested container.');
+    }
+    return parseDockerInspectItem(item, evidenceId, summary);
+  });
+}
+
+function parseDockerInspectItem(
+  item: Record<string, unknown>,
+  evidenceId: string,
+  summary?: DockerPsSummary,
+): ContainerRecord {
   const config = asRecord(item.Config) ?? {};
   const state = asRecord(item.State) ?? {};
   const hostConfig = asRecord(item.HostConfig) ?? {};
