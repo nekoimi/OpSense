@@ -1,5 +1,6 @@
 import { RunMetricsSchema, assertSchema } from '@opsense/schema';
 import type { CommandMetric, PipelineStage, RunMetrics, StageMetric } from '@opsense/schema';
+import type { CollectionConcurrencySnapshot } from './scheduler.js';
 
 export interface CommandMetricInput {
   commandId: string;
@@ -60,6 +61,10 @@ export class RunMetricsCollector {
     this.metrics.ssh.queuedDurationMs += Math.max(0, Math.round(result.queuedDurationMs));
   }
 
+  public setSchedulerConcurrency(snapshot: CollectionConcurrencySnapshot): void {
+    this.metrics.ssh.concurrency = { ...snapshot };
+  }
+
   public setDiscoveryMetrics(values: RunMetrics['discovery']): void {
     this.metrics.discovery = { ...values };
   }
@@ -108,6 +113,14 @@ export function emptyRunMetrics(runId: string, at = new Date()): RunMetrics {
       byCommandId: {},
       cacheHits: 0,
       commandCount: 0,
+      concurrency: {
+        current: 4,
+        maximum: 4,
+        minimum: 2,
+        pressureFailures: 0,
+        recoveries: 0,
+        reductions: 0,
+      },
       executionDurationMs: 0,
       queuedDurationMs: 0,
     },

@@ -65,6 +65,7 @@ pnpm dev -- inspect `
 ```powershell
 pnpm dev -- scan --host server.example.com --user ops --identity "C:\Users\me\.ssh\id_ed25519"
 pnpm dev -- discover --scan <scan-id> --provider codex
+pnpm dev -- resume --run <scan-id> --provider codex
 pnpm dev -- report --inventory <inventory-id>
 ```
 
@@ -83,6 +84,7 @@ pnpm dev -- agent `
 | ------------------- | ------------------------------------------------- |
 | `opsense scan`      | 批量采集证据并生成本地候选与 unverified Inventory |
 | `opsense discover`  | 对已有扫描执行 Batch Discovery                    |
+| `opsense resume`    | 校验阶段 Schema/hash 并从最后有效检查点继续       |
 | `opsense inspect`   | 执行 v3 完整流水线并生成三种报告                  |
 | `opsense report`    | 从稳定 Inventory 离线重建报告                     |
 | `opsense agent`     | 对稳定 Inventory 执行报告后调查并追加 Revision    |
@@ -97,6 +99,7 @@ pnpm dev -- agent `
 |-- runs/<scan-id>/
 |   |-- run.json
 |   |-- metrics.json
+|   |-- evidence.jsonl
 |   |-- snapshot.json
 |   |-- resource-graph.json
 |   |-- candidates.json
@@ -105,6 +108,7 @@ pnpm dev -- agent `
 |   |-- probe-results.json
 |   |-- inventory.json
 |   |-- wiki.json
+|   |-- report-redaction.json
 |   |-- inventory-revisions.jsonl
 |   `-- wiki-revisions.jsonl
 `-- reports/<host>/<scan-time>/
@@ -112,6 +116,8 @@ pnpm dev -- agent `
     |-- index.html
     `-- 服务器部署清单.docx
 ```
+
+`resume` 不会重跑已经通过 Schema 与内容哈希校验的阶段。恢复到新 Probe 时必须有实时 SSH 能力；当前离线恢复会将运行标记为 `partial` 并明确返回 `RESUME_NEEDS_SSH`，不会把补探测伪装成离线完成。
 
 ## 性能和发布验收
 

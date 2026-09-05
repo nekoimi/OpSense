@@ -34,6 +34,7 @@ import { SafeCommandExecutor, connectSsh, detectPermissions } from '@opsense/ssh
 import type { CommandAuditRecord, SshConnection, SudoPasswordProvider } from '@opsense/ssh';
 import {
   appendJsonLine,
+  appendJsonLines,
   createScanId,
   ensureRunWorkspace,
   loadConfig,
@@ -109,8 +110,10 @@ export async function runScanWorkflow(
   const metrics = new RunMetricsCollector(scanId, now);
   const scheduler = new CollectionScheduler({
     concurrency: 4,
+    onConcurrencyChanged: (snapshot) => metrics.setSchedulerConcurrency(snapshot),
     onTaskCompleted: (result) => metrics.addSchedulerMetrics(result),
   });
+  metrics.setSchedulerConcurrency(scheduler.concurrencySnapshot());
   const pipeline = new PipelineRunTracker({
     now,
     profile,
@@ -325,6 +328,7 @@ export async function runScanWorkflow(
     const redacted = redactSnapshot(rawSnapshot, now);
     assertSchema(ScanSnapshotSchema, redacted.value);
     await Promise.all([
+      appendJsonLines(layout.evidenceFile, redacted.value.evidence),
       writeJsonAtomic(layout.snapshotFile, redacted.value),
       writeJsonAtomic(layout.metaFile, redacted.value.session),
       writeJsonAtomic(layout.redactionReportFile, redacted.report),
@@ -355,6 +359,7 @@ export async function runScanWorkflow(
     pipeline.transition(currentPipelineStage);
     pipeline.addOutputFiles([
       layout.snapshotFile,
+      layout.evidenceFile,
       layout.redactionReportFile,
       layout.resourceGraphFile,
       layout.candidateSetFile,

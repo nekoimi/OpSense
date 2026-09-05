@@ -19,10 +19,19 @@ describe('opsense CLI skeleton', () => {
       'scan',
       'discover',
       'report',
+      'resume',
       'inspect',
       'agent',
       'benchmark',
     ]);
+  });
+
+  it('exposes checkpoint resume options', () => {
+    const program = createProgram();
+    const resume = program.commands.find((command) => command.name() === 'resume');
+
+    expect(resume?.helpInformation()).toContain('--run <run-id>');
+    expect(resume?.helpInformation()).toContain('--provider <provider>');
   });
 
   it('exposes v3 benchmark options', () => {

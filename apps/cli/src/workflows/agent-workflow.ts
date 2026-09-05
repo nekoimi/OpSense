@@ -1,16 +1,14 @@
-import { readFile } from 'node:fs/promises';
-
 import { buildPostReportRevisions } from '@opsense/agent-runtime';
 import { CodexPostReportAgentAdapter } from '@opsense/ai-codex';
 import type { PostReportAgentAdapter } from '@opsense/ai-provider';
-import {
-  InventoryRevisionSchema,
-  ScanSnapshotSchema,
-  WikiRevisionSchema,
-  assertSchema,
+import { InventoryRevisionSchema, EvidenceRecordSchema, WikiRevisionSchema } from '@opsense/schema';
+import type {
+  EvidenceRecord,
+  InventoryRevision,
+  PostReportAgentResult,
+  WikiRevision,
 } from '@opsense/schema';
-import type { InventoryRevision, PostReportAgentResult, WikiRevision } from '@opsense/schema';
-import { appendJsonLine, loadConfig } from '@opsense/workspace';
+import { appendJsonLine, loadConfig, readJsonLines } from '@opsense/workspace';
 
 import { findInventory, readWiki } from './inventory-report-workflow.js';
 
@@ -51,22 +49,26 @@ export async function runAgentWorkflow(
   const workspaceRoot = options.workspace ?? loaded.config.workspace.rootDirectory;
   const located = await findInventory(options.inventory, workspaceRoot);
   const wiki = await readWiki(located.scanId, workspaceRoot, located.inventory);
-  const snapshotValue = JSON.parse(await readFile(located.layout.snapshotFile, 'utf8')) as unknown;
-  assertSchema(ScanSnapshotSchema, snapshotValue);
-  const [inventoryRevisions, wikiRevisions] = await Promise.all([
+  const [evidence, inventoryRevisions, wikiRevisions] = await Promise.all([
+    readJsonLines<EvidenceRecord>(located.layout.evidenceFile, EvidenceRecordSchema),
     readJsonLines<InventoryRevision>(
       located.layout.inventoryRevisionsFile,
       InventoryRevisionSchema,
+      { allowMissing: true },
     ),
-    readJsonLines<WikiRevision>(located.layout.wikiRevisionsFile, WikiRevisionSchema),
+    readJsonLines<WikiRevision>(located.layout.wikiRevisionsFile, WikiRevisionSchema, {
+      allowMissing: true,
+    }),
   ]);
+  if (new Set(evidence.map((item) => item.id)).size !== evidence.length)
+    throw new Error('Evidence Store contains duplicate Evidence IDs.');
   assertRevisionChain(inventoryRevisions, located.inventory.inventoryId, 'inventory');
   assertRevisionChain(wikiRevisions, located.inventory.inventoryId, 'wiki');
 
   const adapter = dependencies.adapter ?? new CodexPostReportAgentAdapter();
   const agent = await adapter.investigate(
     {
-      evidence: snapshotValue.evidence,
+      evidence,
       inventory: located.inventory,
       inventoryRevisions,
       prompt: options.prompt,
@@ -82,7 +84,7 @@ export async function runAgentWorkflow(
     },
   );
   const revisions = buildPostReportRevisions({
-    evidence: snapshotValue.evidence,
+    evidence,
     inventory: located.inventory,
     previousInventoryRevisions: inventoryRevisions,
     previousWikiRevisions: wikiRevisions,
@@ -113,27 +115,6 @@ export async function runAgentWorkflow(
       : { inventoryRevision: revisions.inventoryRevision }),
     ...(revisions.wikiRevision === undefined ? {} : { wikiRevision: revisions.wikiRevision }),
   };
-}
-
-async function readJsonLines<T>(
-  file: string,
-  schema: Parameters<typeof assertSchema>[0],
-): Promise<T[]> {
-  let source: string;
-  try {
-    source = await readFile(file, 'utf8');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
-    throw error;
-  }
-  return source
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 0)
-    .map((line) => {
-      const value = JSON.parse(line) as unknown;
-      assertSchema(schema, value);
-      return value as T;
-    });
 }
 
 function assertRevisionChain(

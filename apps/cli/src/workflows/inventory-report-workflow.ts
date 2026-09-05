@@ -2,6 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 
 import { generateV3Reports } from '@opsense/report';
 import type { V3ReportArtifacts } from '@opsense/report';
+import { redactForReport } from '@opsense/redaction';
 import { DeploymentInventorySchema, WikiProjectionV3Schema, assertSchema } from '@opsense/schema';
 import type { DeploymentInventory, WikiProjectionV3 } from '@opsense/schema';
 import { buildWikiProjectionV3 } from '@opsense/wiki';
@@ -10,6 +11,7 @@ import {
   createRunWorkspaceLayout,
   createWorkspaceLayout,
   loadConfig,
+  writeJsonAtomic,
 } from '@opsense/workspace';
 import type { RunWorkspaceLayout } from '@opsense/workspace';
 
@@ -40,8 +42,14 @@ export async function runInventoryReportWorkflow(
     new Date(located.inventory.generatedAt),
     workspaceRoot,
   );
-  const artifacts = await generateV3Reports(located.inventory, wiki, outputDirectory);
-  return { artifacts, inventory: located.inventory, wiki };
+  const redacted = redactForReport({ inventory: located.inventory, wiki });
+  const artifacts = await generateV3Reports(
+    redacted.value.inventory,
+    redacted.value.wiki,
+    outputDirectory,
+  );
+  await writeJsonAtomic(located.layout.reportRedactionFile, redacted.report);
+  return { artifacts, inventory: redacted.value.inventory, wiki: redacted.value.wiki };
 }
 
 export async function findInventory(

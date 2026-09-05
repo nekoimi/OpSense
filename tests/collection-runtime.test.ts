@@ -121,6 +121,68 @@ describe('v3 collection runtime', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it('reduces concurrency after remote pressure and restores it after stable successes', async () => {
+    const changes: number[] = [];
+    const scheduler = new CollectionScheduler({
+      concurrency: 4,
+      onConcurrencyChanged: (snapshot) => changes.push(snapshot.current),
+      pressureFailureThreshold: 2,
+      recoverySuccessThreshold: 2,
+    });
+
+    await scheduler.run([
+      {
+        execute: async () => {
+          throw new Error('channel open failure: resource temporarily unavailable');
+        },
+        taskId: 'pressure-1',
+      },
+      {
+        execute: async () => {
+          throw new Error('operation timeout');
+        },
+        taskId: 'pressure-2',
+      },
+    ]);
+    expect(scheduler.concurrencySnapshot()).toMatchObject({ current: 2, reductions: 1 });
+
+    await scheduler.run([
+      { execute: async () => 'ok', taskId: 'stable-1' },
+      { execute: async () => 'ok', taskId: 'stable-2' },
+    ]);
+
+    expect(changes).toEqual([2, 4]);
+    expect(scheduler.concurrencySnapshot()).toMatchObject({ current: 4, recoveries: 1 });
+  });
+
+  it('does not reduce concurrency for ordinary collector failures', async () => {
+    const scheduler = new CollectionScheduler({
+      concurrency: 4,
+      pressureFailureThreshold: 1,
+    });
+    await scheduler.run([
+      { execute: async () => Promise.reject(new Error('invalid parser output')), taskId: 'parse' },
+    ]);
+    expect(scheduler.concurrencySnapshot().current).toBe(4);
+  });
+
+  it('observes timeout command results returned as task values', async () => {
+    const scheduler = new CollectionScheduler({
+      concurrency: 4,
+      pressureFailureThreshold: 1,
+    });
+    await scheduler.run([
+      {
+        execute: async () => ({ status: 'timeout', stderr: '' }),
+        taskId: 'remote-timeout',
+      },
+    ]);
+    expect(scheduler.concurrencySnapshot()).toMatchObject({
+      current: 2,
+      pressureFailures: 1,
+    });
+  });
+
   it('emits schema-valid run state and metrics', () => {
     const at = new Date('2026-09-04T08:00:00.000Z');
     const run = new PipelineRunTracker({

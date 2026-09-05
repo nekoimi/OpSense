@@ -25,6 +25,7 @@ v3.0 是未正式发布项目的全新主线，不兼容旧版数据、CLI、工
 - 新增 `PipelineRun v3`、全局预算和 `RunMetrics v3` Schema。
 - 每次扫描持续写入 `run.json` 与 `metrics.json`，记录阶段、检查点、SSH 命令次数和耗时。
 - 新增共享 Collection Scheduler，支持统一并发、优先级、依赖、取消和运行内语义缓存。
+- Collection Scheduler 已支持自适应并发：连续远端 channel/资源/超时压力会从配置上限 4 降到 2，稳定成功后恢复，并将降级、恢复和压力次数写入 `metrics.json`。
 - M3、M4、M5 采集器已移除各自重复的并发辅助实现，统一使用 Collection Runtime。
 - M3 与 M4 基线采集已并行运行，并由同一个全局 Scheduler 限制为最多 4 个 SSH channel；审计写入改为阶段末汇合，不阻塞后续 channel 调度。
 - systemd 详情按 48 个 unit 分块、Docker inspect 按 48 个容器分块；失败批次使用二分隔离，正常路径不再逐对象查询。
@@ -44,6 +45,9 @@ v3.0 是未正式发布项目的全新主线，不兼容旧版数据、CLI、工
 - Markdown、HTML、DOCX 报告只消费 v3 Inventory 与 Wiki，不再依赖 Agent final turn；`opsense report --inventory <inventory-id>` 可离线重建三种格式。
 - `inspect` 已切换为 `scan → discover → governed probe（可选）→ finalize → report` 的 v3 固定主链路。
 - 报告后 Agent 只接受 `--inventory <inventory-id> --prompt <text>`，不连接服务器、不触发扫描，也不覆盖稳定 Inventory/Wiki；修订以 append-only 的 `inventory-revisions.jsonl` 与 `wiki-revisions.jsonl` 保存。
+- 每次扫描将脱敏 Evidence 同步写入 append-only `evidence.jsonl`；补探测只追加新 Evidence，报告后 Agent 以该文件为事实源并逐行执行 Schema 校验。
+- 新增 `opsense resume --run <run-id>`，按阶段 Schema 与 source/output hash 复用 Discovery、Probe、Reconciliation、Wiki 和报告产物；已完成运行不会重跑。需要新 SSH Probe 而无实时连接时会保存 `partial/RESUME_NEEDS_SSH`，不声称离线补探测。
+- Wiki 与三格式报告生成前统一经过 report redaction 和敏感信息残留扫描，门禁记录在 `report-redaction.json`；显式离线 `report` 命令也使用同一门禁。
 - 旧 Projection 包、旧首次扫描 Agent loop、`--max-agent-runs`、旧报告渲染链和对应兼容 Schema/测试已删除。
 
-当前已完成 M30～M37 的代码与仓库内合成验收链。合成门禁已经通过；真实服务器 P95 一分钟验收仍需在目标环境保存脱敏指标，`pnpm run release:v3` 会在六类真实场景未覆盖时阻止发布。在完成该外部验收前不能把当前状态视为 v3.0 Definition of Done。
+当前已完成 M30～M38 的代码与仓库内合成验收链。合成门禁已经通过；真实服务器 P95 一分钟验收仍需在目标环境保存脱敏指标，`pnpm run release:v3` 会在六类真实场景未覆盖时阻止发布。在完成该外部验收前不能把当前状态视为 v3.0 Definition of Done。

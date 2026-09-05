@@ -22,8 +22,21 @@ export interface CollectionTaskResult<T> {
 
 export interface CollectionSchedulerOptions {
   concurrency?: number;
+  minimumConcurrency?: number;
   now?: () => number;
+  onConcurrencyChanged?: (snapshot: CollectionConcurrencySnapshot) => void;
   onTaskCompleted?: (result: CollectionTaskResult<unknown>) => void;
+  pressureFailureThreshold?: number;
+  recoverySuccessThreshold?: number;
+}
+
+export interface CollectionConcurrencySnapshot {
+  current: number;
+  maximum: number;
+  minimum: number;
+  pressureFailures: number;
+  recoveries: number;
+  reductions: number;
 }
 
 interface CachedExecution {
@@ -38,24 +51,64 @@ const PRIORITY_ORDER: Record<CollectionTaskPriority, number> = {
 };
 
 export class CollectionScheduler {
-  private readonly concurrency: number;
+  private readonly maximumConcurrency: number;
+  private readonly minimumConcurrency: number;
   private readonly now: () => number;
+  private readonly onConcurrencyChanged:
+    ((snapshot: CollectionConcurrencySnapshot) => void) | undefined;
   private readonly onTaskCompleted: ((result: CollectionTaskResult<unknown>) => void) | undefined;
+  private readonly pressureFailureThreshold: number;
+  private readonly recoverySuccessThreshold: number;
   private readonly cache = new Map<string, CachedExecution>();
   private activeExecutions = 0;
+  private currentConcurrency: number;
+  private consecutivePressureFailures = 0;
+  private consecutiveStableSuccesses = 0;
+  private pressureFailures = 0;
+  private recoveries = 0;
+  private reductions = 0;
   private readonly permitWaiters: Array<(release: () => void) => void> = [];
 
   public constructor(options: CollectionSchedulerOptions = {}) {
     const concurrency = options.concurrency ?? 4;
     if (!Number.isInteger(concurrency) || concurrency < 1)
       throw new Error('Collection scheduler concurrency must be a positive integer.');
-    this.concurrency = concurrency;
+    const minimumConcurrency = options.minimumConcurrency ?? Math.min(2, concurrency);
+    if (
+      !Number.isInteger(minimumConcurrency) ||
+      minimumConcurrency < 1 ||
+      minimumConcurrency > concurrency
+    )
+      throw new Error('Collection scheduler minimum concurrency must be within its limit.');
+    const pressureFailureThreshold = options.pressureFailureThreshold ?? 2;
+    const recoverySuccessThreshold = options.recoverySuccessThreshold ?? 8;
+    if (!Number.isInteger(pressureFailureThreshold) || pressureFailureThreshold < 1)
+      throw new Error('Collection scheduler pressure threshold must be a positive integer.');
+    if (!Number.isInteger(recoverySuccessThreshold) || recoverySuccessThreshold < 1)
+      throw new Error('Collection scheduler recovery threshold must be a positive integer.');
+    this.maximumConcurrency = concurrency;
+    this.minimumConcurrency = minimumConcurrency;
+    this.currentConcurrency = concurrency;
     this.now = options.now ?? (() => Date.now());
+    this.onConcurrencyChanged = options.onConcurrencyChanged;
     this.onTaskCompleted = options.onTaskCompleted;
+    this.pressureFailureThreshold = pressureFailureThreshold;
+    this.recoverySuccessThreshold = recoverySuccessThreshold;
   }
 
   public clearCache(): void {
     this.cache.clear();
+  }
+
+  public concurrencySnapshot(): CollectionConcurrencySnapshot {
+    return {
+      current: this.currentConcurrency,
+      maximum: this.maximumConcurrency,
+      minimum: this.minimumConcurrency,
+      pressureFailures: this.pressureFailures,
+      recoveries: this.recoveries,
+      reductions: this.reductions,
+    };
   }
 
   public async run<T>(
@@ -121,7 +174,7 @@ export class CollectionScheduler {
             order.get(left.taskId)! - order.get(right.taskId)!,
         );
 
-      while (active.size < this.concurrency && ready.length > 0) {
+      while (active.size < this.currentConcurrency && ready.length > 0) {
         const task = ready.shift()!;
         remaining.delete(task.taskId);
         const queuedDurationMs = Math.max(0, this.now() - runStartedAt);
@@ -142,6 +195,7 @@ export class CollectionScheduler {
       const settled = await Promise.race(active.values());
       active.delete(settled.id);
       completed.set(settled.id, settled.result);
+      this.observeResult(settled.result);
       this.onTaskCompleted?.(settled.result);
     }
 
@@ -201,7 +255,7 @@ export class CollectionScheduler {
   }
 
   private acquirePermit(): Promise<() => void> {
-    if (this.activeExecutions < this.concurrency) {
+    if (this.activeExecutions < this.currentConcurrency) {
       this.activeExecutions += 1;
       return Promise.resolve(this.createRelease());
     }
@@ -214,12 +268,51 @@ export class CollectionScheduler {
       if (released) return;
       released = true;
       this.activeExecutions -= 1;
-      const next = this.permitWaiters.shift();
-      if (next !== undefined) {
-        this.activeExecutions += 1;
-        next(this.createRelease());
-      }
+      this.wakePermitWaiters();
     };
+  }
+
+  private observeResult(result: CollectionTaskResult<unknown>): void {
+    if (result.cacheHit || result.status === 'cancelled' || result.status === 'skipped') return;
+    if (
+      (result.status === 'failed' && isRemotePressureError(result.error)) ||
+      (result.status === 'success' && isRemotePressureValue(result.value))
+    ) {
+      this.pressureFailures += 1;
+      this.consecutivePressureFailures += 1;
+      this.consecutiveStableSuccesses = 0;
+      if (
+        this.currentConcurrency > this.minimumConcurrency &&
+        this.consecutivePressureFailures >= this.pressureFailureThreshold
+      ) {
+        this.currentConcurrency = this.minimumConcurrency;
+        this.consecutivePressureFailures = 0;
+        this.reductions += 1;
+        this.onConcurrencyChanged?.(this.concurrencySnapshot());
+      }
+      return;
+    }
+    this.consecutivePressureFailures = 0;
+    if (result.status !== 'success' || this.currentConcurrency >= this.maximumConcurrency) {
+      this.consecutiveStableSuccesses = 0;
+      return;
+    }
+    this.consecutiveStableSuccesses += 1;
+    if (this.consecutiveStableSuccesses < this.recoverySuccessThreshold) return;
+    this.currentConcurrency = this.maximumConcurrency;
+    this.consecutiveStableSuccesses = 0;
+    this.recoveries += 1;
+    this.onConcurrencyChanged?.(this.concurrencySnapshot());
+    this.wakePermitWaiters();
+  }
+
+  private wakePermitWaiters(): void {
+    while (this.activeExecutions < this.currentConcurrency) {
+      const next = this.permitWaiters.shift();
+      if (next === undefined) return;
+      this.activeExecutions += 1;
+      next(this.createRelease());
+    }
   }
 }
 
@@ -271,4 +364,24 @@ function validateTasks<T>(tasks: readonly CollectionTask<T>[]): void {
 
 function isAborted(signal: AbortSignal | undefined): boolean {
   return signal?.aborted === true;
+}
+
+function isRemotePressureError(error: string | undefined): boolean {
+  return (
+    error !== undefined &&
+    /channel open failure|administratively prohibited|resource(?:s)? (?:temporarily )?unavailable|too many (?:open )?channels|channel limit|timed?\s*out|timeout/i.test(
+      error,
+    )
+  );
+}
+
+function isRemotePressureValue(value: unknown): boolean {
+  if (value === null || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  if (record.status === 'timeout') return true;
+  for (const key of ['errorMessage', 'message', 'code', 'stderr']) {
+    const item = record[key];
+    if (typeof item === 'string' && isRemotePressureError(item)) return true;
+  }
+  return Array.isArray(record.attempts) && record.attempts.some(isRemotePressureValue);
 }

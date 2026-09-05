@@ -20,6 +20,7 @@ export interface RunWorkspaceLayout extends WorkspaceLayout {
   candidateSetFile: string;
   discoveryFile: string;
   discoveryInputFile: string;
+  evidenceFile: string;
   inventoryFile: string;
   inventoryRevisionsFile: string;
   metaFile: string;
@@ -30,6 +31,7 @@ export interface RunWorkspaceLayout extends WorkspaceLayout {
   reconciliationFile: string;
   reconciliationInputFile: string;
   redactionReportFile: string;
+  reportRedactionFile: string;
   resourceGraphFile: string;
   runDirectory: string;
   scanId: string;
@@ -72,6 +74,7 @@ export function createRunWorkspaceLayout(
     candidateSetFile: path.join(runDirectory, 'candidates.json'),
     discoveryFile: path.join(runDirectory, 'discovery.json'),
     discoveryInputFile: path.join(runDirectory, 'discovery-input.json'),
+    evidenceFile: path.join(runDirectory, 'evidence.jsonl'),
     inventoryFile: path.join(runDirectory, 'inventory.json'),
     inventoryRevisionsFile: path.join(runDirectory, 'inventory-revisions.jsonl'),
     metaFile: path.join(runDirectory, 'meta.json'),
@@ -82,6 +85,7 @@ export function createRunWorkspaceLayout(
     reconciliationFile: path.join(runDirectory, 'reconciliation.json'),
     reconciliationInputFile: path.join(runDirectory, 'reconciliation-input.json'),
     redactionReportFile: path.join(runDirectory, 'redaction-report.json'),
+    reportRedactionFile: path.join(runDirectory, 'report-redaction.json'),
     resourceGraphFile: path.join(runDirectory, 'resource-graph.json'),
     runDirectory,
     scanId,

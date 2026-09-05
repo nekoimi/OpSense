@@ -5,6 +5,7 @@ import { createAgentCommand } from './commands/agent.js';
 import { createBenchmarkCommand } from './commands/benchmark.js';
 import { createInspectCommand } from './commands/inspect.js';
 import { createReportCommand } from './commands/report.js';
+import { createResumeCommand } from './commands/resume.js';
 import { createScanCommand } from './commands/scan.js';
 import { ExitCode } from './exit-code.js';
 import { createLogger } from './logger.js';
@@ -27,6 +28,7 @@ export function createProgram({ loggerFactory = createLogger }: ProgramDependenc
   program.addCommand(createScanCommand(loggerFactory));
   program.addCommand(createDiscoverCommand(loggerFactory));
   program.addCommand(createReportCommand(loggerFactory));
+  program.addCommand(createResumeCommand(loggerFactory));
   program.addCommand(createInspectCommand(loggerFactory));
   program.addCommand(createAgentCommand(loggerFactory));
   program.addCommand(createBenchmarkCommand(loggerFactory));

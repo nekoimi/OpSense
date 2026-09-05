@@ -4,14 +4,17 @@ import path from 'node:path';
 
 import {
   appendJsonLine,
+  appendJsonLines,
   createReportDirectory,
   createScanId,
   ensureRunWorkspace,
   loadConfig,
+  readJsonLines,
   summarizeConfig,
   writeJsonAtomic,
 } from '@opsense/workspace';
 import type { ConfigError } from '@opsense/workspace';
+import { EvidenceRecordSchema } from '@opsense/schema';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const temporaryDirectories: string[] = [];
@@ -42,6 +45,36 @@ describe('local workspace', () => {
     expect(layout.redactionReportFile).toBe(
       path.join(layout.runDirectory, 'redaction-report.json'),
     );
+    expect(layout.evidenceFile).toBe(path.join(layout.runDirectory, 'evidence.jsonl'));
+  });
+
+  it('appends and validates Evidence records in one durable batch', async () => {
+    const root = await createTemporaryDirectory();
+    const filePath = path.join(root, 'evidence.jsonl');
+    const evidence = [
+      {
+        collectedAt: '2026-09-05T00:00:00.000Z',
+        id: 'evidence:one',
+        kind: 'runtime_state',
+        opsenseVersion: '0.1.0',
+        sensitivity: 'internal',
+        source: 'test',
+        status: 'success',
+      },
+      {
+        collectedAt: '2026-09-05T00:00:01.000Z',
+        id: 'evidence:two',
+        kind: 'derived',
+        opsenseVersion: '0.1.0',
+        sensitivity: 'internal',
+        source: 'test',
+        status: 'success',
+      },
+    ];
+
+    await appendJsonLines(filePath, evidence);
+
+    await expect(readJsonLines(filePath, EvidenceRecordSchema)).resolves.toEqual(evidence);
   });
 
   it('atomically writes and replaces JSON files', async () => {

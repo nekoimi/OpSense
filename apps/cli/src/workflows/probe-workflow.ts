@@ -23,7 +23,7 @@ import type {
   RunMetrics,
   ScanSnapshot,
 } from '@opsense/schema';
-import { writeJsonAtomic } from '@opsense/workspace';
+import { appendJsonLines, writeJsonAtomic } from '@opsense/workspace';
 
 import type { DiscoveryWorkflowResult } from './discovery-workflow.js';
 import type { ScanStageHandler, ScanWorkflowResult } from './scan-workflow.js';
@@ -177,7 +177,7 @@ export async function runProbeWorkflow(
   };
 }
 
-function createReconciliationAdapter(name: string): BatchReconciliationAdapter {
+export function createReconciliationAdapter(name: string): BatchReconciliationAdapter {
   if (name === 'codex') return new CodexBatchDiscoveryAdapter();
   if (name === 'noop' || name === 'baseline') return new NoopBatchDiscoveryAdapter();
   throw new Error(`Unsupported Reconciliation provider '${name}'.`);
@@ -203,18 +203,30 @@ async function persistProbeEvidence(
   const enriched: ScanSnapshot = {
     ...scan.snapshot,
     artifacts: normalized.artifacts,
-    evidence: normalized.evidence,
+    evidence: mergeAppendOnlyEvidence(scan.snapshot.evidence, normalized.evidence),
     services: normalized.services,
     session: { ...scan.snapshot.session, finishedAt: now().toISOString() },
   };
   const redacted = redactSnapshot(enriched, now);
   assertSchema(ScanSnapshotSchema, redacted.value);
+  const existingEvidenceIds = new Set(scan.snapshot.evidence.map((item) => item.id));
+  const newEvidence = redacted.value.evidence.filter((item) => !existingEvidenceIds.has(item.id));
   await Promise.all([
+    appendJsonLines(scan.layout.evidenceFile, newEvidence),
     writeJsonAtomic(scan.layout.snapshotFile, redacted.value),
     writeJsonAtomic(scan.layout.metaFile, redacted.value.session),
     writeJsonAtomic(scan.layout.redactionReportFile, redacted.report),
   ]);
   return redacted.value;
+}
+
+function mergeAppendOnlyEvidence(
+  existing: ScanSnapshot['evidence'],
+  normalized: ScanSnapshot['evidence'],
+): ScanSnapshot['evidence'] {
+  const byId = new Map(existing.map((item) => [item.id, item]));
+  for (const item of normalized) if (!byId.has(item.id)) byId.set(item.id, item);
+  return [...byId.values()].sort((left, right) => left.id.localeCompare(right.id));
 }
 
 function applyProbeMetrics(

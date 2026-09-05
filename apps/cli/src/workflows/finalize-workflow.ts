@@ -1,9 +1,9 @@
-import { createHash } from 'node:crypto';
-
 import { CodexBatchDiscoveryAdapter } from '@opsense/ai-codex';
 import { NoopBatchDiscoveryAdapter } from '@opsense/ai-provider';
 import type { WikiComposer } from '@opsense/ai-provider';
+import { hashFiles, hashJson } from '@opsense/collection-runtime';
 import { buildFinalDeploymentInventory } from '@opsense/discovery';
+import { RedactionError, redactForReport } from '@opsense/redaction';
 import { generateV3Reports } from '@opsense/report';
 import type { V3ReportArtifacts } from '@opsense/report';
 import {
@@ -85,24 +85,74 @@ export async function runFinalizeWorkflow(
     now,
     requireNarrative: options.provider === 'codex',
   });
-  const composition: WikiCompositionArtifact = {
+  const unsafeComposition: WikiCompositionArtifact = {
     projection: wiki.projection,
     quality: wiki.quality,
     run: narrativeResult.run,
     schemaVersion: '3.0',
   };
+  assertSchema(WikiCompositionArtifactSchema, unsafeComposition);
+  const afterComposition = applyCompositionMetrics(
+    discoveryContext.metrics,
+    unsafeComposition,
+    now,
+  );
+  let reportPayload: ReturnType<
+    typeof redactForReport<{
+      inventory: DeploymentInventory;
+      projection: WikiCompositionArtifact['projection'];
+    }>
+  >;
+  try {
+    reportPayload = redactForReport({ inventory, projection: unsafeComposition.projection }, now);
+  } catch (error) {
+    const failedMetrics = structuredClone(afterComposition);
+    failedMetrics.report.qualityGateFailures += 1;
+    failedMetrics.generatedAt = now().toISOString();
+    const failedPipeline: PipelineRun = {
+      ...structuredClone(discoveryContext.pipelineRun),
+      currentStage: 'composing',
+      finishedAt: now().toISOString(),
+      lastError: {
+        code: 'REPORT_REDACTION_FAILED',
+        message: error instanceof Error ? error.message : String(error),
+        retryable: false,
+        stage: 'composing',
+      },
+      state: 'failed',
+      updatedAt: now().toISOString(),
+    };
+    assertSchema(RunMetricsSchema, failedMetrics);
+    assertSchema(PipelineRunSchema, failedPipeline);
+    await Promise.all([
+      writeJsonAtomic(scan.layout.metricsFile, failedMetrics),
+      writeJsonAtomic(scan.layout.pipelineRunFile, failedPipeline),
+    ]);
+    if (error instanceof RedactionError) throw error;
+    throw new Error('Report redaction gate failed.', { cause: error });
+  }
+  const composition: WikiCompositionArtifact = {
+    ...unsafeComposition,
+    projection: reportPayload.value.projection,
+  };
+  assertSchema(DeploymentInventorySchema, reportPayload.value.inventory);
   assertSchema(WikiCompositionArtifactSchema, composition);
   await Promise.all([
-    writeJsonAtomic(scan.layout.wikiFile, wiki.projection),
+    writeJsonAtomic(scan.layout.wikiFile, composition.projection),
     writeJsonAtomic(scan.layout.wikiCompositionFile, composition),
+    writeJsonAtomic(scan.layout.reportRedactionFile, reportPayload.report),
   ]);
-  const afterComposition = applyCompositionMetrics(discoveryContext.metrics, composition, now);
   let pipelineRun = checkpoint(
     discoveryContext.pipelineRun,
     'composing',
     hashJson(inventory),
     hashJson(composition),
-    [scan.layout.inventoryFile, scan.layout.wikiFile, scan.layout.wikiCompositionFile],
+    [
+      scan.layout.inventoryFile,
+      scan.layout.wikiFile,
+      scan.layout.wikiCompositionFile,
+      scan.layout.reportRedactionFile,
+    ],
     now,
   );
   await onStage?.('reporting');
@@ -113,8 +163,8 @@ export async function runFinalizeWorkflow(
     scan.workspaceRoot,
   );
   const reports = await (dependencies.generateReports ?? generateV3Reports)(
-    inventory,
-    wiki.projection,
+    reportPayload.value.inventory,
+    composition.projection,
     reportDirectory,
   );
   const reportFinishedAt = now();
@@ -127,8 +177,8 @@ export async function runFinalizeWorkflow(
   pipelineRun = checkpoint(
     pipelineRun,
     'reporting',
-    hashJson(wiki.projection),
-    hashJson(reports),
+    hashJson(composition.projection),
+    await hashFiles([reports.markdownFile, reports.htmlFile, reports.docxFile]),
     [reports.markdownFile, reports.htmlFile, reports.docxFile],
     now,
   );
@@ -194,8 +244,4 @@ function checkpoint(
   };
   assertSchema(PipelineRunSchema, result);
   return result;
-}
-
-function hashJson(value: unknown): string {
-  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }

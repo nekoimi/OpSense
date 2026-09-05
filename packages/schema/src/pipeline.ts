@@ -204,6 +204,17 @@ export const RunMetricsSchema = Type.Object(
         byCommandId: Type.Record(Type.String({ minLength: 1 }), CommandMetricSchema),
         cacheHits: CounterSchema,
         commandCount: CounterSchema,
+        concurrency: Type.Object(
+          {
+            current: Type.Integer({ minimum: 1 }),
+            maximum: Type.Integer({ minimum: 1 }),
+            minimum: Type.Integer({ minimum: 1 }),
+            pressureFailures: CounterSchema,
+            recoveries: CounterSchema,
+            reductions: CounterSchema,
+          },
+          { additionalProperties: false },
+        ),
         executionDurationMs: CounterSchema,
         queuedDurationMs: CounterSchema,
       },

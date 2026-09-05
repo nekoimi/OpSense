@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { PostReportAgentAdapter } from '@opsense/ai-provider';
 import type { DeploymentInventory, PostReportAgentResult, ScanSnapshot } from '@opsense/schema';
 import { buildWikiProjectionV3 } from '@opsense/wiki';
-import { ensureRunWorkspace, writeJsonAtomic } from '@opsense/workspace';
+import { appendJsonLines, ensureRunWorkspace, writeJsonAtomic } from '@opsense/workspace';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { runAgentWorkflow } from '../apps/cli/src/workflows/agent-workflow.js';
@@ -162,6 +162,7 @@ async function createRun() {
   };
   const wiki = buildWikiProjectionV3(inventory).projection;
   await Promise.all([
+    appendJsonLines(layout.evidenceFile, snapshot.evidence),
     writeJsonAtomic(layout.snapshotFile, snapshot),
     writeJsonAtomic(layout.inventoryFile, inventory),
     writeJsonAtomic(layout.wikiFile, wiki),
