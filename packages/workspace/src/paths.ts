@@ -24,10 +24,13 @@ export interface RunWorkspaceLayout extends WorkspaceLayout {
   aiOutputFile: string;
   aiRunFile: string;
   auditFile: string;
+  candidateSetFile: string;
+  inventoryFile: string;
   metaFile: string;
   metricsFile: string;
   pipelineRunFile: string;
   redactionReportFile: string;
+  resourceGraphFile: string;
   runDirectory: string;
   scanId: string;
   snapshotFile: string;
@@ -69,10 +72,13 @@ export function createRunWorkspaceLayout(
     aiOutputFile: path.join(runDirectory, 'ai-output.json'),
     aiRunFile: path.join(runDirectory, 'ai-run.json'),
     auditFile: path.join(runDirectory, 'audit.jsonl'),
+    candidateSetFile: path.join(runDirectory, 'candidates.json'),
+    inventoryFile: path.join(runDirectory, 'inventory.json'),
     metaFile: path.join(runDirectory, 'meta.json'),
     metricsFile: path.join(runDirectory, 'metrics.json'),
     pipelineRunFile: path.join(runDirectory, 'run.json'),
     redactionReportFile: path.join(runDirectory, 'redaction-report.json'),
+    resourceGraphFile: path.join(runDirectory, 'resource-graph.json'),
     runDirectory,
     scanId,
     snapshotFile: path.join(runDirectory, 'snapshot.json'),

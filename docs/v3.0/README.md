@@ -30,5 +30,7 @@ v3.0 是未正式发布项目的全新主线，不兼容旧版数据、CLI、工
 - 初始路径元数据按 64 个路径执行批量 `stat`，不读取配置内容。
 - `scan` 与 `inspect` 支持 `--profile fast|standard|deep`，默认 `standard`。
 - `fast` 和 `standard` 初扫只构建路径种子；仅 `deep` 执行原 M5 递归目录与配置读取，从默认链路移除主要 N+1 来源。
+- 新增独立 Correlation 模块，构建 host、unit、process、socket、container、Compose、mount 和 path 的 Resource Graph；只有确定性强边参与自动归并。
+- 新增高价值 Candidate 保护与普通系统对象聚合，并在 `inventory_ready` 阶段持久化 `resource-graph.json`、`candidates.json` 和语义状态为 `unverified` 的本地 `inventory.json`。
 
-这一批完成了 M30 的扫描侧骨架和 M31 的核心 N+1 改造，并启动了 M32。自适应并发、全流程指标与预算执行、Resource Graph、稳定 Deployment Inventory 和 Batch Discovery 尚未完成，不能把当前状态视为 v3.0 Definition of Done。
+当前已完成 M30 的扫描侧骨架、M31 的核心 N+1 改造和 M32 的代码侧快速发现链路。真实服务器 P95 一分钟验收、自适应并发、全流程指标与预算执行、AI 验证后的稳定 Deployment Inventory 和 Batch Discovery 尚未完成，不能把当前状态视为 v3.0 Definition of Done。

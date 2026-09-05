@@ -57,6 +57,7 @@ export function createScanCommand(loggerFactory: LoggerFactory): Command {
       logger.info(`Scan ${result.scanId} completed with state '${result.snapshot.session.state}'.`);
       logger.info(`Local run directory: ${result.layout.runDirectory}`);
       logger.info(`Snapshot: ${result.layout.snapshotFile}`);
+      logger.info(`Local deployment inventory: ${result.layout.inventoryFile}`);
       process.exitCode =
         result.snapshot.session.state === 'partial' ? ExitCode.ScanPartial : ExitCode.Success;
     } catch (error) {

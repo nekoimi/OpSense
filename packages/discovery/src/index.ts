@@ -490,3 +490,6 @@ function sortRecordArrays(record: Record<string, string[]>): Record<string, stri
 }
 
 export type { DiscoveryCandidate, EvidenceIndex, PathInvestigationSeed } from '@opsense/schema';
+
+export * from './candidate-selector.js';
+export * from './local-inventory.js';

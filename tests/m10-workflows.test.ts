@@ -4,6 +4,8 @@ import path from 'node:path';
 
 import { BaselineRelevanceClassifier } from '@opsense/ai-provider';
 import { PipelineRunTracker, emptyRunMetrics } from '@opsense/collection-runtime';
+import { buildResourceGraph } from '@opsense/correlation';
+import { buildLocalDeploymentInventory, selectDeploymentCandidates } from '@opsense/discovery';
 import { redactSnapshot } from '@opsense/redaction';
 import type { AiAnalysis, AnalysisResult, ScanSnapshot } from '@opsense/schema';
 import {
@@ -90,16 +92,22 @@ describe('M10 CLI workflows', () => {
     assertSchema(AiPlanSchema, fakeResult.plan);
     assertSchema(AiProbeAuditSchema, fakeResult.probeAudit);
     assertSchema(AiRunSchema, fakeResult.run);
+    const resourceGraph = buildResourceGraph(redacted.value);
+    const candidateSet = selectDeploymentCandidates(resourceGraph, redacted.value);
+    const inventory = buildLocalDeploymentInventory(redacted.value, resourceGraph, candidateSet);
     const scanResult = {
+      candidateSet,
       config: {} as ScanWorkflowResult['config'],
       connection: fakeConnection,
       executor: fakeExecutor,
       layout,
+      inventory,
       metrics: emptyRunMetrics(snapshot.session.id),
       pipelineRun: new PipelineRunTracker({
         runId: snapshot.session.id,
         target: snapshot.session.target,
       }).snapshot(),
+      resourceGraph,
       scanId: snapshot.session.id,
       snapshot: redacted.value,
       workspaceRoot: root,

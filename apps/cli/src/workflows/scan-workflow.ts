@@ -12,15 +12,20 @@ import {
   collectM5Snapshot,
   collectPathMetadataSnapshot,
 } from '@opsense/collectors';
+import { buildResourceGraph } from '@opsense/correlation';
 import { normalizeAndMergeServices } from '@opsense/core';
+import { buildLocalDeploymentInventory, selectDeploymentCandidates } from '@opsense/discovery';
 import { redactForAudit, redactSnapshot } from '@opsense/redaction';
 import { SCHEMA_VERSION, ScanSnapshotSchema, assertSchema } from '@opsense/schema';
 import type {
+  DeploymentCandidateSet,
+  DeploymentInventory,
   OpsenseConfig,
   PipelineProfile,
   PipelineRun,
   PipelineStage,
   RunMetrics,
+  ResourceGraph,
   ScanSession,
   ScanSnapshot,
   ScanStage,
@@ -62,16 +67,22 @@ export interface ScanWorkflowDependencies {
   collectM4?: typeof collectM4Snapshot;
   collectM5?: typeof collectM5Snapshot;
   collectPathMetadata?: typeof collectPathMetadataSnapshot;
+  buildGraph?: typeof buildResourceGraph;
+  buildInventory?: typeof buildLocalDeploymentInventory;
   now?: () => Date;
+  selectCandidates?: typeof selectDeploymentCandidates;
 }
 
 export interface ScanWorkflowResult {
+  candidateSet: DeploymentCandidateSet;
   config: OpsenseConfig;
   connection?: SshConnection;
   executor?: SafeCommandExecutor;
   layout: RunWorkspaceLayout;
+  inventory: DeploymentInventory;
   metrics: RunMetrics;
   pipelineRun: PipelineRun;
+  resourceGraph: ResourceGraph;
   scanId: string;
   snapshot: ScanSnapshot;
   workspaceRoot: string;
@@ -186,6 +197,9 @@ export async function runScanWorkflow(
     const collectM4 = dependencies.collectM4 ?? collectM4Snapshot;
     const collectM5 = dependencies.collectM5 ?? collectM5Snapshot;
     const collectPathMetadata = dependencies.collectPathMetadata ?? collectPathMetadataSnapshot;
+    const buildGraph = dependencies.buildGraph ?? buildResourceGraph;
+    const selectCandidates = dependencies.selectCandidates ?? selectDeploymentCandidates;
+    const buildInventory = dependencies.buildInventory ?? buildLocalDeploymentInventory;
 
     await writeStage('collecting');
     const permissions = await permissionsProbe(executor, {
@@ -315,6 +329,21 @@ export async function runScanWorkflow(
       writeJsonAtomic(layout.metaFile, redacted.value.session),
       writeJsonAtomic(layout.redactionReportFile, redacted.report),
     ]);
+    const resourceGraph = buildGraph(redacted.value, { now });
+    const candidateSet = selectCandidates(resourceGraph, redacted.value, { now });
+    const inventory = buildInventory(redacted.value, resourceGraph, candidateSet, { now });
+    metrics.setDiscoveryMetrics({
+      candidateCount: candidateSet.candidates.length,
+      filteredGroupCount: candidateSet.filteredGroups.length,
+      finalServiceCount: inventory.services.length,
+      protectedCandidateCount: candidateSet.candidates.length,
+      rawObjectCount: inventory.coverage.rawObjectCount,
+    });
+    await Promise.all([
+      writeJsonAtomic(layout.resourceGraphFile, resourceGraph),
+      writeJsonAtomic(layout.candidateSetFile, candidateSet),
+      writeJsonAtomic(layout.inventoryFile, inventory),
+    ]);
     if (currentPipelineStage !== undefined) {
       metrics.finishStage();
       pipeline.checkpoint(currentPipelineStage, {
@@ -324,9 +353,16 @@ export async function runScanWorkflow(
     currentPipelineStage = 'inventory_ready';
     metrics.startStage(currentPipelineStage);
     pipeline.transition(currentPipelineStage);
-    pipeline.addOutputFiles([layout.snapshotFile, layout.redactionReportFile, layout.metricsFile]);
+    pipeline.addOutputFiles([
+      layout.snapshotFile,
+      layout.redactionReportFile,
+      layout.resourceGraphFile,
+      layout.candidateSetFile,
+      layout.inventoryFile,
+      layout.metricsFile,
+    ]);
     metrics.finishStage();
-    pipeline.checkpoint(currentPipelineStage, { outputHash: hashJson(redacted.value) });
+    pipeline.checkpoint(currentPipelineStage, { outputHash: hashJson(inventory) });
     await Promise.all([
       writeJsonAtomic(layout.metricsFile, metrics.snapshot()),
       writeJsonAtomic(layout.pipelineRunFile, pipeline.snapshot()),
@@ -334,11 +370,14 @@ export async function runScanWorkflow(
     await onStage?.(redacted.value.session.state);
     if (!options.retainConnection) connection.close();
     return {
+      candidateSet,
       config: loaded.config,
       ...(options.retainConnection ? { connection, executor } : {}),
       layout,
+      inventory,
       metrics: metrics.snapshot(),
       pipelineRun: pipeline.snapshot(),
+      resourceGraph,
       scanId,
       snapshot: redacted.value,
       workspaceRoot: layout.rootDirectory,

@@ -13,6 +13,7 @@
     { "path": "../../packages/ai-codex" },
     { "path": "../../packages/collection-runtime" },
     { "path": "../../packages/collectors" },
+    { "path": "../../packages/correlation" },
     { "path": "../../packages/core" },
     { "path": "../../packages/discovery" },
     { "path": "../../packages/redaction" },

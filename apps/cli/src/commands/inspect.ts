@@ -93,6 +93,7 @@ export function createInspectCommand(loggerFactory: LoggerFactory): Command {
       logger.info(
         `Scan ${result.scan.scanId} completed with state '${result.scan.snapshot.session.state}'.`,
       );
+      logger.info(`Local deployment inventory: ${result.scan.layout.inventoryFile}`);
       logger.info(`Word: ${result.report.artifacts.docxFile ?? '(not generated)'}`);
       logger.info(`HTML: ${result.report.artifacts.htmlFile ?? '(not generated)'}`);
       process.exitCode =

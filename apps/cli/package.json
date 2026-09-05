@@ -22,6 +22,7 @@
     "@opsense/ai-provider": "workspace:*",
     "@opsense/collection-runtime": "workspace:*",
     "@opsense/collectors": "workspace:*",
+    "@opsense/correlation": "workspace:*",
     "@opsense/core": "workspace:*",
     "@opsense/discovery": "workspace:*",
     "@opsense/redaction": "workspace:*",

@@ -36,6 +36,11 @@ describe('v3 scan workflow profiles', () => {
     const persistedMetrics: unknown = JSON.parse(await readFile(result.layout.metricsFile, 'utf8'));
     assertSchema(PipelineRunSchema, persistedRun);
     assertSchema(RunMetricsSchema, persistedMetrics);
+    await expect(readFile(result.layout.resourceGraphFile, 'utf8')).resolves.toContain(
+      'resource-graph',
+    );
+    await expect(readFile(result.layout.candidateSetFile, 'utf8')).resolves.toContain('candidates');
+    await expect(readFile(result.layout.inventoryFile, 'utf8')).resolves.toContain('unverified');
   });
 
   it('runs recursive directory collection only for the deep profile', async () => {

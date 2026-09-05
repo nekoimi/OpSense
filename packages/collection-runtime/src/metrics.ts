@@ -60,6 +60,10 @@ export class RunMetricsCollector {
     this.metrics.ssh.queuedDurationMs += Math.max(0, Math.round(result.queuedDurationMs));
   }
 
+  public setDiscoveryMetrics(values: RunMetrics['discovery']): void {
+    this.metrics.discovery = { ...values };
+  }
+
   public snapshot(): RunMetrics {
     const snapshot = structuredClone(this.metrics);
     snapshot.generatedAt = this.now().toISOString();

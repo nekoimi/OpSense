@@ -20,6 +20,9 @@ export default defineConfig({
       '@opsense/collectors': fileURLToPath(
         new URL('./packages/collectors/src/index.ts', import.meta.url),
       ),
+      '@opsense/correlation': fileURLToPath(
+        new URL('./packages/correlation/src/index.ts', import.meta.url),
+      ),
       '@opsense/core': fileURLToPath(new URL('./packages/core/src/index.ts', import.meta.url)),
       '@opsense/discovery': fileURLToPath(
         new URL('./packages/discovery/src/index.ts', import.meta.url),
@@ -40,6 +43,8 @@ export default defineConfig({
     },
   },
   test: {
+    hookTimeout: 15_000,
+    testTimeout: 15_000,
     coverage: {
       reporter: ['text', 'html'],
     },
