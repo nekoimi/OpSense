@@ -13,6 +13,8 @@ import {
 } from 'docx';
 import type { DeploymentInventory, WikiProjectionV3 } from '@opsense/schema';
 
+export type ReportFormat = 'docx' | 'html' | 'markdown';
+
 export interface V3ReportArtifacts {
   docxFile: string;
   htmlFile: string;

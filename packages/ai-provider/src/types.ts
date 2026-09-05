@@ -1,41 +1,15 @@
 import type {
-  AiAnalysis,
-  AiPlan,
-  AiProbeAudit,
-  AiRun,
   BatchDiscoveryArtifact,
   BatchDiscoveryInput,
   BatchReconciliationInput,
-  ScanSnapshot,
   DeploymentInventory,
+  EvidenceRecord,
+  InventoryRevision,
+  PostReportAgentResult,
+  WikiProjectionV3,
+  WikiRevision,
   WikiNarrativeResult,
 } from '@opsense/schema';
-
-export interface AnalysisInput {
-  aiInputDirectory: string;
-  baselinePlan: AiPlan;
-  snapshot: ScanSnapshot;
-}
-
-export interface AnalysisOptions {
-  maxRetries?: number;
-  model?: string;
-  signal?: AbortSignal;
-  timeoutMs?: number;
-  threadId?: string;
-}
-
-export interface AnalysisResult {
-  analysis: AiAnalysis;
-  plan: AiPlan;
-  probeAudit: AiProbeAudit;
-  run: AiRun;
-}
-
-export interface AiProvider {
-  readonly name: string;
-  analyze(input: AnalysisInput, options?: AnalysisOptions): Promise<AnalysisResult>;
-}
 
 export interface BatchDiscoveryOptions {
   maxCalls?: number;
@@ -68,4 +42,29 @@ export interface WikiComposer {
     inventory: DeploymentInventory,
     options?: BatchDiscoveryOptions,
   ): Promise<WikiNarrativeResult>;
+}
+
+export interface PostReportAgentInput {
+  inventory: DeploymentInventory;
+  wiki: WikiProjectionV3;
+  evidence: EvidenceRecord[];
+  inventoryRevisions: InventoryRevision[];
+  wikiRevisions: WikiRevision[];
+  prompt: string;
+}
+
+export interface PostReportAgentOptions {
+  maxRetries?: number;
+  model?: string;
+  signal?: AbortSignal;
+  threadId?: string;
+  timeoutMs?: number;
+}
+
+export interface PostReportAgentAdapter {
+  readonly name: string;
+  investigate(
+    input: PostReportAgentInput,
+    options?: PostReportAgentOptions,
+  ): Promise<PostReportAgentResult>;
 }

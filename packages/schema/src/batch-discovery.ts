@@ -1,7 +1,7 @@
 import { Type, type Static } from '@sinclair/typebox';
 
 import { DateTimeSchema, IdSchema, NonEmptyStringSchema } from './common.js';
-import { ProbeRequestSchema } from './ai.js';
+import { ProbeRequestSchema } from './probe-request.js';
 import { DeploymentHintSchema, PortSummarySchema, ProtectionSignalSchema } from './inventory-v3.js';
 import { GovernedProbePlanSchema, ProbeBatchResultSchema } from './probe-v3.js';
 

@@ -32,11 +32,17 @@ v3.0 是未正式发布项目的全新主线，不兼容旧版数据、CLI、工
 - `fast` 和 `standard` 初扫只构建路径种子；仅 `deep` 执行原 M5 递归目录与配置读取，从默认链路移除主要 N+1 来源。
 - 新增独立 Correlation 模块，构建 host、unit、process、socket、container、Compose、mount 和 path 的 Resource Graph；只有确定性强边参与自动归并。
 - 新增高价值 Candidate 保护与普通系统对象聚合，并在 `inventory_ready` 阶段持久化 `resource-graph.json`、`candidates.json` 和语义状态为 `unverified` 的本地 `inventory.json`。
-- `opsense analyze --scan <scan-id>` 已切换为 v3 Batch Discovery：一次提交全部紧凑候选，持久化 `discovery-input.json` 与 `discovery.json`。
+- `opsense discover --scan <scan-id>` 使用 v3 Batch Discovery：一次提交全部紧凑候选，持久化 `discovery-input.json` 与 `discovery.json`。
 - Batch Discovery 对 ServiceDraft 逐项执行 Schema 和 Candidate/Object/Evidence 引用校验，并用 Completion Gate 阻止候选遗漏、重复归属和输入哈希错配；修复只在同一 Codex thread 内进行。
 - 每个候选最多向 Codex 携带 4 个 unit、4 个进程、4 个容器、4 个 Compose 项目、8 个端口、12 个路径和 12 个 Evidence ID，超出部分只记录计数。
 - Codex 不可用或修复失败时，所有受保护候选会进入 `retainedUnknownCandidateIds`，已有本地清单不被覆盖。
 - M34 受控补探测会依次执行来源与预算治理、语义去重、祖先路径覆盖合并和批量调度；unit、container、stat 批次上限分别为 48、48、64，目录型任务最多 2 并发。
 - 补探测对象级结果先脱敏回流 Evidence，随后最多执行一次同 thread Reconciliation；修正阶段禁止申请第二轮 Probe，并共享 Pipeline 的 AI 调用硬预算。
+- Batch Discovery 结果会冻结为 ID 稳定的 Deployment Inventory；Service ID 由本地依据来源对象生成，Codex 只负责有证据引用的名称、角色与用途归因。
+- Wiki 由稳定 Inventory 构建确定性骨架，可在同一 Codex thread 内一次完成叙述层撰写；本地质量门禁校验 Inventory hash、Service/Evidence 引用与覆盖率。
+- Markdown、HTML、DOCX 报告只消费 v3 Inventory 与 Wiki，不再依赖 Agent final turn；`opsense report --inventory <inventory-id>` 可离线重建三种格式。
+- `inspect` 已切换为 `scan → discover → governed probe（可选）→ finalize → report` 的 v3 固定主链路。
+- 报告后 Agent 只接受 `--inventory <inventory-id> --prompt <text>`，不连接服务器、不触发扫描，也不覆盖稳定 Inventory/Wiki；修订以 append-only 的 `inventory-revisions.jsonl` 与 `wiki-revisions.jsonl` 保存。
+- 旧 Projection 包、旧首次扫描 Agent loop、`--max-agent-runs`、旧报告渲染链和对应兼容 Schema/测试已删除。
 
-当前已完成 M30 的扫描侧骨架、M31 的核心 N+1 改造、M32 的快速发现链路、M33 的 Batch Discovery 和 M34 的受控补探测代码链。真实服务器 P95 一分钟验收、自适应并发、AI 验证后的稳定 Deployment Inventory、v3 Wiki 和 inspect 主链切换尚未完成，不能把当前状态视为 v3.0 Definition of Done。
+当前已完成 M30～M36 的代码链。M37 的仓库内样本评测、准确率/性能发布门禁仍在建设；真实服务器 P95 一分钟验收需要在目标环境保存脱敏指标，在完成该验收前不能把当前状态视为 v3.0 Definition of Done。

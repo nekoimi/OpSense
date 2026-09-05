@@ -1,6 +1,6 @@
 import { Type, type Static } from '@sinclair/typebox';
 
-import { ProbeRequestSchema } from './ai.js';
+import { ProbeRequestSchema } from './probe-request.js';
 import { DateTimeSchema, IdSchema, NonEmptyStringSchema } from './common.js';
 
 export const GovernedProbeAuditStatusSchema = Type.Union([

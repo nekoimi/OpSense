@@ -44,6 +44,8 @@ export interface ProbeWorkflowDependencies {
 
 export interface ProbeWorkflowResult {
   discovery: BatchDiscoveryArtifact;
+  metrics: RunMetrics;
+  pipelineRun: PipelineRun;
   plan: GovernedProbePlan;
   probeBatch: ProbeBatchResult;
   reconciliationInput?: BatchReconciliationInput;
@@ -94,14 +96,28 @@ export async function runProbeWorkflow(
   ]);
 
   if (plan.requests.length === 0 || executed.batch.evidenceIds.length === 0) {
-    return { discovery: discovery.artifact, plan, probeBatch: executed.batch, snapshot };
+    return {
+      discovery: discovery.artifact,
+      metrics: metricsAfterProbe,
+      pipelineRun: pipelineAfterProbe,
+      plan,
+      probeBatch: executed.batch,
+      snapshot,
+    };
   }
   const remainingCalls = Math.max(
     0,
     pipelineAfterProbe.budgets.maxAiCalls - discovery.artifact.run.callCount,
   );
   if (remainingCalls === 0) {
-    return { discovery: discovery.artifact, plan, probeBatch: executed.batch, snapshot };
+    return {
+      discovery: discovery.artifact,
+      metrics: metricsAfterProbe,
+      pipelineRun: pipelineAfterProbe,
+      plan,
+      probeBatch: executed.batch,
+      snapshot,
+    };
   }
   const reconciliationInput: BatchReconciliationInput = {
     contractVersion: 'batch-reconciliation-v1',
@@ -150,7 +166,15 @@ export async function runProbeWorkflow(
     writeJsonAtomic(scan.layout.metricsFile, finalMetrics),
     writeJsonAtomic(scan.layout.pipelineRunFile, finalPipeline),
   ]);
-  return { discovery: reconciled, plan, probeBatch: executed.batch, reconciliationInput, snapshot };
+  return {
+    discovery: reconciled,
+    metrics: finalMetrics,
+    pipelineRun: finalPipeline,
+    plan,
+    probeBatch: executed.batch,
+    reconciliationInput,
+    snapshot,
+  };
 }
 
 function createReconciliationAdapter(name: string): BatchReconciliationAdapter {

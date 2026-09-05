@@ -1,6 +1,6 @@
 import { Command, CommanderError } from 'commander';
 
-import { createAnalyzeCommand } from './commands/analyze.js';
+import { createDiscoverCommand } from './commands/analyze.js';
 import { createAgentCommand } from './commands/agent.js';
 import { createInspectCommand } from './commands/inspect.js';
 import { createReportCommand } from './commands/report.js';
@@ -24,7 +24,7 @@ export function createProgram({ loggerFactory = createLogger }: ProgramDependenc
     .showHelpAfterError();
 
   program.addCommand(createScanCommand(loggerFactory));
-  program.addCommand(createAnalyzeCommand(loggerFactory));
+  program.addCommand(createDiscoverCommand(loggerFactory));
   program.addCommand(createReportCommand(loggerFactory));
   program.addCommand(createInspectCommand(loggerFactory));
   program.addCommand(createAgentCommand(loggerFactory));

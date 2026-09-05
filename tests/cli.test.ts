@@ -17,22 +17,22 @@ describe('opsense CLI skeleton', () => {
 
     expect(program.commands.map((command) => command.name())).toEqual([
       'scan',
-      'analyze',
+      'discover',
       'report',
       'inspect',
       'agent',
     ]);
   });
 
-  it('exposes the M16 agent options', () => {
+  it('exposes only post-report Agent options', () => {
     const program = createProgram();
     const agent = program.commands.find((command) => command.name() === 'agent');
 
-    expect(agent?.helpInformation()).toContain('--scan <scan-id>');
-    expect(agent?.helpInformation()).toContain('--resume <agent-session-id>');
+    expect(agent?.helpInformation()).toContain('--inventory <inventory-id>');
     expect(agent?.helpInformation()).toContain('--prompt <text>');
-    expect(agent?.helpInformation()).toContain('--max-agent-rounds <count>');
-    expect(agent?.helpInformation()).toContain('--max-probes <count>');
+    expect(agent?.helpInformation()).toContain('--thread-id <thread-id>');
+    expect(agent?.helpInformation()).not.toContain('--scan <scan-id>');
+    expect(agent?.helpInformation()).not.toContain('--max-agent-runs');
   });
 
   it('exposes version and help information', () => {
@@ -42,9 +42,9 @@ describe('opsense CLI skeleton', () => {
     expect(program.helpInformation()).toContain('Inspect a Linux server');
   });
 
-  it('exposes the M9 analyze options', () => {
+  it('exposes the v3 discovery options', () => {
     const program = createProgram();
-    const analyze = program.commands.find((command) => command.name() === 'analyze');
+    const analyze = program.commands.find((command) => command.name() === 'discover');
 
     expect(analyze?.helpInformation()).toContain('--scan <scan-id>');
     expect(analyze?.helpInformation()).toContain('--provider <provider>');

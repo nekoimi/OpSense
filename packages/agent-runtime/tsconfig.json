@@ -7,10 +7,5 @@
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "references": [
-    { "path": "../schema" },
-    { "path": "../workspace" },
-    { "path": "../ai-provider" },
-    { "path": "../discovery" }
-  ]
+  "references": [{ "path": "../schema" }]
 }

@@ -1,7 +1,6 @@
 import { readFile } from 'node:fs/promises';
 
 import {
-  AiServiceSummarySchema,
   DEFAULT_OPSENSE_CONFIG,
   OpsenseConfigSchema,
   ScanSnapshotSchema,
@@ -45,18 +44,5 @@ describe('schema contracts', () => {
     };
 
     expect(validateSchema(OpsenseConfigSchema, invalid).valid).toBe(false);
-  });
-
-  it('prevents AI summaries from claiming confirmed confidence', () => {
-    const result = validateSchema(AiServiceSummarySchema, {
-      serviceId: 'svc-api',
-      purpose: 'API service',
-      purposeConfidence: 'confirmed',
-      summary: 'AI-generated summary',
-      evidenceIds: [],
-      notes: [],
-    });
-
-    expect(result.valid).toBe(false);
   });
 });

@@ -4,7 +4,7 @@ import { ExitCode, exitCodeForError } from '../exit-code.js';
 import type { LoggerFactory } from '../logger.js';
 import { runDiscoveryWorkflow } from '../workflows/discovery-workflow.js';
 
-interface AnalyzeOptions {
+interface DiscoverOptions {
   config?: string;
   maxRetries?: number;
   model?: string;
@@ -20,8 +20,8 @@ interface GlobalOptions {
   verbose?: boolean;
 }
 
-export function createAnalyzeCommand(loggerFactory: LoggerFactory): Command {
-  const command = new Command('analyze')
+export function createDiscoverCommand(loggerFactory: LoggerFactory): Command {
+  const command = new Command('discover')
     .description('Run v3 Batch Discovery for an existing scan with Codex or the local provider.')
     .requiredOption('--scan <scan-id>', 'scan ID to analyze')
     .option('--provider <provider>', 'AI provider: codex or noop', 'codex')
@@ -32,7 +32,7 @@ export function createAnalyzeCommand(loggerFactory: LoggerFactory): Command {
     .option('--config <path>', 'configuration file path')
     .option('--workspace <path>', 'local OpSense workspace directory');
 
-  command.action(async (options: AnalyzeOptions) => {
+  command.action(async (options: DiscoverOptions) => {
     const logger = loggerFactory(command.optsWithGlobals<GlobalOptions>());
     try {
       validateProvider(options.provider);
@@ -44,7 +44,7 @@ export function createAnalyzeCommand(loggerFactory: LoggerFactory): Command {
       process.exitCode =
         result.artifact.run.status === 'degraded' ? ExitCode.AiDegraded : ExitCode.Success;
     } catch (error) {
-      logger.error(`Analysis failed: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error(`Discovery failed: ${error instanceof Error ? error.message : String(error)}`);
       process.exitCode = exitCodeForError(error);
     }
   });

@@ -11,13 +11,6 @@ export interface WorkspaceLayout {
 }
 
 export interface RunWorkspaceLayout extends WorkspaceLayout {
-  agentHypothesesFile: string;
-  agentProjectionFile: string;
-  agentReviewFile: string;
-  agentSandboxDirectory: string;
-  agentSessionFile: string;
-  agentTranscriptFile: string;
-  agentTurnsFile: string;
   aiInputDirectory: string;
   aiPlanFile: string;
   aiProbeAuditFile: string;
@@ -28,6 +21,7 @@ export interface RunWorkspaceLayout extends WorkspaceLayout {
   discoveryFile: string;
   discoveryInputFile: string;
   inventoryFile: string;
+  inventoryRevisionsFile: string;
   metaFile: string;
   metricsFile: string;
   pipelineRunFile: string;
@@ -42,6 +36,8 @@ export interface RunWorkspaceLayout extends WorkspaceLayout {
   snapshotFile: string;
   wikiCompositionFile: string;
   wikiFile: string;
+  wikiRevisionsFile: string;
+  postReportAgentTurnsFile: string;
 }
 
 export function resolveWorkspaceRoot(explicitRoot?: string): string {
@@ -67,13 +63,6 @@ export function createRunWorkspaceLayout(
   const runDirectory = path.join(workspace.runsDirectory, sanitizePathSegment(scanId));
   return {
     ...workspace,
-    agentHypothesesFile: path.join(runDirectory, 'agent-hypotheses.json'),
-    agentProjectionFile: path.join(runDirectory, 'agent-projection.json'),
-    agentReviewFile: path.join(runDirectory, 'agent-review.json'),
-    agentSandboxDirectory: path.join(runDirectory, 'agent-sandbox'),
-    agentSessionFile: path.join(runDirectory, 'agent-session.json'),
-    agentTranscriptFile: path.join(runDirectory, 'agent-transcript.jsonl'),
-    agentTurnsFile: path.join(runDirectory, 'agent-turns.jsonl'),
     aiInputDirectory: path.join(runDirectory, 'ai-input'),
     aiPlanFile: path.join(runDirectory, 'ai-plan.json'),
     aiProbeAuditFile: path.join(runDirectory, 'ai-probe-audit.json'),
@@ -84,6 +73,7 @@ export function createRunWorkspaceLayout(
     discoveryFile: path.join(runDirectory, 'discovery.json'),
     discoveryInputFile: path.join(runDirectory, 'discovery-input.json'),
     inventoryFile: path.join(runDirectory, 'inventory.json'),
+    inventoryRevisionsFile: path.join(runDirectory, 'inventory-revisions.jsonl'),
     metaFile: path.join(runDirectory, 'meta.json'),
     metricsFile: path.join(runDirectory, 'metrics.json'),
     pipelineRunFile: path.join(runDirectory, 'run.json'),
@@ -98,6 +88,8 @@ export function createRunWorkspaceLayout(
     snapshotFile: path.join(runDirectory, 'snapshot.json'),
     wikiCompositionFile: path.join(runDirectory, 'wiki-composition.json'),
     wikiFile: path.join(runDirectory, 'wiki.json'),
+    wikiRevisionsFile: path.join(runDirectory, 'wiki-revisions.jsonl'),
+    postReportAgentTurnsFile: path.join(runDirectory, 'post-report-agent-turns.jsonl'),
   };
 }
 

@@ -6,7 +6,6 @@ import { ExitCode, exitCodeForError } from '../exit-code.js';
 import type { LoggerFactory } from '../logger.js';
 import { createInteractiveSudoPasswordProvider } from '../sudo-password.js';
 import { runInspectWorkflow } from '../workflows/inspect-workflow.js';
-import { parseReportFormats } from '../workflows/report-workflow.js';
 import { parsePort, parseScanProfile } from './scan.js';
 
 interface InspectOptions {
@@ -94,10 +93,11 @@ export function createInspectCommand(loggerFactory: LoggerFactory): Command {
         `Scan ${result.scan.scanId} completed with state '${result.scan.snapshot.session.state}'.`,
       );
       logger.info(`Local deployment inventory: ${result.scan.layout.inventoryFile}`);
-      logger.info(`Word: ${result.report.artifacts.docxFile ?? '(not generated)'}`);
-      logger.info(`HTML: ${result.report.artifacts.htmlFile ?? '(not generated)'}`);
+      logger.info(`Final inventory: ${result.scan.layout.inventoryFile}`);
+      logger.info(`Word: ${result.finalization.reports.docxFile}`);
+      logger.info(`HTML: ${result.finalization.reports.htmlFile}`);
       process.exitCode =
-        result.analysis.result.run.status === 'degraded'
+        result.finalization.pipelineRun.state === 'partial'
           ? ExitCode.AiDegraded
           : result.scan.snapshot.session.state === 'partial'
             ? ExitCode.ScanPartial
@@ -119,11 +119,12 @@ export function createInspectCommand(loggerFactory: LoggerFactory): Command {
 }
 
 function parseFormats(value: string): ReportFormat[] {
-  try {
-    return [...new Set<ReportFormat>([...parseReportFormats(value), 'docx', 'html'])];
-  } catch (error) {
-    throw new InvalidArgumentError(error instanceof Error ? error.message : String(error));
+  const allowed = new Set<ReportFormat>(['docx', 'html', 'markdown']);
+  const formats = value.split(',').map((item) => item.trim().toLowerCase());
+  if (formats.some((item) => !allowed.has(item as ReportFormat))) {
+    throw new InvalidArgumentError('Report formats must be docx, markdown, or html.');
   }
+  return [...new Set<ReportFormat>([...(formats as ReportFormat[]), 'docx', 'html'])];
 }
 
 function parsePositiveInteger(value: string): number {

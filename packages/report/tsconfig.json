@@ -7,10 +7,5 @@
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "references": [
-    { "path": "../projection" },
-    { "path": "../redaction" },
-    { "path": "../schema" },
-    { "path": "../wiki" }
-  ]
+  "references": [{ "path": "../schema" }]
 }

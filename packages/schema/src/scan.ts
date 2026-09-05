@@ -1,6 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
 
-import { AiAnalysisSchema } from './ai.js';
 import {
   SCHEMA_VERSION,
   DateTimeSchema,
@@ -77,7 +76,6 @@ export const ScanSnapshotSchema = Type.Object(
     findings: Type.Array(FindingRecordSchema),
     unknowns: Type.Array(Type.String()),
     redaction: Type.Optional(RedactionReportSchema),
-    aiAnalysis: Type.Optional(AiAnalysisSchema),
   },
   { $id: 'ScanSnapshot', additionalProperties: false },
 );

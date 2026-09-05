@@ -1,29 +1,23 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { BaselineRelevanceClassifier } from '@opsense/ai-provider';
+import { NoopBatchDiscoveryAdapter } from '@opsense/ai-provider';
 import { PipelineRunTracker, emptyRunMetrics } from '@opsense/collection-runtime';
 import { buildResourceGraph } from '@opsense/correlation';
-import { buildLocalDeploymentInventory, selectDeploymentCandidates } from '@opsense/discovery';
-import { redactSnapshot } from '@opsense/redaction';
-import type { AiAnalysis, AnalysisResult, ScanSnapshot } from '@opsense/schema';
 import {
-  AiAnalysisSchema,
-  AiPlanSchema,
-  AiProbeAuditSchema,
-  AiRunSchema,
-  assertSchema,
-} from '@opsense/schema';
+  buildBatchDiscoveryInput,
+  buildLocalDeploymentInventory,
+  selectDeploymentCandidates,
+} from '@opsense/discovery';
+import { redactSnapshot } from '@opsense/redaction';
 import type { ReportFormat } from '@opsense/report';
+import type { ScanSnapshot } from '@opsense/schema';
 import { ensureRunWorkspace } from '@opsense/workspace';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import {
-  parseReportFormats,
-  runReportWorkflow,
-} from '../apps/cli/src/workflows/report-workflow.js';
 import { runInspectWorkflow } from '../apps/cli/src/workflows/inspect-workflow.js';
+import type { FinalizeWorkflowResult } from '../apps/cli/src/workflows/finalize-workflow.js';
 import type { ScanWorkflowResult } from '../apps/cli/src/workflows/scan-workflow.js';
 import { readFixture } from './support/read-fixture.js';
 
@@ -37,81 +31,51 @@ afterEach(async () => {
   );
 });
 
-describe('M10 CLI workflows', () => {
-  it('parses comma-separated report formats and rejects unknown values', () => {
-    expect(parseReportFormats('docx, html,docx')).toEqual(['docx', 'html']);
-    expect(() => parseReportFormats('pdf')).toThrow('docx, markdown, html');
-  });
-
-  it('regenerates a report from a snapshot without an AI output file', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'opsense-m10-report-'));
+describe('v3 CLI workflows', () => {
+  it('keeps inspect stages ordered and returns the stable Inventory reports', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'opsense-v3-inspect-'));
     temporaryDirectories.push(root);
-    const snapshot = await snapshotFixture();
-    const redacted = redactSnapshot(snapshot, () => new Date('2026-08-14T09:00:00Z'));
+    const snapshot = JSON.parse(await readFixture('schema/minimal-snapshot.json')) as ScanSnapshot;
+    const redacted = redactSnapshot(snapshot, () => new Date('2026-08-14T09:00:00Z')).value;
     const layout = await ensureRunWorkspace(snapshot.session.id, root);
-    await writeFile(layout.snapshotFile, JSON.stringify(redacted.value), 'utf8');
-
-    const result = await runReportWorkflow({
-      formats: ['docx', 'html'],
-      scan: snapshot.session.id,
-      timeZone: 'Asia/Shanghai',
-      workspace: root,
-    });
-    expect(result.analysis).toBeUndefined();
-    expect(result.artifacts.docxFile).toContain('.docx');
-    expect(result.artifacts.htmlFile).toContain('index.html');
-  });
-
-  it('keeps inspect stages ordered and produces mandatory Word and HTML paths', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'opsense-m10-inspect-'));
-    temporaryDirectories.push(root);
-    const snapshot = await snapshotFixture();
-    const redacted = redactSnapshot(snapshot, () => new Date('2026-08-14T09:00:00Z'));
-    const layout = await ensureRunWorkspace(snapshot.session.id, root);
-    await writeFile(layout.snapshotFile, JSON.stringify(redacted.value), 'utf8');
-    const stages: string[] = [];
-    const fakeConnection = { close: () => undefined } as NonNullable<
-      ScanWorkflowResult['connection']
-    >;
-    const fakeExecutor = {} as NonNullable<ScanWorkflowResult['executor']>;
-    const baseline = new BaselineRelevanceClassifier().classify(redacted.value);
-    const fakeResult: AnalysisResult = {
-      analysis: baselineAnalysis(redacted.value),
-      plan: baseline,
-      probeAudit: { generatedAt: '2026-08-14T09:00:00.000Z', records: [], round: 0 },
-      run: {
-        durationMs: 0,
-        finishedAt: '2026-08-14T09:00:00.000Z',
-        provider: 'noop',
-        retryCount: 0,
-        startedAt: '2026-08-14T09:00:00.000Z',
-        status: 'skipped',
-      },
-    };
-    assertSchema(AiAnalysisSchema, fakeResult.analysis);
-    assertSchema(AiPlanSchema, fakeResult.plan);
-    assertSchema(AiProbeAuditSchema, fakeResult.probeAudit);
-    assertSchema(AiRunSchema, fakeResult.run);
-    const resourceGraph = buildResourceGraph(redacted.value);
-    const candidateSet = selectDeploymentCandidates(resourceGraph, redacted.value);
-    const inventory = buildLocalDeploymentInventory(redacted.value, resourceGraph, candidateSet);
+    const graph = buildResourceGraph(redacted);
+    const candidateSet = selectDeploymentCandidates(graph, redacted);
+    const inventory = buildLocalDeploymentInventory(redacted, graph, candidateSet);
+    const pipelineRun = new PipelineRunTracker({
+      runId: snapshot.session.id,
+      target: snapshot.session.target,
+    }).snapshot();
+    const metrics = emptyRunMetrics(snapshot.session.id);
+    const input = buildBatchDiscoveryInput(redacted, graph, candidateSet, pipelineRun.budgets);
+    const artifact = await new NoopBatchDiscoveryAdapter().discover(input);
     const scanResult = {
       candidateSet,
       config: {} as ScanWorkflowResult['config'],
-      connection: fakeConnection,
-      executor: fakeExecutor,
+      connection: { close: () => undefined } as NonNullable<ScanWorkflowResult['connection']>,
+      executor: {} as NonNullable<ScanWorkflowResult['executor']>,
       layout,
       inventory,
-      metrics: emptyRunMetrics(snapshot.session.id),
-      pipelineRun: new PipelineRunTracker({
-        runId: snapshot.session.id,
-        target: snapshot.session.target,
-      }).snapshot(),
-      resourceGraph,
+      metrics,
+      pipelineRun,
+      resourceGraph: graph,
       scanId: snapshot.session.id,
-      snapshot: redacted.value,
+      snapshot: redacted,
       workspaceRoot: root,
     } satisfies ScanWorkflowResult;
+    const discovery = { artifact, candidateSet, input, layout, metrics, pipelineRun };
+    const stages: string[] = [];
+    const finalization = {
+      composition: {},
+      inventory,
+      metrics,
+      pipelineRun: { ...pipelineRun, state: 'completed' },
+      reports: {
+        docxFile: path.join(root, '服务器部署清单.docx'),
+        htmlFile: path.join(root, 'index.html'),
+        markdownFile: path.join(root, 'README.md'),
+        outputDirectory: root,
+      },
+    } as FinalizeWorkflowResult;
 
     const result = await runInspectWorkflow(
       {
@@ -129,54 +93,21 @@ describe('M10 CLI workflows', () => {
           await handler?.('created');
           return scanResult;
         },
-        runAnalysis: async (_options, handler) => {
-          await handler?.(_options.stageMode === 'planning-only' ? 'planning' : 'analyzing');
-          return {
-            config: {} as ScanWorkflowResult['config'],
-            layout,
-            result: fakeResult,
-            snapshot: redacted.value,
-          };
+        runDiscovery: async (_options, handler) => {
+          await handler?.('discovering');
+          return discovery;
         },
-        executeProbes: async () => ({ artifacts: [], evidence: [], records: [] }),
-        runReport: async () => ({
-          analysis: fakeResult.analysis,
-          artifacts: {
-            markdownFiles: [],
-            modelFile: path.join(root, 'report-model.json'),
-            outputDirectory: root,
-            projectionFile: path.join(root, 'inventory-projection.json'),
-            redactionReportFile: path.join(root, 'redaction-report.json'),
-            snapshotFile: path.join(root, 'snapshot.json'),
-            docxFile: path.join(root, '服务器巡检报告.docx'),
-            htmlFile: path.join(root, 'index.html'),
-          },
-          snapshot: redacted.value,
-        }),
+        runFinalize: async (_options, _scan, _discovery, _decision, _snapshot, handler) => {
+          await handler?.('composing');
+          await handler?.('reporting');
+          return finalization;
+        },
       },
     );
 
-    expect(stages).toEqual(['created', 'planning', 'enriching', 'analyzing', 'rendering']);
-    expect(result.report.artifacts.docxFile).toContain('.docx');
-    expect(result.report.artifacts.htmlFile).toContain('index.html');
+    expect(stages).toEqual(['created', 'discovering', 'composing', 'reporting']);
+    expect(result.finalization.reports.docxFile).toContain('.docx');
+    expect(result.finalization.reports.htmlFile).toContain('index.html');
+    expect(result.finalization.inventory.inventoryId).toBe(inventory.inventoryId);
   });
 });
-
-async function snapshotFixture(): Promise<ScanSnapshot> {
-  return JSON.parse(await readFixture('schema/minimal-snapshot.json')) as ScanSnapshot;
-}
-
-function baselineAnalysis(snapshot: ScanSnapshot): AiAnalysis {
-  const plan = new BaselineRelevanceClassifier().classify(snapshot);
-  return {
-    generatedAt: '2026-08-14T09:00:00.000Z',
-    hostSummary: 'host',
-    pathAssessments: plan.pathAssessments,
-    provider: 'noop',
-    serviceAssessments: plan.serviceAssessments,
-    serviceSummaries: [],
-    storageSummary: 'storage',
-    findings: [],
-    unknowns: [],
-  };
-}
