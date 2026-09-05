@@ -39,25 +39,39 @@ export async function executeAiProbeRequests(
   const evidence: EvidenceRecord[] = [];
   const records: AiProbeExecutionRecord[] = [];
   for (const request of requests) {
-    const evidenceId = `evidence:ai-probe:${request.id}`;
     const result = await executeRequest(executor, request, options);
-    const parsed = parseRequestResult(request, result, evidenceId);
-    artifacts.push(...parsed.artifacts);
-    evidence.push(
-      createEvidence(request, result, evidenceId, parsed.value, options.opsenseVersion),
-    );
-    records.push({
-      evidenceIds: [evidenceId],
-      reason:
-        result.status === 'success' || result.status === 'truncated'
-          ? '受控探测已执行，结果已进入证据层。'
-          : (result.errorMessage ??
-            (result.stderr.slice(0, 300) || `探测执行状态：${result.status}`)),
-      requestId: request.id,
-      status: result.status === 'success' || result.status === 'truncated' ? 'accepted' : 'failed',
-    });
+    const materialized = materializeAiProbeExecution(request, result, options.opsenseVersion);
+    artifacts.push(...materialized.artifacts);
+    evidence.push(...materialized.evidence);
+    records.push(...materialized.records);
   }
   return { artifacts: mergeArtifacts(artifacts), evidence, records };
+}
+
+export function materializeAiProbeExecution(
+  request: ProbeRequest,
+  result: CommandExecutionResult,
+  opsenseVersion: string,
+): AiProbeExecutionResult {
+  const evidenceId = `evidence:ai-probe:${request.id}`;
+  const parsed = parseRequestResult(request, result, evidenceId);
+  return {
+    artifacts: parsed.artifacts,
+    evidence: [createEvidence(request, result, evidenceId, parsed.value, opsenseVersion)],
+    records: [
+      {
+        evidenceIds: [evidenceId],
+        reason:
+          result.status === 'success' || result.status === 'truncated'
+            ? '受控探测已执行，结果已进入证据层。'
+            : (result.errorMessage ??
+              (result.stderr.slice(0, 300) || `探测执行状态：${result.status}`)),
+        requestId: request.id,
+        status:
+          result.status === 'success' || result.status === 'truncated' ? 'accepted' : 'failed',
+      },
+    ],
+  };
 }
 
 async function executeRequest(

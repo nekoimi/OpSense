@@ -36,5 +36,7 @@ v3.0 是未正式发布项目的全新主线，不兼容旧版数据、CLI、工
 - Batch Discovery 对 ServiceDraft 逐项执行 Schema 和 Candidate/Object/Evidence 引用校验，并用 Completion Gate 阻止候选遗漏、重复归属和输入哈希错配；修复只在同一 Codex thread 内进行。
 - 每个候选最多向 Codex 携带 4 个 unit、4 个进程、4 个容器、4 个 Compose 项目、8 个端口、12 个路径和 12 个 Evidence ID，超出部分只记录计数。
 - Codex 不可用或修复失败时，所有受保护候选会进入 `retainedUnknownCandidateIds`，已有本地清单不被覆盖。
+- M34 受控补探测会依次执行来源与预算治理、语义去重、祖先路径覆盖合并和批量调度；unit、container、stat 批次上限分别为 48、48、64，目录型任务最多 2 并发。
+- 补探测对象级结果先脱敏回流 Evidence，随后最多执行一次同 thread Reconciliation；修正阶段禁止申请第二轮 Probe，并共享 Pipeline 的 AI 调用硬预算。
 
-当前已完成 M30 的扫描侧骨架、M31 的核心 N+1 改造、M32 的快速发现链路和 M33 的 Batch Discovery。真实服务器 P95 一分钟验收、自适应并发、完整预算执行、受控补探测、AI 验证后的稳定 Deployment Inventory 和 v3 Wiki 尚未完成，不能把当前状态视为 v3.0 Definition of Done。
+当前已完成 M30 的扫描侧骨架、M31 的核心 N+1 改造、M32 的快速发现链路、M33 的 Batch Discovery 和 M34 的受控补探测代码链。真实服务器 P95 一分钟验收、自适应并发、AI 验证后的稳定 Deployment Inventory、v3 Wiki 和 inspect 主链切换尚未完成，不能把当前状态视为 v3.0 Definition of Done。

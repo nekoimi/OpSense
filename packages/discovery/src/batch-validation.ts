@@ -22,6 +22,7 @@ export interface BatchDiscoveryValidation {
 export function validateBatchDiscoveryDecision(
   value: unknown,
   input: BatchDiscoveryInput,
+  options: { allowProbeRequests?: boolean } = {},
 ): BatchDiscoveryValidation {
   const emptyCompletion = completion(input, []);
   if (!isRecord(value) || !Array.isArray(value.services)) {
@@ -86,6 +87,9 @@ export function validateBatchDiscoveryDecision(
   const visibleEvidenceIds = new Set(input.evidenceIndex.map((item) => item.id));
   const allowedProbeKinds = new Set(input.probePolicy.allowedKinds);
   const acceptedServiceIds = new Set(accepted.map((service) => service.serviceId));
+  if (options.allowProbeRequests === false && decision.probeRequests.length > 0) {
+    batchErrors.push('Reconciliation cannot request another probe round.');
+  }
   if (decision.probeRequests.length > input.probePolicy.maxRequests) {
     batchErrors.push(
       `Probe request count ${decision.probeRequests.length} exceeds budget ${input.probePolicy.maxRequests}.`,

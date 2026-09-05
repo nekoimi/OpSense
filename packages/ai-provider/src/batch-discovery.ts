@@ -5,11 +5,18 @@ import type {
   BatchDiscoveryArtifact,
   BatchDiscoveryInput,
   BatchDiscoveryRun,
+  BatchReconciliationInput,
 } from '@opsense/schema';
 
-import type { BatchDiscoveryAdapter, BatchDiscoveryOptions } from './types.js';
+import type {
+  BatchDiscoveryAdapter,
+  BatchDiscoveryOptions,
+  BatchReconciliationAdapter,
+} from './types.js';
 
-export class NoopBatchDiscoveryAdapter implements BatchDiscoveryAdapter {
+export class NoopBatchDiscoveryAdapter
+  implements BatchDiscoveryAdapter, BatchReconciliationAdapter
+{
   public readonly name = 'noop';
 
   public discover(
@@ -24,6 +31,13 @@ export class NoopBatchDiscoveryAdapter implements BatchDiscoveryAdapter {
         ...(options.threadId === undefined ? {} : { threadId: options.threadId }),
       }),
     );
+  }
+
+  public reconcile(
+    input: BatchReconciliationInput,
+    options: BatchDiscoveryOptions = {},
+  ): Promise<BatchDiscoveryArtifact> {
+    return this.discover(input.discoveryInput, options);
   }
 }
 

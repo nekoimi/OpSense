@@ -11,6 +11,7 @@ export * from './host.js';
 export * from './inventory-v3.js';
 export * from './network.js';
 export * from './pipeline.js';
+export * from './probe-v3.js';
 export * from './projection.js';
 export * from './redaction.js';
 export * from './report.js';

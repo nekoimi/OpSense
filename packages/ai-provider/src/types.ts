@@ -5,6 +5,7 @@ import type {
   AiRun,
   BatchDiscoveryArtifact,
   BatchDiscoveryInput,
+  BatchReconciliationInput,
   ScanSnapshot,
 } from '@opsense/schema';
 
@@ -47,6 +48,14 @@ export interface BatchDiscoveryAdapter {
   readonly name: string;
   discover(
     input: BatchDiscoveryInput,
+    options?: BatchDiscoveryOptions,
+  ): Promise<BatchDiscoveryArtifact>;
+}
+
+export interface BatchReconciliationAdapter {
+  readonly name: string;
+  reconcile(
+    input: BatchReconciliationInput,
     options?: BatchDiscoveryOptions,
   ): Promise<BatchDiscoveryArtifact>;
 }

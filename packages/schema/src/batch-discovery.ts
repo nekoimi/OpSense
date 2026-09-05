@@ -3,6 +3,7 @@ import { Type, type Static } from '@sinclair/typebox';
 import { DateTimeSchema, IdSchema, NonEmptyStringSchema } from './common.js';
 import { ProbeRequestSchema } from './ai.js';
 import { DeploymentHintSchema, PortSummarySchema, ProtectionSignalSchema } from './inventory-v3.js';
+import { GovernedProbePlanSchema, ProbeBatchResultSchema } from './probe-v3.js';
 
 export const BATCH_DISCOVERY_CONTRACT_VERSION = 'batch-discovery-v1' as const;
 
@@ -215,3 +216,29 @@ export const BatchDiscoveryArtifactSchema = Type.Object(
 );
 
 export type BatchDiscoveryArtifact = Static<typeof BatchDiscoveryArtifactSchema>;
+
+export const BatchReconciliationInputSchema = Type.Object(
+  {
+    contractVersion: Type.Literal('batch-reconciliation-v1'),
+    discoveryInput: BatchDiscoveryInputSchema,
+    newEvidence: Type.Array(
+      Type.Object(
+        {
+          field: Type.Optional(NonEmptyStringSchema),
+          id: IdSchema,
+          kind: NonEmptyStringSchema,
+          source: NonEmptyStringSchema,
+          status: NonEmptyStringSchema,
+          value: Type.Unknown(),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+    originalDecision: BatchDiscoveryDecisionSchema,
+    probeBatch: ProbeBatchResultSchema,
+    probePlan: GovernedProbePlanSchema,
+  },
+  { $id: 'BatchReconciliationInputV3', additionalProperties: false },
+);
+
+export type BatchReconciliationInput = Static<typeof BatchReconciliationInputSchema>;

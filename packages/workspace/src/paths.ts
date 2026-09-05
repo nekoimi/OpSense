@@ -31,6 +31,10 @@ export interface RunWorkspaceLayout extends WorkspaceLayout {
   metaFile: string;
   metricsFile: string;
   pipelineRunFile: string;
+  probePlanFile: string;
+  probeResultFile: string;
+  reconciliationFile: string;
+  reconciliationInputFile: string;
   redactionReportFile: string;
   resourceGraphFile: string;
   runDirectory: string;
@@ -81,6 +85,10 @@ export function createRunWorkspaceLayout(
     metaFile: path.join(runDirectory, 'meta.json'),
     metricsFile: path.join(runDirectory, 'metrics.json'),
     pipelineRunFile: path.join(runDirectory, 'run.json'),
+    probePlanFile: path.join(runDirectory, 'probe-plan.json'),
+    probeResultFile: path.join(runDirectory, 'probe-results.json'),
+    reconciliationFile: path.join(runDirectory, 'reconciliation.json'),
+    reconciliationInputFile: path.join(runDirectory, 'reconciliation-input.json'),
     redactionReportFile: path.join(runDirectory, 'redaction-report.json'),
     resourceGraphFile: path.join(runDirectory, 'resource-graph.json'),
     runDirectory,

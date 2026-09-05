@@ -3,6 +3,7 @@ export * from './ai-probes.js';
 export * from './directory-discovery.js';
 export * from './docker.js';
 export * from './host.js';
+export * from './governed-probes.js';
 export * from './network.js';
 export * from './path-metadata.js';
 export * from './path-seeds.js';

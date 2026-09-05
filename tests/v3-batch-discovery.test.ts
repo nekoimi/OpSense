@@ -5,6 +5,7 @@ import { BatchDiscoveryArtifactSchema, assertSchema } from '@opsense/schema';
 import type {
   BatchDiscoveryDecision,
   BatchDiscoveryInput,
+  BatchReconciliationInput,
   DeploymentCandidateSet,
   ResourceGraph,
   ScanSnapshot,
@@ -252,6 +253,40 @@ describe('v3 Batch Discovery', () => {
     expect(exhausted.run).toMatchObject({ callCount: 1, status: 'degraded' });
     expect(exhausted.run.error).toContain('call budget exhausted');
   });
+
+  it('reconciles in one resumed thread and rejects a second probe round', async () => {
+    const input = discoveryInput();
+    const prompts: string[] = [];
+    let call = 0;
+    const thread = {
+      id: 'thread:reconcile',
+      run: async (prompt: string) => {
+        prompts.push(prompt);
+        call += 1;
+        const decision = validDecision(input);
+        return {
+          finalResponse: JSON.stringify(
+            call === 1 ? { ...decision, probeRequests: [reconciliationProbe()] } : decision,
+          ),
+          items: [],
+          usage: null,
+        };
+      },
+    } as unknown as Thread;
+    const adapter = new CodexBatchDiscoveryAdapter({
+      client: { resumeThread: () => thread, startThread: () => thread },
+    });
+
+    const result = await adapter.reconcile(reconciliationInput(input), {
+      maxRetries: 1,
+      threadId: 'thread:reconcile',
+    });
+
+    expect(result.run).toMatchObject({ callCount: 2, repairCount: 1, status: 'completed' });
+    expect(result.decision.probeRequests).toEqual([]);
+    expect(prompts[0]).toContain('batch-reconciliation-v1');
+    expect(prompts[1]).toContain('cannot request another probe round');
+  });
 });
 
 function discoveryInput(): BatchDiscoveryInput {
@@ -345,5 +380,69 @@ function validDecision(input: BatchDiscoveryInput): BatchDiscoveryDecision {
     sourceCandidateSetHash: input.sourceCandidateSetHash,
     summary: 'Merged the two application units.',
     unresolvedQuestions: [],
+  };
+}
+
+function reconciliationInput(input: BatchDiscoveryInput): BatchReconciliationInput {
+  const originalDecision = validDecision(input);
+  return {
+    contractVersion: 'batch-reconciliation-v1',
+    discoveryInput: input,
+    newEvidence: [
+      {
+        id: 'evidence:probe',
+        kind: 'runtime_state',
+        source: 'systemd:one.service',
+        status: 'success',
+        value: { ActiveState: 'active' },
+      },
+    ],
+    originalDecision,
+    probeBatch: {
+      evidenceIds: ['evidence:probe'],
+      finishedAt: '2026-09-05T01:00:01.000Z',
+      planId: 'probe-plan:test',
+      results: [
+        {
+          durationMs: 1,
+          evidenceIds: ['evidence:probe'],
+          reason: 'completed',
+          requestId: 'probe:one',
+          status: 'completed',
+        },
+      ],
+      round: 1,
+      startedAt: '2026-09-05T01:00:00.000Z',
+      yield: {
+        changedConfidenceCount: 0,
+        newEvidenceCount: 1,
+        newServiceCount: 0,
+        resolvedFieldCount: 1,
+        resolvedQuestionCount: 0,
+      },
+    },
+    probePlan: {
+      audit: [],
+      generatedAt: '2026-09-05T01:00:00.000Z',
+      planId: 'probe-plan:test',
+      requests: [reconciliationProbe()],
+      round: 1,
+      sourceCandidateSetHash: input.sourceCandidateSetHash,
+      sourceDecisionId: originalDecision.decisionId,
+    },
+  };
+}
+
+function reconciliationProbe() {
+  return {
+    evidenceIds: ['evidence:one'],
+    expectedFields: ['status'],
+    id: 'probe:one',
+    kind: 'systemd_unit' as const,
+    maxBytes: 10_000,
+    reason: 'Confirm state.',
+    targetServiceId: 'service:merged',
+    timeoutMs: 5_000,
+    unitName: 'one.service',
   };
 }

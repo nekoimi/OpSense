@@ -1,7 +1,11 @@
 import { Codex } from '@openai/codex-sdk';
 import type { RunResult, Thread, ThreadOptions } from '@openai/codex-sdk';
 import { createDegradedBatchDiscoveryArtifact } from '@opsense/ai-provider';
-import type { BatchDiscoveryAdapter, BatchDiscoveryOptions } from '@opsense/ai-provider';
+import type {
+  BatchDiscoveryAdapter,
+  BatchDiscoveryOptions,
+  BatchReconciliationAdapter,
+} from '@opsense/ai-provider';
 import { validateBatchDiscoveryDecision } from '@opsense/discovery';
 import {
   BatchDiscoveryArtifactSchema,
@@ -12,6 +16,7 @@ import type {
   BatchDiscoveryArtifact,
   BatchDiscoveryInput,
   BatchDiscoveryRun,
+  BatchReconciliationInput,
 } from '@opsense/schema';
 
 interface CodexClient {
@@ -24,7 +29,9 @@ export interface CodexBatchDiscoveryAdapterOptions {
   now?: () => Date;
 }
 
-export class CodexBatchDiscoveryAdapter implements BatchDiscoveryAdapter {
+export class CodexBatchDiscoveryAdapter
+  implements BatchDiscoveryAdapter, BatchReconciliationAdapter
+{
   public readonly name = 'codex';
   private readonly client: CodexClient;
   private readonly now: () => Date;
@@ -37,6 +44,8 @@ export class CodexBatchDiscoveryAdapter implements BatchDiscoveryAdapter {
   public async discover(
     input: BatchDiscoveryInput,
     options: BatchDiscoveryOptions = {},
+    initialPrompt = discoveryPrompt(input),
+    allowProbeRequests = true,
   ): Promise<BatchDiscoveryArtifact> {
     const startedAt = this.now();
     const maxCalls = options.maxCalls ?? 3;
@@ -59,7 +68,7 @@ export class CodexBatchDiscoveryAdapter implements BatchDiscoveryAdapter {
         threadId === undefined
           ? this.client.startThread(threadOptions)
           : this.client.resumeThread(threadId, threadOptions);
-      let result = await runTurn(thread, discoveryPrompt(input), signal, maxRetries, () => {
+      let result = await runTurn(thread, initialPrompt, signal, maxRetries, () => {
         if (callCount >= maxCalls) throw new Error('Batch Discovery AI call budget exhausted.');
         callCount += 1;
       });
@@ -67,7 +76,7 @@ export class CodexBatchDiscoveryAdapter implements BatchDiscoveryAdapter {
       threadId = thread.id ?? threadId;
 
       for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-        const validation = validationForResult(result, input);
+        const validation = validationForResult(result, input, allowProbeRequests);
         if (validation.valid && validation.decision !== undefined) {
           const finishedAt = this.now();
           const artifact: BatchDiscoveryArtifact = {
@@ -123,6 +132,13 @@ export class CodexBatchDiscoveryAdapter implements BatchDiscoveryAdapter {
       });
     }
   }
+
+  public reconcile(
+    input: BatchReconciliationInput,
+    options: BatchDiscoveryOptions = {},
+  ): Promise<BatchDiscoveryArtifact> {
+    return this.discover(input.discoveryInput, options, reconciliationPrompt(input), false);
+  }
 }
 
 async function runTurn(
@@ -158,6 +174,15 @@ Return exactly one BatchDiscoveryDecision JSON object. Requirements:
 6. Copy sourceCandidateSetHash exactly. Return JSON only; do not call tools, read files, access the network, or execute commands.`;
 }
 
+function reconciliationPrompt(input: BatchReconciliationInput): string {
+  return `OpSense Batch Reconciliation contract ${input.contractVersion}.
+
+Revise the original Batch Discovery decision once using the governed probe results:
+${JSON.stringify(input)}
+
+Return exactly one complete BatchDiscoveryDecision JSON object. Preserve all deterministic facts and candidate coverage. Use newEvidence only to resolve unknown fields, review items, merge decisions, and requested semantics. Do not claim confirmed semantic confidence. Do not request a second probe round. probeRequests must be empty. Copy discoveryInput.sourceCandidateSetHash exactly. Return JSON only; do not call tools, read files, access the network, or execute commands.`;
+}
+
 function repairPrompt(validation: ReturnType<typeof validateBatchDiscoveryDecision>): string {
   const acceptedServiceIds =
     validation.decision?.services.map((service) => service.serviceId) ?? [];
@@ -185,9 +210,10 @@ function describeValidationFailure(
 function validationForResult(
   result: RunResult,
   input: BatchDiscoveryInput,
+  allowProbeRequests: boolean,
 ): ReturnType<typeof validateBatchDiscoveryDecision> {
   try {
-    return validateBatchDiscoveryDecision(parseJson(result), input);
+    return validateBatchDiscoveryDecision(parseJson(result), input, { allowProbeRequests });
   } catch (error) {
     return {
       batchErrors: [
