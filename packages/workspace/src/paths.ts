@@ -40,6 +40,8 @@ export interface RunWorkspaceLayout extends WorkspaceLayout {
   runDirectory: string;
   scanId: string;
   snapshotFile: string;
+  wikiCompositionFile: string;
+  wikiFile: string;
 }
 
 export function resolveWorkspaceRoot(explicitRoot?: string): string {
@@ -94,6 +96,8 @@ export function createRunWorkspaceLayout(
     runDirectory,
     scanId,
     snapshotFile: path.join(runDirectory, 'snapshot.json'),
+    wikiCompositionFile: path.join(runDirectory, 'wiki-composition.json'),
+    wikiFile: path.join(runDirectory, 'wiki.json'),
   };
 }
 

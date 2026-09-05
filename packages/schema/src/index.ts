@@ -21,3 +21,4 @@ export * from './service.js';
 export * from './storage.js';
 export * from './validator.js';
 export * from './wiki.js';
+export * from './wiki-v3.js';

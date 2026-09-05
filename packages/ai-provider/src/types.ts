@@ -7,6 +7,8 @@ import type {
   BatchDiscoveryInput,
   BatchReconciliationInput,
   ScanSnapshot,
+  DeploymentInventory,
+  WikiNarrativeResult,
 } from '@opsense/schema';
 
 export interface AnalysisInput {
@@ -58,4 +60,12 @@ export interface BatchReconciliationAdapter {
     input: BatchReconciliationInput,
     options?: BatchDiscoveryOptions,
   ): Promise<BatchDiscoveryArtifact>;
+}
+
+export interface WikiComposer {
+  readonly name: string;
+  compose(
+    inventory: DeploymentInventory,
+    options?: BatchDiscoveryOptions,
+  ): Promise<WikiNarrativeResult>;
 }

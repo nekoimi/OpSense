@@ -23,6 +23,7 @@
     "@opsense/agent-runtime": "workspace:*",
     "@opsense/ai-provider": "workspace:*",
     "@opsense/discovery": "workspace:*",
-    "@opsense/schema": "workspace:*"
+    "@opsense/schema": "workspace:*",
+    "@opsense/wiki": "workspace:*"
   }
 }

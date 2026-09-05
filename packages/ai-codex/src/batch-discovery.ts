@@ -5,11 +5,14 @@ import type {
   BatchDiscoveryAdapter,
   BatchDiscoveryOptions,
   BatchReconciliationAdapter,
+  WikiComposer,
 } from '@opsense/ai-provider';
 import { validateBatchDiscoveryDecision } from '@opsense/discovery';
+import { deploymentInventoryHash, validateNarrative } from '@opsense/wiki';
 import {
   BatchDiscoveryArtifactSchema,
   BatchDiscoveryDecisionSchema,
+  WikiNarrativeProposalSchema,
   assertSchema,
 } from '@opsense/schema';
 import type {
@@ -17,6 +20,9 @@ import type {
   BatchDiscoveryInput,
   BatchDiscoveryRun,
   BatchReconciliationInput,
+  DeploymentInventory,
+  WikiNarrativeProposal,
+  WikiNarrativeResult,
 } from '@opsense/schema';
 
 interface CodexClient {
@@ -30,7 +36,7 @@ export interface CodexBatchDiscoveryAdapterOptions {
 }
 
 export class CodexBatchDiscoveryAdapter
-  implements BatchDiscoveryAdapter, BatchReconciliationAdapter
+  implements BatchDiscoveryAdapter, BatchReconciliationAdapter, WikiComposer
 {
   public readonly name = 'codex';
   private readonly client: CodexClient;
@@ -139,6 +145,13 @@ export class CodexBatchDiscoveryAdapter
   ): Promise<BatchDiscoveryArtifact> {
     return this.discover(input.discoveryInput, options, reconciliationPrompt(input), false);
   }
+
+  public compose(
+    inventory: DeploymentInventory,
+    options: BatchDiscoveryOptions = {},
+  ): Promise<WikiNarrativeResult> {
+    return composeWiki(this.client, this.now, inventory, options);
+  }
 }
 
 async function runTurn(
@@ -181,6 +194,140 @@ Revise the original Batch Discovery decision once using the governed probe resul
 ${JSON.stringify(input)}
 
 Return exactly one complete BatchDiscoveryDecision JSON object. Preserve all deterministic facts and candidate coverage. Use newEvidence only to resolve unknown fields, review items, merge decisions, and requested semantics. Do not claim confirmed semantic confidence. Do not request a second probe round. probeRequests must be empty. Copy discoveryInput.sourceCandidateSetHash exactly. Return JSON only; do not call tools, read files, access the network, or execute commands.`;
+}
+
+async function composeWiki(
+  client: CodexClient,
+  now: () => Date,
+  inventory: DeploymentInventory,
+  options: BatchDiscoveryOptions,
+): Promise<WikiNarrativeResult> {
+  const startedAt = now();
+  const usage = emptyUsage();
+  const maxCalls = options.maxCalls ?? 1;
+  const maxRetries = options.maxRetries ?? 2;
+  let callCount = 0;
+  let repairCount = 0;
+  let threadId = options.threadId;
+  const signal = timeoutSignal(options.signal, options.timeoutMs ?? 120_000);
+  try {
+    const threadOptions: ThreadOptions = {
+      approvalPolicy: 'never',
+      modelReasoningEffort: 'low',
+      networkAccessEnabled: false,
+      sandboxMode: 'read-only',
+      skipGitRepoCheck: true,
+      ...(options.model === undefined ? {} : { model: options.model }),
+    };
+    const thread =
+      threadId === undefined
+        ? client.startThread(threadOptions)
+        : client.resumeThread(threadId, threadOptions);
+    let result = await wikiTurn(thread, wikiPrompt(inventory), signal, () => {
+      if (callCount >= maxCalls) throw new Error('Wiki Composition AI call budget exhausted.');
+      callCount += 1;
+    });
+    addUsage(usage, result.usage);
+    threadId = thread.id ?? threadId;
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      let proposal: WikiNarrativeProposal | undefined;
+      let errors: string[] = [];
+      try {
+        const parsed = parseJson(result);
+        assertSchema(WikiNarrativeProposalSchema, parsed);
+        proposal = parsed;
+        errors = validateNarrative(inventory, deploymentInventoryHash(inventory), proposal);
+      } catch (error) {
+        errors = [error instanceof Error ? error.message : String(error)];
+      }
+      if (proposal !== undefined && errors.length === 0) {
+        const finishedAt = now();
+        return {
+          narrative: proposal,
+          run: {
+            callCount,
+            durationMs: Math.max(0, finishedAt.getTime() - startedAt.getTime()),
+            finishedAt: finishedAt.toISOString(),
+            provider: 'codex',
+            repairCount,
+            startedAt: startedAt.toISOString(),
+            status: 'completed',
+            usage,
+            ...(options.model === undefined ? {} : { model: options.model }),
+            ...(threadId === undefined ? {} : { threadId }),
+          },
+        };
+      }
+      if (attempt === maxRetries)
+        throw new Error(`Wiki narrative validation failed: ${errors.join('; ')}`);
+      repairCount += 1;
+      result = await wikiTurn(
+        thread,
+        `The Wiki narrative failed local validation: ${JSON.stringify(errors)}\nReturn a corrected complete WikiNarrativeProposal JSON object. Preserve valid service IDs and Evidence IDs. Return JSON only.`,
+        signal,
+        () => {
+          if (callCount >= maxCalls) throw new Error('Wiki Composition AI call budget exhausted.');
+          callCount += 1;
+        },
+      );
+      addUsage(usage, result.usage);
+    }
+    throw new Error('Wiki Composition repair loop ended unexpectedly.');
+  } catch (error) {
+    const finishedAt = now();
+    return {
+      run: {
+        callCount,
+        durationMs: Math.max(0, finishedAt.getTime() - startedAt.getTime()),
+        error: error instanceof Error ? error.message : String(error),
+        finishedAt: finishedAt.toISOString(),
+        provider: 'codex',
+        repairCount,
+        startedAt: startedAt.toISOString(),
+        status: 'degraded',
+        usage,
+        ...(options.model === undefined ? {} : { model: options.model }),
+        ...(threadId === undefined ? {} : { threadId }),
+      },
+    };
+  }
+}
+
+function wikiTurn(
+  thread: Thread,
+  prompt: string,
+  signal: AbortSignal,
+  onCall: () => void,
+): Promise<RunResult> {
+  onCall();
+  return thread.run(prompt, { outputSchema: WikiNarrativeProposalSchema, signal });
+}
+
+function wikiPrompt(inventory: DeploymentInventory): string {
+  const input = {
+    filteredGroups: inventory.filteredGroups.map((group) => ({
+      category: group.category,
+      objectCount: group.objectCount,
+      sampleNames: group.sampleNames,
+    })),
+    host: inventory.host,
+    inventoryHash: deploymentInventoryHash(inventory),
+    inventoryId: inventory.inventoryId,
+    semanticStatus: inventory.semanticStatus,
+    services: inventory.services.map((service) => ({
+      deploymentHints: service.deploymentHints,
+      evidenceIds: service.evidenceIds.slice(0, 20),
+      name: service.name,
+      ports: service.ports,
+      purpose: service.purpose,
+      reviewItems: service.reviewItems,
+      role: service.role,
+      serviceId: service.serviceId,
+      unknownFields: service.unknownFields,
+    })),
+    unresolvedQuestions: inventory.unresolvedQuestions,
+  };
+  return `Compose the OpSense server Wiki narrative from this stable Deployment Inventory:\n${JSON.stringify(input)}\n\nReturn exactly one WikiNarrativeProposal JSON object. Copy inventoryId and inventoryHash exactly. Explain the server role, deployment architecture, service purposes, operational concerns, and human review recommendations. Every service description must use an existing serviceId and only that service's Evidence IDs. Do not invent credentials, dependencies, commands, ports, paths, or operational procedures. State uncertainty plainly. Return JSON only; do not call tools, read files, access the network, or modify anything.`;
 }
 
 function repairPrompt(validation: ReturnType<typeof validateBatchDiscoveryDecision>): string {

@@ -11,6 +11,7 @@
     { "path": "../ai-provider" },
     { "path": "../agent-runtime" },
     { "path": "../discovery" },
-    { "path": "../schema" }
+    { "path": "../schema" },
+    { "path": "../wiki" }
   ]
 }

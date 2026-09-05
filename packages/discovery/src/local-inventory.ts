@@ -22,6 +22,20 @@ export function buildLocalDeploymentInventory(
     JSON.stringify([...snapshot.evidence].sort((left, right) => left.id.localeCompare(right.id))),
   );
   const services = candidateSet.candidates.map((candidate) => ({
+    attribution: {
+      name: {
+        certainty: 'inferred' as const,
+        evidenceIds: candidate.evidenceIds,
+        source: 'correlation' as const,
+        value: candidate.suggestedName ?? candidate.candidateId,
+      },
+      role: {
+        certainty: 'unknown' as const,
+        evidenceIds: candidate.evidenceIds,
+        source: 'correlation' as const,
+        value: 'needs_review',
+      },
+    },
     composeProjectIds: candidate.composeProjectIds,
     confidence: 'inferred' as const,
     containerIds: candidate.containerIds,
@@ -33,6 +47,7 @@ export function buildLocalDeploymentInventory(
     ports: candidate.exposedPorts,
     processIds: candidate.processIds,
     role: 'needs_review' as const,
+    reviewItems: ['AI semantic discovery has not been completed.'],
     serviceId: stableId('service', candidate.sourceObjectIds.join('|')),
     socketIds: candidate.socketIds,
     sourceCandidateIds: [candidate.candidateId],
@@ -57,6 +72,7 @@ export function buildLocalDeploymentInventory(
     exposedPorts: uniquePorts(services.flatMap((service) => service.ports)),
     filteredGroups: candidateSet.filteredGroups,
     findings: snapshot.findings,
+    filteredCandidateIds: [],
     generatedAt: (options.now ?? (() => new Date()))().toISOString(),
     host: {
       hostname: snapshot.host?.hostname ?? snapshot.session.target.host,

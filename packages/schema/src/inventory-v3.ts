@@ -99,6 +99,35 @@ export const DeploymentCandidateSetSchema = Type.Object(
 
 export type DeploymentCandidateSet = Static<typeof DeploymentCandidateSetSchema>;
 
+export const DeploymentServiceRoleSchema = Type.Union([
+  Type.Literal('primary_application'),
+  Type.Literal('infrastructure_service'),
+  Type.Literal('edge_service'),
+  Type.Literal('supporting_component'),
+  Type.Literal('container_platform'),
+  Type.Literal('system_service'),
+  Type.Literal('needs_review'),
+]);
+
+export const AttributedStringSchema = Type.Object(
+  {
+    certainty: Type.Union([
+      Type.Literal('confirmed'),
+      Type.Literal('inferred'),
+      Type.Literal('unknown'),
+    ]),
+    evidenceIds: Type.Array(IdSchema),
+    source: Type.Union([
+      Type.Literal('collector'),
+      Type.Literal('correlation'),
+      Type.Literal('codex'),
+      Type.Literal('human'),
+    ]),
+    value: NonEmptyStringSchema,
+  },
+  { additionalProperties: false },
+);
+
 export const DeploymentInventoryServiceSchema = Type.Object(
   {
     composeProjectIds: Type.Array(IdSchema),
@@ -108,10 +137,20 @@ export const DeploymentInventoryServiceSchema = Type.Object(
     evidenceIds: Type.Array(IdSchema),
     imageNames: Type.Array(NonEmptyStringSchema),
     name: NonEmptyStringSchema,
+    attribution: Type.Object(
+      {
+        name: AttributedStringSchema,
+        purpose: Type.Optional(AttributedStringSchema),
+        role: AttributedStringSchema,
+      },
+      { additionalProperties: false },
+    ),
     pathIds: Type.Array(IdSchema),
     ports: Type.Array(PortSummarySchema),
     processIds: Type.Array(IdSchema),
-    role: Type.Literal('needs_review'),
+    purpose: Type.Optional(NonEmptyStringSchema),
+    reviewItems: Type.Array(NonEmptyStringSchema),
+    role: DeploymentServiceRoleSchema,
     serviceId: IdSchema,
     socketIds: Type.Array(IdSchema),
     sourceCandidateIds: Type.Array(IdSchema, { minItems: 1 }),
@@ -148,11 +187,17 @@ export const DeploymentInventorySchema = Type.Object(
     ),
     inventoryId: IdSchema,
     schemaVersion: Type.Literal('3.0'),
-    semanticStatus: Type.Literal('unverified'),
+    semanticStatus: Type.Union([
+      Type.Literal('verified'),
+      Type.Literal('partially_verified'),
+      Type.Literal('unverified'),
+    ]),
+    sourceDecisionId: Type.Optional(IdSchema),
     services: Type.Array(DeploymentInventoryServiceSchema),
     sourceEvidenceHash: NonEmptyStringSchema,
     sourceScanId: IdSchema,
     unresolvedQuestions: Type.Array(Type.String()),
+    filteredCandidateIds: Type.Array(IdSchema),
   },
   { $id: 'DeploymentInventoryV3', additionalProperties: false },
 );

@@ -116,6 +116,9 @@ importers:
       '@opsense/schema':
         specifier: workspace:*
         version: link:../schema
+      '@opsense/wiki':
+        specifier: workspace:*
+        version: link:../wiki
 
   packages/ai-provider:
     dependencies:

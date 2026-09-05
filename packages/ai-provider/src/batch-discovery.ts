@@ -6,16 +6,19 @@ import type {
   BatchDiscoveryInput,
   BatchDiscoveryRun,
   BatchReconciliationInput,
+  DeploymentInventory,
+  WikiNarrativeResult,
 } from '@opsense/schema';
 
 import type {
   BatchDiscoveryAdapter,
   BatchDiscoveryOptions,
   BatchReconciliationAdapter,
+  WikiComposer,
 } from './types.js';
 
 export class NoopBatchDiscoveryAdapter
-  implements BatchDiscoveryAdapter, BatchReconciliationAdapter
+  implements BatchDiscoveryAdapter, BatchReconciliationAdapter, WikiComposer
 {
   public readonly name = 'noop';
 
@@ -38,6 +41,28 @@ export class NoopBatchDiscoveryAdapter
     options: BatchDiscoveryOptions = {},
   ): Promise<BatchDiscoveryArtifact> {
     return this.discover(input.discoveryInput, options);
+  }
+
+  public compose(
+    _inventory: DeploymentInventory,
+    options: BatchDiscoveryOptions = {},
+  ): Promise<WikiNarrativeResult> {
+    const at = new Date().toISOString();
+    return Promise.resolve({
+      run: {
+        callCount: 0,
+        durationMs: 0,
+        error: 'Wiki Composer provider is disabled; generated the local skeleton only.',
+        finishedAt: at,
+        provider: this.name,
+        repairCount: 0,
+        startedAt: at,
+        status: 'degraded',
+        usage: { cachedInputTokens: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0 },
+        ...(options.model === undefined ? {} : { model: options.model }),
+        ...(options.threadId === undefined ? {} : { threadId: options.threadId }),
+      },
+    });
   }
 }
 

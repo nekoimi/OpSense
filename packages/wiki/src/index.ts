@@ -18,6 +18,8 @@ import type {
   WikiServiceRole,
 } from '@opsense/schema';
 
+export * from './v3.js';
+
 const KEY_FIELDS = [
   'purpose',
   'status',
