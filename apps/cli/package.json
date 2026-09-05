@@ -25,6 +25,7 @@
     "@opsense/correlation": "workspace:*",
     "@opsense/core": "workspace:*",
     "@opsense/discovery": "workspace:*",
+    "@opsense/evaluation": "workspace:*",
     "@opsense/redaction": "workspace:*",
     "@opsense/report": "workspace:*",
     "@opsense/schema": "workspace:*",

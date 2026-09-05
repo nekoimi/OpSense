@@ -27,13 +27,13 @@ export default defineConfig({
       '@opsense/discovery': fileURLToPath(
         new URL('./packages/discovery/src/index.ts', import.meta.url),
       ),
+      '@opsense/evaluation': fileURLToPath(
+        new URL('./packages/evaluation/src/index.ts', import.meta.url),
+      ),
       '@opsense/redaction': fileURLToPath(
         new URL('./packages/redaction/src/index.ts', import.meta.url),
       ),
       '@opsense/report': fileURLToPath(new URL('./packages/report/src/index.ts', import.meta.url)),
-      '@opsense/projection': fileURLToPath(
-        new URL('./packages/projection/src/index.ts', import.meta.url),
-      ),
       '@opsense/schema': fileURLToPath(new URL('./packages/schema/src/index.ts', import.meta.url)),
       '@opsense/ssh': fileURLToPath(new URL('./packages/ssh/src/index.ts', import.meta.url)),
       '@opsense/workspace': fileURLToPath(

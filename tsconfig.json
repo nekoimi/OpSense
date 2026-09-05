@@ -9,6 +9,7 @@
     { "path": "packages/collectors" },
     { "path": "packages/correlation" },
     { "path": "packages/core" },
+    { "path": "packages/evaluation" },
     { "path": "packages/redaction" },
     { "path": "packages/report" },
     { "path": "packages/schema" },

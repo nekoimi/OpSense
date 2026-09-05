@@ -2,6 +2,7 @@ import { Command, CommanderError } from 'commander';
 
 import { createDiscoverCommand } from './commands/analyze.js';
 import { createAgentCommand } from './commands/agent.js';
+import { createBenchmarkCommand } from './commands/benchmark.js';
 import { createInspectCommand } from './commands/inspect.js';
 import { createReportCommand } from './commands/report.js';
 import { createScanCommand } from './commands/scan.js';
@@ -28,6 +29,7 @@ export function createProgram({ loggerFactory = createLogger }: ProgramDependenc
   program.addCommand(createReportCommand(loggerFactory));
   program.addCommand(createInspectCommand(loggerFactory));
   program.addCommand(createAgentCommand(loggerFactory));
+  program.addCommand(createBenchmarkCommand(loggerFactory));
 
   return program;
 }

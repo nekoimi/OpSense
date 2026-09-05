@@ -23,6 +23,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
+    "evaluate:v3": "tsx scripts/v3-release-check.ts --synthetic-only",
+    "release:v3": "tsx scripts/v3-release-check.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "pnpm run build && pnpm -r --if-present run typecheck"

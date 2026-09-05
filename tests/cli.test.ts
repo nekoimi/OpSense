@@ -21,7 +21,16 @@ describe('opsense CLI skeleton', () => {
       'report',
       'inspect',
       'agent',
+      'benchmark',
     ]);
+  });
+
+  it('exposes v3 benchmark options', () => {
+    const program = createProgram();
+    const benchmark = program.commands.find((command) => command.name() === 'benchmark');
+
+    expect(benchmark?.helpInformation()).toContain('--run <run-id>');
+    expect(benchmark?.helpInformation()).toContain('--compare <run-ids...>');
   });
 
   it('exposes only post-report Agent options', () => {

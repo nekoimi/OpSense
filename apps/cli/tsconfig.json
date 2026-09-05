@@ -16,6 +16,7 @@
     { "path": "../../packages/correlation" },
     { "path": "../../packages/core" },
     { "path": "../../packages/discovery" },
+    { "path": "../../packages/evaluation" },
     { "path": "../../packages/redaction" },
     { "path": "../../packages/report" },
     { "path": "../../packages/schema" },
