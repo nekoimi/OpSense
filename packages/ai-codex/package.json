@@ -22,6 +22,7 @@
     "@openai/codex-sdk": "^0.147.0",
     "@opsense/agent-runtime": "workspace:*",
     "@opsense/ai-provider": "workspace:*",
+    "@opsense/discovery": "workspace:*",
     "@opsense/schema": "workspace:*"
   }
 }

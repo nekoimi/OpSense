@@ -156,6 +156,7 @@ export const RunMetricsSchema = Type.Object(
     ai: Type.Object(
       {
         calls: CounterSchema,
+        cachedInputTokens: CounterSchema,
         durationMs: CounterSchema,
         failedCalls: CounterSchema,
         inputTokens: CounterSchema,

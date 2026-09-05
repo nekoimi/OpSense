@@ -1,4 +1,12 @@
-import type { AiAnalysis, AiPlan, AiProbeAudit, AiRun, ScanSnapshot } from '@opsense/schema';
+import type {
+  AiAnalysis,
+  AiPlan,
+  AiProbeAudit,
+  AiRun,
+  BatchDiscoveryArtifact,
+  BatchDiscoveryInput,
+  ScanSnapshot,
+} from '@opsense/schema';
 
 export interface AnalysisInput {
   aiInputDirectory: string;
@@ -24,4 +32,21 @@ export interface AnalysisResult {
 export interface AiProvider {
   readonly name: string;
   analyze(input: AnalysisInput, options?: AnalysisOptions): Promise<AnalysisResult>;
+}
+
+export interface BatchDiscoveryOptions {
+  maxCalls?: number;
+  maxRetries?: number;
+  model?: string;
+  signal?: AbortSignal;
+  threadId?: string;
+  timeoutMs?: number;
+}
+
+export interface BatchDiscoveryAdapter {
+  readonly name: string;
+  discover(
+    input: BatchDiscoveryInput,
+    options?: BatchDiscoveryOptions,
+  ): Promise<BatchDiscoveryArtifact>;
 }

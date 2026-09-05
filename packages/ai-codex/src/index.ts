@@ -32,6 +32,7 @@ import type {
   ScanSnapshot,
 } from '@opsense/schema';
 
+export * from './batch-discovery.js';
 export * from './preflight.js';
 
 export interface CodexAgentThreadAdapterOptions {

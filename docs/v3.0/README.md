@@ -32,5 +32,9 @@ v3.0 是未正式发布项目的全新主线，不兼容旧版数据、CLI、工
 - `fast` 和 `standard` 初扫只构建路径种子；仅 `deep` 执行原 M5 递归目录与配置读取，从默认链路移除主要 N+1 来源。
 - 新增独立 Correlation 模块，构建 host、unit、process、socket、container、Compose、mount 和 path 的 Resource Graph；只有确定性强边参与自动归并。
 - 新增高价值 Candidate 保护与普通系统对象聚合，并在 `inventory_ready` 阶段持久化 `resource-graph.json`、`candidates.json` 和语义状态为 `unverified` 的本地 `inventory.json`。
+- `opsense analyze --scan <scan-id>` 已切换为 v3 Batch Discovery：一次提交全部紧凑候选，持久化 `discovery-input.json` 与 `discovery.json`。
+- Batch Discovery 对 ServiceDraft 逐项执行 Schema 和 Candidate/Object/Evidence 引用校验，并用 Completion Gate 阻止候选遗漏、重复归属和输入哈希错配；修复只在同一 Codex thread 内进行。
+- 每个候选最多向 Codex 携带 4 个 unit、4 个进程、4 个容器、4 个 Compose 项目、8 个端口、12 个路径和 12 个 Evidence ID，超出部分只记录计数。
+- Codex 不可用或修复失败时，所有受保护候选会进入 `retainedUnknownCandidateIds`，已有本地清单不被覆盖。
 
-当前已完成 M30 的扫描侧骨架、M31 的核心 N+1 改造和 M32 的代码侧快速发现链路。真实服务器 P95 一分钟验收、自适应并发、全流程指标与预算执行、AI 验证后的稳定 Deployment Inventory 和 Batch Discovery 尚未完成，不能把当前状态视为 v3.0 Definition of Done。
+当前已完成 M30 的扫描侧骨架、M31 的核心 N+1 改造、M32 的快速发现链路和 M33 的 Batch Discovery。真实服务器 P95 一分钟验收、自适应并发、完整预算执行、受控补探测、AI 验证后的稳定 Deployment Inventory 和 v3 Wiki 尚未完成，不能把当前状态视为 v3.0 Definition of Done。

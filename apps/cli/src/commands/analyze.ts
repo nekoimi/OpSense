@@ -2,7 +2,7 @@ import { Command, InvalidArgumentError } from 'commander';
 
 import { ExitCode, exitCodeForError } from '../exit-code.js';
 import type { LoggerFactory } from '../logger.js';
-import { runAnalysisWorkflow } from '../workflows/analysis-workflow.js';
+import { runDiscoveryWorkflow } from '../workflows/discovery-workflow.js';
 
 interface AnalyzeOptions {
   config?: string;
@@ -22,7 +22,7 @@ interface GlobalOptions {
 
 export function createAnalyzeCommand(loggerFactory: LoggerFactory): Command {
   const command = new Command('analyze')
-    .description('Analyze an existing scan snapshot with Codex or the local baseline provider.')
+    .description('Run v3 Batch Discovery for an existing scan with Codex or the local provider.')
     .requiredOption('--scan <scan-id>', 'scan ID to analyze')
     .option('--provider <provider>', 'AI provider: codex or noop', 'codex')
     .option('--model <model>', 'Codex model override')
@@ -36,13 +36,13 @@ export function createAnalyzeCommand(loggerFactory: LoggerFactory): Command {
     const logger = loggerFactory(command.optsWithGlobals<GlobalOptions>());
     try {
       validateProvider(options.provider);
-      const result = await runAnalysisWorkflow(options, (stage) => logger.info(`Stage: ${stage}`));
+      const result = await runDiscoveryWorkflow(options, (stage) => logger.info(`Stage: ${stage}`));
       logger.info(
-        `Analysis ${options.scan} completed with state '${result.result.run.status}' using '${result.result.analysis.provider}'.`,
+        `Batch Discovery ${options.scan} completed with state '${result.artifact.run.status}' using '${result.artifact.run.provider}'.`,
       );
-      logger.info(`AI output: ${result.layout.aiOutputFile}`);
+      logger.info(`Discovery output: ${result.layout.discoveryFile}`);
       process.exitCode =
-        result.result.run.status === 'degraded' ? ExitCode.AiDegraded : ExitCode.Success;
+        result.artifact.run.status === 'degraded' ? ExitCode.AiDegraded : ExitCode.Success;
     } catch (error) {
       logger.error(`Analysis failed: ${error instanceof Error ? error.message : String(error)}`);
       process.exitCode = exitCodeForError(error);

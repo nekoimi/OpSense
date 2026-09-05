@@ -76,6 +76,7 @@ export function emptyRunMetrics(runId: string, at = new Date()): RunMetrics {
   return {
     ai: {
       calls: 0,
+      cachedInputTokens: 0,
       durationMs: 0,
       failedCalls: 0,
       inputTokens: 0,

@@ -1,5 +1,6 @@
 export * from './ai.js';
 export * from './agent.js';
+export * from './batch-discovery.js';
 export * from './common.js';
 export * from './config.js';
 export * from './container.js';

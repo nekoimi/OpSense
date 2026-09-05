@@ -110,6 +110,9 @@ importers:
       '@opsense/ai-provider':
         specifier: workspace:*
         version: link:../ai-provider
+      '@opsense/discovery':
+        specifier: workspace:*
+        version: link:../discovery
       '@opsense/schema':
         specifier: workspace:*
         version: link:../schema
